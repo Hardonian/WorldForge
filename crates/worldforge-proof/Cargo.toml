@@ -1,0 +1,13 @@
+[package]
+name = "worldforge-proof"
+description = "Deterministic proof chain and verification for World Forge simulation runs"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+worldforge-core = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+ciborium = { workspace = true }
