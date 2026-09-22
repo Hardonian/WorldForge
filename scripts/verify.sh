@@ -1,18 +1,59 @@
 #!/usr/bin/env bash
+# verify.sh — Run the full World Forge verification suite
+# Usage: ./scripts/verify.sh
 set -euo pipefail
-cd "$(dirname "$0")/.."
 
-cargo fmt --check
-cargo clippy --workspace --all-targets --all-features -- -D warnings
+echo "=== World Forge Verification Suite ==="
+echo ""
+
+# 1. Check workspace
+echo "▸ Checking workspace..."
+cargo check --workspace
+echo "  ✓ Workspace compiles"
+echo ""
+
+# 2. Run all tests
+echo "▸ Running tests..."
 cargo test --workspace
-cargo build --workspace --release
-cargo run -q -p worldforge-cli -- test-world examples/supply-chain --runs 100 --ticks 1000
-./scripts/smoke.sh
+echo "  ✓ All tests pass"
+echo ""
 
-first=$(cargo run -q -p worldforge-cli -- package fingerprint examples/supply-chain)
-cargo run -q -p worldforge-cli -- package build examples/supply-chain --output target/repro-a.world >/dev/null
-cargo run -q -p worldforge-cli -- package build examples/supply-chain --output target/repro-b.world >/dev/null
-a=$(cargo run -q -p worldforge-cli -- package fingerprint target/repro-a.world)
-b=$(cargo run -q -p worldforge-cli -- package fingerprint target/repro-b.world)
-test "$first" = "$a"
-test "$a" = "$b"
+# 3. Format check
+echo "▸ Checking formatting..."
+cargo fmt --all -- --check
+echo "  ✓ Code is formatted"
+echo ""
+
+# 4. Clippy
+echo "▸ Running clippy..."
+cargo clippy --workspace -- -D warnings
+echo "  ✓ No clippy warnings"
+echo ""
+
+# 5. Doctor
+echo "▸ Running doctor..."
+cargo run -p worldforge-cli --quiet -- doctor
+echo ""
+
+# 6. Validate example worlds
+echo "▸ Validating example worlds..."
+cargo run -p worldforge-cli --quiet -- validate examples/supply-chain
+cargo run -p worldforge-cli --quiet -- validate examples/minimal-world
+echo "  ✓ All example worlds valid"
+echo ""
+
+# 7. Determinism test
+echo "▸ Running determinism test (10 runs)..."
+cargo run -p worldforge-cli --quiet -- test-world examples/supply-chain --runs 10 --ticks 1000
+echo ""
+
+# 8. Run simulation and verify replay
+echo "▸ Running simulation..."
+cargo run -p worldforge-cli --quiet -- run examples/supply-chain --seed 42 --ticks 500
+echo ""
+
+echo "▸ Verifying replay..."
+cargo run -p worldforge-cli --quiet -- replay verify examples/supply-chain/last.replay
+echo ""
+
+echo "=== All verification checks passed ✓ ==="

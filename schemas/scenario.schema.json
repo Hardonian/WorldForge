@@ -1,15 +1,57 @@
 {
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://worldforge.dev/schemas/scenario-0.1.0.json",
-  "title": "World Forge scenario 0.1.0",
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "World Forge Scenario",
+  "description": "Schema for scenario.toml files",
   "type": "object",
   "required": ["world"],
   "properties": {
-    "world": { "type": "string", "minLength": 1 },
-    "seed": { "type": "integer", "minimum": 0 },
-    "duration_ticks": { "type": "integer", "minimum": 1 },
-    "events": { "type": "array" },
-    "objectives": { "type": "array" }
+    "world": {
+      "type": "string",
+      "description": "Name of the world this scenario runs"
+    },
+    "seed": {
+      "type": "integer",
+      "description": "RNG seed for deterministic simulation",
+      "default": 42
+    },
+    "duration_ticks": {
+      "type": "integer",
+      "description": "Number of ticks to simulate",
+      "minimum": 1,
+      "default": 1000
+    },
+    "events": {
+      "type": "array",
+      "description": "Scheduled events during the simulation",
+      "items": {
+        "type": "object",
+        "required": ["tick", "type"],
+        "properties": {
+          "tick": { "type": "integer", "minimum": 0 },
+          "type": { "type": "string", "enum": ["capacity_change"] },
+          "target": { "type": "string" },
+          "value": { "type": "number" }
+        }
+      }
+    },
+    "objectives": {
+      "type": "array",
+      "description": "Success/failure objectives to evaluate",
+      "items": {
+        "type": "object",
+        "required": ["type"],
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["maintain_inventory", "avoid_shortage", "reach_production_target", "survive_until_tick"]
+          },
+          "resource": { "type": "string" },
+          "minimum": { "type": "number" },
+          "target": { "type": "number" },
+          "tick": { "type": "integer" }
+        }
+      }
+    }
   },
   "additionalProperties": false
 }

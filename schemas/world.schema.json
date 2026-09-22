@@ -1,15 +1,35 @@
 {
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://worldforge.dev/schemas/world-0.1.0.json",
-  "title": "World Forge world manifest 0.1.0",
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "World Forge World Manifest",
+  "description": "Schema for world.toml manifest files",
   "type": "object",
   "required": ["name"],
   "properties": {
-    "name": { "type": "string", "minLength": 1, "maxLength": 128 },
-    "description": { "type": "string" },
-    "version": { "type": "string" },
-    "extends": { "type": "array", "items": { "type": "string" } },
-    "mods": { "type": "array", "items": { "type": "string" } }
+    "name": {
+      "type": "string",
+      "description": "Unique name for this world",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "description": {
+      "type": "string",
+      "description": "Human-readable description"
+    },
+    "version": {
+      "type": "string",
+      "description": "SemVer version string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$"
+    },
+    "extends": {
+      "type": "array",
+      "description": "Base world packages this world extends",
+      "items": { "type": "string" }
+    },
+    "mods": {
+      "type": "array",
+      "description": "Mod packages to apply",
+      "items": { "type": "string" }
+    }
   },
   "additionalProperties": false
 }

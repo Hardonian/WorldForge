@@ -1,40 +1,155 @@
 # World Forge
 
-World Forge is a deterministic, headless simulation runtime where worlds are
-portable packages. The current vertical slice models a three-region supply
-chain and provides reproducible state fingerprints, replay proofs, deterministic
-archives, deterministic agents, and a capability-gated Wasmtime mod boundary.
+**A deterministic, moddable simulation runtime where entire worlds are packages.**
 
-## Implemented now
+World Forge is a simulation operating system for building games, simulations, worlds, scenarios, challenges, and developer-created content. Every simulation run is fully reproducible: same seed + same world = same result, on every platform, every time.
 
-- Fixed-tick ECS execution with fixed-point economy math and seeded IDs/RNG.
-- Inventory, atomic transfer, production/consumption, shortages, and prices.
-- Typed events and objectives included in a BLAKE3 event chain.
-- Replay inspect, verify, and local deterministic re-execution.
-- Reproducible `.world` tar packages with normalized metadata.
-- Versioned WIT contracts plus a minimal core-Wasm v0 host ABI. Mods have no
-  WASI access; resource/event calls require explicit capabilities and execution
-  has fuel and memory limits.
-- `doctor`, `validate`, `run`, `test-world`, `package`, and `replay` CLI flows.
+## Status
 
-## Quick start
+| Feature | Status | Notes |
+|---------|--------|-------|
+| Fixed-point math (Q32.32) | ✅ Implemented | `Fixed64` for all simulation-critical values |
+| Deterministic RNG | ✅ Implemented | ChaCha8-based with named streams |
+| BLAKE3 fingerprinting | ✅ Implemented | State hashing, event chains, package fingerprints |
+| Purpose-built ECS | ✅ Implemented | BTreeMap-backed, deterministic iteration |
+| World manifest + scenarios | ✅ Implemented | TOML-based with schema validation |
+| Resource economy | ✅ Implemented | Production, transfer, conservation, prices |
+| Objective system | ✅ Implemented | Evaluate pass/fail conditions per scenario |
+| Replay artifacts | ✅ Implemented | CBOR-serialized with tamper detection |
+| Proof chain | ✅ Implemented | Event hash chains with verification |
+| Package system (.world) | ✅ Implemented | Deterministic tar with content fingerprinting |
+| Agent framework | ✅ Implemented | Rule-based and utility-based policies |
+| Capability-based mod API | ✅ Implemented | Deny-by-default capability system |
+| WASM mod runtime | ⚠️ Contract only | WIT interfaces defined; wasmtime integration planned |
+| CLI | ✅ Implemented | doctor, validate, run, test-world, package, replay |
+| CI pipeline | ✅ Implemented | Cross-platform tests + determinism verification |
+
+## Quick Start
 
 ```bash
+# Clone and build
+git clone https://github.com/Hardonian/worldforge.git
+cd worldforge
+cargo build
+
+# Run the supply-chain scenario
+cargo run -p worldforge-cli -- run examples/supply-chain --seed 42 --ticks 1000
+
+# Verify determinism across 10 runs
+cargo run -p worldforge-cli -- test-world examples/supply-chain --runs 10 --ticks 1000
+
+# Verify a replay artifact
+cargo run -p worldforge-cli -- replay verify examples/supply-chain/last.replay
+
+# Check runtime health
 cargo run -p worldforge-cli -- doctor
-cargo run -p worldforge-cli -- run examples/supply-chain --ticks 1000 --seed 42
-cargo run -p worldforge-cli -- test-world examples/supply-chain --runs 100
-./scripts/smoke.sh
 ```
 
-Use `cargo run -p worldforge-cli -- --help` for all commands. Formats have
-independent versions in `worldforge-core`; the engine is currently pre-1.0.
+## Architecture
 
-## Planned later
+World Forge is a Rust workspace of 12 crates:
 
-Remote registries, package signing, a marketplace, multiplayer/distributed
-simulation, cloud hosting, graphical authoring, and LLM agents are not
-implemented. The WASM host currently uses a compact core-Wasm ABI while the WIT
-Component Model binding layer remains the compatibility contract to adopt next.
+```
+worldforge-core        Foundation: typed IDs, Fixed64, Tick, RNG, BLAKE3, errors
+worldforge-ecs         Deterministic ECS with BTreeMap storage
+worldforge-world       World manifest, scenarios, entities, events, objectives
+worldforge-economy     Production, transfers, pricing, conservation invariants
+worldforge-proof       Event hash chains, run proofs, verification reports
+worldforge-replay      CBOR replay artifacts with tamper detection
+worldforge-runtime     Simulation executor (load → validate → tick → proof)
+worldforge-agent       Rule-based and utility-based agent policies
+worldforge-mod-api     Capability-based mod API (deny-by-default)
+worldforge-mod-runtime WASM mod lifecycle (mock runtime; wasmtime planned)
+worldforge-package     .world package format with reproducible fingerprints
+worldforge-cli         Command-line interface
+```
 
-See [security policy](SECURITY.md), [architecture](docs/architecture/README.md),
-and [error codes](docs/error-codes.md).
+### Design Principles
+
+1. **Determinism is non-negotiable.** `Fixed64` replaces all floating-point in simulation. `ChaCha8Rng` with explicit seeding. `BTreeMap` for all iteration. No threading in the simulation loop.
+
+2. **Worlds are packages.** A world is a directory containing `world.toml`, `scenario.toml`, `entities.toml`, and optionally mods. Package into `.world` archives with reproducible content fingerprints.
+
+3. **No fake features.** Where functionality is not yet implemented (e.g., WASM mod loading), the code returns `FeatureStatus::Unavailable` with a clear reason — never a silent no-op.
+
+4. **Replay verifies the run.** Every simulation produces a CBOR replay artifact containing the event hash chain. Tampering with any event invalidates the chain root.
+
+5. **Mods cannot escape the sandbox.** The capability-based API denies filesystem, network, shell, environment, process, and secrets access. Always.
+
+## Vertical Slice: Supply Chain
+
+The `examples/supply-chain` directory demonstrates a complete simulation:
+
+- **5 entities**: mine → steel-mill → factory → warehouse → city-market
+- **Resource flow**: ore → steel → goods, with energy costs
+- **Disruption event**: Factory capacity drops to 50% at tick 250
+- **Objectives**: Maintain goods inventory ≥ 50, avoid stockouts
+- **Outcome**: The disruption causes cascading shortages — objectives fail, demonstrating that the simulation produces meaningful, realistic behavior
+
+```bash
+cargo run -p worldforge-cli -- run examples/supply-chain --seed 42 --ticks 1000
+```
+
+## Verification
+
+```bash
+# Run all checks: compile, test, validate, determinism, replay
+./scripts/verify.sh       # Linux/macOS
+.\scripts\verify.ps1      # Windows
+```
+
+The CI pipeline runs these checks on every push:
+- Workspace compilation
+- 73+ unit tests across all crates
+- Cross-platform tests (Linux, Windows, macOS)
+- Determinism verification (20 runs with same seed)
+- Format and lint checks
+- Replay integrity verification
+
+## World Format
+
+```toml
+# world.toml
+name = "my-world"
+description = "A custom simulation"
+version = "0.1.0"
+
+# scenario.toml
+world = "my-world"
+seed = 42
+duration_ticks = 500
+
+[[events]]
+tick = 100
+type = "capacity_change"
+target = "factory"
+value = 0.5
+
+[[objectives]]
+type = "maintain_inventory"
+resource = "goods"
+minimum = 50.0
+```
+
+## Modding
+
+Mods declare capabilities in their manifest and receive only those capabilities at runtime:
+
+```rust
+use worldforge_mod_api::{Capability, CapabilityPolicy};
+
+let policy = CapabilityPolicy::with_capabilities(vec![
+    Capability::EntityRead,
+    Capability::ResourceRead,
+    Capability::EventEmit,
+]);
+
+// EntityWrite is not granted — mod cannot modify entities
+assert!(!policy.check(&Capability::EntityWrite));
+```
+
+WIT interfaces for the WASM Component Model are defined in `wit/worldforge/`. The runtime contract is specified; wasmtime integration is planned for M1.
+
+## License
+
+MIT OR Apache-2.0
