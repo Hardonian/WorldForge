@@ -1,0 +1,7 @@
+// Economy API — host-provided functions for economic operations.
+// Requires: world.economy.read and/or world.economy.transact capabilities.
+
+interface economy-api {
+    // Get the current price of a resource at an entity.
+    get-price: func(entity-id: string, resource: string) -> s64;
+}

@@ -1,0 +1,16 @@
+// World Forge Mod Interface v0.1.0
+//
+// This is the top-level WIT package for World Forge mods.
+// Mods implement the `mod-guest` world and call host-provided functions.
+
+package worldforge:mod@0.1.0;
+
+world mod-guest {
+    // Host-provided capabilities (gated by capability policy)
+    import entity-api;
+    import resource-api;
+    import event-api;
+
+    // Guest-implemented lifecycle callbacks
+    export mod-lifecycle;
+}

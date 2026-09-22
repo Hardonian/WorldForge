@@ -4,8 +4,9 @@ use serde::{Deserialize, Serialize};
 use worldforge_core::Fixed64;
 
 /// Status of an objective.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ObjectiveStatus {
+    #[default]
     Pending,
     Passed,
     Failed,

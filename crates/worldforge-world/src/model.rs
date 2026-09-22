@@ -1,7 +1,7 @@
 //! Core world model types.
 
 use serde::{Deserialize, Serialize};
-use worldforge_core::{EntityId, Fixed64, RegionId, ResourceId};
+use worldforge_core::{Fixed64, RegionId, ResourceId};
 use worldforge_ecs::Component;
 
 /// A named resource type in the simulation.

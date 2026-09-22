@@ -1,0 +1,16 @@
+// Entity API — host-provided functions for reading/writing entities.
+// Requires: world.entity.read and/or world.entity.write capabilities.
+
+interface entity-api {
+    // Get an entity's name by its string identifier.
+    get-entity-name: func(entity-id: string) -> option<string>;
+
+    // Get an entity's type (e.g., "producer", "consumer").
+    get-entity-type: func(entity-id: string) -> option<string>;
+
+    // Get an entity's region.
+    get-entity-region: func(entity-id: string) -> option<string>;
+
+    // List all entity identifiers.
+    list-entities: func() -> list<string>;
+}

@@ -1,0 +1,7 @@
+// Event API — host-provided functions for emitting events.
+// Requires: world.event.emit capability.
+
+interface event-api {
+    // Emit a custom mod event.
+    emit-event: func(event-type: string, data: string) -> result<_, string>;
+}

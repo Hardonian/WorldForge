@@ -1,0 +1,15 @@
+// Mod Lifecycle — guest-implemented callbacks invoked by the host runtime.
+
+interface mod-lifecycle {
+    // Called once when the mod is loaded.
+    init: func() -> result<_, string>;
+
+    // Called each simulation tick.
+    on-tick: func(tick: u64) -> result<_, string>;
+
+    // Called when a simulation event occurs.
+    on-event: func(event-type: string, event-data: string) -> result<_, string>;
+
+    // Called when the simulation ends.
+    shutdown: func() -> result<_, string>;
+}

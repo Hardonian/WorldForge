@@ -6,7 +6,7 @@
 
 use serde::{Deserialize, Serialize};
 use worldforge_core::hash::{Fingerprint, FingerprintBuilder};
-use worldforge_core::version::EngineVersion;
+// EngineVersion used indirectly via RunProof fields
 
 /// A cryptographic proof of a simulation run.
 #[derive(Debug, Clone, Serialize, Deserialize)]

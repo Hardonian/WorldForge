@@ -1,0 +1,10 @@
+// Resource API — host-provided functions for reading resource/inventory state.
+// Requires: world.resource.read capability.
+
+interface resource-api {
+    // Get the quantity of a resource in an entity's inventory.
+    get-resource-amount: func(entity-id: string, resource: string) -> s64;
+
+    // List all resources in an entity's inventory.
+    list-resources: func(entity-id: string) -> list<string>;
+}
