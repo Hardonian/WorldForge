@@ -57,19 +57,44 @@ impl SimulationEvent {
     /// Get a human-readable summary of this event.
     pub fn summary(&self) -> String {
         match &self.event_type {
-            EventType::ProductionCompleted { entity, resource, amount } => {
+            EventType::ProductionCompleted {
+                entity,
+                resource,
+                amount,
+            } => {
                 format!("{}: produced {} {}", entity, amount, resource)
             }
-            EventType::ResourceTransferred { from, to, resource, amount } => {
+            EventType::ResourceTransferred {
+                from,
+                to,
+                resource,
+                amount,
+            } => {
                 format!("{} → {}: {} {}", from, to, amount, resource)
             }
-            EventType::InventoryShortage { entity, resource, needed, available } => {
-                format!("SHORTAGE at {}: {} needs {}, has {}", entity, resource, needed, available)
+            EventType::InventoryShortage {
+                entity,
+                resource,
+                needed,
+                available,
+            } => {
+                format!(
+                    "SHORTAGE at {}: {} needs {}, has {}",
+                    entity, resource, needed, available
+                )
             }
-            EventType::PriceChanged { resource, old_price, new_price } => {
+            EventType::PriceChanged {
+                resource,
+                old_price,
+                new_price,
+            } => {
                 format!("{} price: {} → {}", resource, old_price, new_price)
             }
-            EventType::CapacityChanged { entity, old_capacity, new_capacity } => {
+            EventType::CapacityChanged {
+                entity,
+                old_capacity,
+                new_capacity,
+            } => {
                 format!("{} capacity: {} → {}", entity, old_capacity, new_capacity)
             }
             EventType::ObjectiveUpdated { objective, status } => {
@@ -94,8 +119,5 @@ pub struct ScheduledEvent {
 #[serde(tag = "type")]
 pub enum ScheduledEventType {
     #[serde(rename = "capacity_change")]
-    CapacityChange {
-        target: String,
-        value: f64,
-    },
+    CapacityChange { target: String, value: f64 },
 }

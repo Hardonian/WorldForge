@@ -11,9 +11,7 @@
 
 use worldforge_core::{EntityId, Fixed64, Tick};
 use worldforge_ecs::SimulationWorld;
-use worldforge_world::{
-    EntityInfo, EventType, Inventory, PriceSignal, ProductionRule, SimulationEvent, SupplyLink,
-};
+use worldforge_world::{EventType, Inventory, PriceSignal, ProductionRule, SimulationEvent};
 
 /// Run production for all entities that have production rules.
 pub fn run_production(
@@ -112,8 +110,14 @@ pub fn run_transfers(
             to_inv.add(resource, transfer_amount);
         }
 
-        let from_name = entity_names.get(from_id).map(|s| s.as_str()).unwrap_or("unknown");
-        let to_name = entity_names.get(to_id).map(|s| s.as_str()).unwrap_or("unknown");
+        let from_name = entity_names
+            .get(from_id)
+            .map(|s| s.as_str())
+            .unwrap_or("unknown");
+        let to_name = entity_names
+            .get(to_id)
+            .map(|s| s.as_str())
+            .unwrap_or("unknown");
 
         events.push(SimulationEvent::new(
             tick,
@@ -137,7 +141,7 @@ pub fn update_prices(
     tick: Tick,
     events: &mut Vec<SimulationEvent>,
 ) {
-    for (entity_id, entity_name) in entity_ids {
+    for (entity_id, _entity_name) in entity_ids {
         let inventory = match world.get_component::<Inventory>(entity_id) {
             Some(inv) => inv.clone(),
             None => continue,

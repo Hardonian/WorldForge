@@ -4,7 +4,6 @@
 //! Builds deterministic, reproducible archives from world directories.
 //! Same content always produces the same fingerprint.
 
-use std::io::Write;
 use std::path::Path;
 
 use worldforge_core::error::{ErrorCode, WorldForgeError};
@@ -174,7 +173,10 @@ pub fn inspect_package(package_path: &Path) -> Result<PackageInfo, WorldForgeErr
 
         let mut data = Vec::new();
         std::io::Read::read_to_end(&mut entry, &mut data).map_err(|e| {
-            WorldForgeError::new(ErrorCode::PackageInvalid, format!("cannot read entry: {}", e))
+            WorldForgeError::new(
+                ErrorCode::PackageInvalid,
+                format!("cannot read entry: {}", e),
+            )
         })?;
 
         // Parse manifest if found
@@ -236,9 +238,8 @@ fn collect_files(
     })?;
 
     for entry in entries {
-        let entry = entry.map_err(|e| {
-            WorldForgeError::new(ErrorCode::PackageBuildFailed, e.to_string())
-        })?;
+        let entry = entry
+            .map_err(|e| WorldForgeError::new(ErrorCode::PackageBuildFailed, e.to_string()))?;
         let path = entry.path();
 
         if path.is_dir() {

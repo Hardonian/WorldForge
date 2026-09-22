@@ -151,8 +151,10 @@ mod tests {
 
     #[test]
     fn selective_grant() {
-        let policy =
-            CapabilityPolicy::with_capabilities(vec![Capability::EntityRead, Capability::ResourceRead]);
+        let policy = CapabilityPolicy::with_capabilities(vec![
+            Capability::EntityRead,
+            Capability::ResourceRead,
+        ]);
         assert!(policy.check(&Capability::EntityRead));
         assert!(policy.check(&Capability::ResourceRead));
         assert!(!policy.check(&Capability::EntityWrite));
@@ -172,6 +174,9 @@ mod tests {
         let result = policy.require(&Capability::EntityWrite);
         assert!(result.is_err());
         let err = result.unwrap_err();
-        assert_eq!(err.code, worldforge_core::error::ErrorCode::ModCapabilityDenied);
+        assert_eq!(
+            err.code,
+            worldforge_core::error::ErrorCode::ModCapabilityDenied
+        );
     }
 }

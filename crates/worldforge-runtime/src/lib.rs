@@ -14,8 +14,8 @@ use worldforge_core::hash::{Fingerprint, FingerprintBuilder};
 use worldforge_core::rng::DeterministicRng;
 use worldforge_core::version::EngineVersion;
 use worldforge_core::{EntityId, Fixed64, Tick};
-use worldforge_ecs::SimulationWorld;
 use worldforge_economy::{run_production, run_transfers, update_prices};
+use worldforge_ecs::SimulationWorld;
 use worldforge_proof::RunProof;
 use worldforge_replay::{ReplayArtifact, ReplayWriter};
 use worldforge_world::*;
@@ -74,7 +74,11 @@ pub struct SimulationRuntime {
 
 impl SimulationRuntime {
     /// Load and initialize a simulation from a world directory.
-    pub fn load(world_path: &Path, seed: u64, duration_ticks: Option<u64>) -> Result<Self, WorldForgeError> {
+    pub fn load(
+        world_path: &Path,
+        seed: u64,
+        duration_ticks: Option<u64>,
+    ) -> Result<Self, WorldForgeError> {
         // Load manifest
         let manifest_path = world_path.join("world.toml");
         let manifest = WorldManifest::from_file(&manifest_path)?;
@@ -169,9 +173,10 @@ impl SimulationRuntime {
 
         // Register supply links
         for link_cfg in &entities_config.links {
-            if let (Some(&from_id), Some(&to_id)) =
-                (entity_id_map.get(&link_cfg.from), entity_id_map.get(&link_cfg.to))
-            {
+            if let (Some(&from_id), Some(&to_id)) = (
+                entity_id_map.get(&link_cfg.from),
+                entity_id_map.get(&link_cfg.to),
+            ) {
                 supply_links.push((
                     from_id,
                     to_id,
@@ -284,7 +289,11 @@ impl SimulationRuntime {
         }
 
         // Build proof
-        let replay = self.replay_writer.take().unwrap().finalize(final_fp, duration);
+        let replay = self
+            .replay_writer
+            .take()
+            .unwrap()
+            .finalize(final_fp, duration);
         let proof = replay.to_proof();
 
         self.state = RunState::Completed;
@@ -338,7 +347,9 @@ impl SimulationRuntime {
                 match &scheduled.event_type {
                     ScheduledEventType::CapacityChange { target, value } => {
                         if let Some(&entity_id) = self.entity_id_map.get(target) {
-                            if let Some(rule) = self.world.get_component_mut::<ProductionRule>(&entity_id) {
+                            if let Some(rule) =
+                                self.world.get_component_mut::<ProductionRule>(&entity_id)
+                            {
                                 let old = rule.capacity;
                                 rule.capacity = Fixed64::from_f64_lossy(*value);
                                 let new = rule.capacity;

@@ -215,8 +215,20 @@ mod tests {
 
         for i in 0..5 {
             let entity = EntityId::deterministic(42, i);
-            s1.insert(entity, AnyComponent::new(Position { x: i as i32, y: i as i32 }));
-            s2.insert(entity, AnyComponent::new(Position { x: i as i32, y: i as i32 }));
+            s1.insert(
+                entity,
+                AnyComponent::new(Position {
+                    x: i as i32,
+                    y: i as i32,
+                }),
+            );
+            s2.insert(
+                entity,
+                AnyComponent::new(Position {
+                    x: i as i32,
+                    y: i as i32,
+                }),
+            );
         }
 
         assert_eq!(s1.fingerprint(), s2.fingerprint());

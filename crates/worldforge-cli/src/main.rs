@@ -127,7 +127,9 @@ fn main() -> ExitCode {
         Command::Run { path, ticks, seed } => commands::run(&path, ticks, seed, &cli.output),
         Command::TestWorld { path, runs, ticks } => commands::test_world(&path, runs, ticks),
         Command::Package { action } => match action {
-            PackageAction::Build { path, output } => commands::package_build(&path, output.as_deref()),
+            PackageAction::Build { path, output } => {
+                commands::package_build(&path, output.as_deref())
+            }
             PackageAction::Inspect { file } => commands::package_inspect(&file),
         },
         Command::Replay { action } => match action {

@@ -12,7 +12,7 @@ pub mod model;
 pub mod objective;
 pub mod scenario;
 
-pub use event::{SimulationEvent, ScheduledEvent, EventType};
+pub use event::{EventType, ScheduledEvent, SimulationEvent};
 pub use manifest::WorldManifest;
 pub use model::*;
 pub use objective::{Objective, ObjectiveStatus, ObjectiveType};

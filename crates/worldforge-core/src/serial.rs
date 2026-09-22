@@ -9,7 +9,8 @@ use std::fmt;
 /// Serialize a value to canonical CBOR bytes.
 pub fn to_cbor<T: Serialize>(value: &T) -> Result<Vec<u8>, SerialError> {
     let mut buf = Vec::new();
-    ciborium::into_writer(value, &mut buf).map_err(|e| SerialError(format!("CBOR serialize: {}", e)))?;
+    ciborium::into_writer(value, &mut buf)
+        .map_err(|e| SerialError(format!("CBOR serialize: {}", e)))?;
     Ok(buf)
 }
 

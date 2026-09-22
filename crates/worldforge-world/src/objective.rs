@@ -23,18 +23,11 @@ pub enum ObjectiveType {
         minimum: f64,
     },
     #[serde(rename = "avoid_shortage")]
-    AvoidShortage {
-        resource: String,
-    },
+    AvoidShortage { resource: String },
     #[serde(rename = "reach_production_target")]
-    ReachProductionTarget {
-        resource: String,
-        target: f64,
-    },
+    ReachProductionTarget { resource: String, target: f64 },
     #[serde(rename = "survive_until_tick")]
-    SurviveUntilTick {
-        tick: u64,
-    },
+    SurviveUntilTick { tick: u64 },
 }
 
 fn default_min() -> f64 {

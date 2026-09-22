@@ -8,7 +8,7 @@
 
 use serde::{Deserialize, Serialize};
 use worldforge_core::hash::Fingerprint;
-use worldforge_core::version::{EngineVersion, FormatVersion};
+use worldforge_core::version::EngineVersion;
 use worldforge_proof::{EventChain, RunProof};
 use worldforge_world::SimulationEvent;
 
@@ -47,7 +47,10 @@ impl ReplayArtifact {
     }
 
     /// Save to a file.
-    pub fn save(&self, path: &std::path::Path) -> Result<(), worldforge_core::error::WorldForgeError> {
+    pub fn save(
+        &self,
+        path: &std::path::Path,
+    ) -> Result<(), worldforge_core::error::WorldForgeError> {
         let data = self.to_cbor();
         std::fs::write(path, &data).map_err(|e| {
             worldforge_core::error::WorldForgeError::new(
@@ -180,7 +183,11 @@ impl ReplayWriter {
     }
 
     /// Finalize the replay with the final state fingerprint.
-    pub fn finalize(self, final_state_fingerprint: Fingerprint, total_ticks: u64) -> ReplayArtifact {
+    pub fn finalize(
+        self,
+        final_state_fingerprint: Fingerprint,
+        total_ticks: u64,
+    ) -> ReplayArtifact {
         let engine = EngineVersion::current();
         let format = worldforge_core::version::formats::replay_format();
 
@@ -254,7 +261,14 @@ mod tests {
         let replay = writer.finalize(Fingerprint::hash(b"f"), 1);
 
         let report = replay.verify_internal();
-        assert!(report.checks.iter().find(|c| c.name == "event_chain").unwrap().passed);
+        assert!(
+            report
+                .checks
+                .iter()
+                .find(|c| c.name == "event_chain")
+                .unwrap()
+                .passed
+        );
     }
 
     #[test]
@@ -283,7 +297,11 @@ mod tests {
         );
 
         let report = replay.verify_internal();
-        let chain_check = report.checks.iter().find(|c| c.name == "event_chain").unwrap();
+        let chain_check = report
+            .checks
+            .iter()
+            .find(|c| c.name == "event_chain")
+            .unwrap();
         assert!(!chain_check.passed); // Tampered replay should fail
     }
 }

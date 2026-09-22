@@ -21,10 +21,7 @@ pub fn doctor() -> Result<(), WorldForgeError> {
     print_check("Rust toolchain", true);
 
     // WASM runtime
-    print_check(
-        "WASM runtime",
-        false,
-    );
+    print_check("WASM runtime", false);
     println!("    → wasmtime integration planned for M1");
 
     // Check example worlds
@@ -61,7 +58,12 @@ pub fn validate(path: &Path) -> Result<(), WorldForgeError> {
     Ok(())
 }
 
-pub fn run(path: &Path, ticks: u64, seed: u64, output: &OutputFormat) -> Result<(), WorldForgeError> {
+pub fn run(
+    path: &Path,
+    ticks: u64,
+    seed: u64,
+    output: &OutputFormat,
+) -> Result<(), WorldForgeError> {
     println!("World Forge Simulation");
     println!("======================");
     println!("  World:  {}", path.display());
@@ -79,7 +81,10 @@ pub fn run(path: &Path, ticks: u64, seed: u64, output: &OutputFormat) -> Result<
     println!("Run completed ✓");
     println!("  Events:               {}", result.event_count);
     println!("  Shortage events:      {}", result.shortage_count);
-    println!("  World fingerprint:    {}", result.world_fingerprint.to_short_hex());
+    println!(
+        "  World fingerprint:    {}",
+        result.world_fingerprint.to_short_hex()
+    );
     println!(
         "  Initial state:        {}",
         result.initial_state_fingerprint.to_short_hex()
@@ -208,7 +213,11 @@ pub fn package_build(path: &Path, output: Option<&Path>) -> Result<(), WorldForg
     let default_output = path.with_extension("world");
     let output_path = output.unwrap_or(&default_output);
 
-    println!("Building package: {} → {}", path.display(), output_path.display());
+    println!(
+        "Building package: {} → {}",
+        path.display(),
+        output_path.display()
+    );
 
     let info = worldforge_package::build_package(path, output_path)?;
 
@@ -236,7 +245,12 @@ pub fn package_inspect(file: &Path) -> Result<(), WorldForgeError> {
     println!();
     println!("Files:");
     for entry in &info.files {
-        println!("  {} ({} bytes) [{}]", entry.path, entry.size, entry.fingerprint.to_short_hex());
+        println!(
+            "  {} ({} bytes) [{}]",
+            entry.path,
+            entry.size,
+            entry.fingerprint.to_short_hex()
+        );
     }
     Ok(())
 }
@@ -253,11 +267,26 @@ pub fn replay_inspect(file: &Path) -> Result<(), WorldForgeError> {
     println!("  Seed:            {}", replay.seed);
     println!("  Total ticks:     {}", replay.total_ticks);
     println!("  Events:          {}", replay.events.len());
-    println!("  World FP:        {}", replay.world_fingerprint.to_short_hex());
-    println!("  Scenario FP:     {}", replay.scenario_fingerprint.to_short_hex());
-    println!("  Initial state:   {}", replay.initial_state_fingerprint.to_short_hex());
-    println!("  Final state:     {}", replay.final_state_fingerprint.to_short_hex());
-    println!("  Event chain:     {}", replay.event_chain_root.to_short_hex());
+    println!(
+        "  World FP:        {}",
+        replay.world_fingerprint.to_short_hex()
+    );
+    println!(
+        "  Scenario FP:     {}",
+        replay.scenario_fingerprint.to_short_hex()
+    );
+    println!(
+        "  Initial state:   {}",
+        replay.initial_state_fingerprint.to_short_hex()
+    );
+    println!(
+        "  Final state:     {}",
+        replay.final_state_fingerprint.to_short_hex()
+    );
+    println!(
+        "  Event chain:     {}",
+        replay.event_chain_root.to_short_hex()
+    );
     println!("  Timestamp:       {}", replay.timestamp);
     Ok(())
 }
@@ -281,10 +310,7 @@ pub fn replay_verify(file: &Path) -> Result<(), WorldForgeError> {
     } else {
         Err(WorldForgeError::new(
             worldforge_core::error::ErrorCode::ReplayHashMismatch,
-            format!(
-                "{} check(s) failed",
-                report.failed_checks().len()
-            ),
+            format!("{} check(s) failed", report.failed_checks().len()),
         ))
     }
 }

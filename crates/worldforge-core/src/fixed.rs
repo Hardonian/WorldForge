@@ -217,7 +217,7 @@ mod tests {
     fn multiplication_precision() {
         let a = Fixed64::from_ratio(3, 2); // 1.5
         let b = Fixed64::from_ratio(5, 2); // 2.5
-        let result = a * b;                // 3.75
+        let result = a * b; // 3.75
         assert_eq!(result, Fixed64::from_ratio(15, 4));
     }
 

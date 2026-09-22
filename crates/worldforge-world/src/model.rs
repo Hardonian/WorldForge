@@ -63,7 +63,10 @@ impl Inventory {
     }
 
     pub fn get(&self, resource: &str) -> Fixed64 {
-        self.resources.get(resource).copied().unwrap_or(Fixed64::ZERO)
+        self.resources
+            .get(resource)
+            .copied()
+            .unwrap_or(Fixed64::ZERO)
     }
 
     pub fn set(&mut self, resource: &str, amount: Fixed64) {
@@ -72,7 +75,8 @@ impl Inventory {
 
     pub fn add(&mut self, resource: &str, amount: Fixed64) {
         let current = self.get(resource);
-        self.resources.insert(resource.to_string(), current + amount);
+        self.resources
+            .insert(resource.to_string(), current + amount);
     }
 
     /// Try to subtract. Returns Err if would go negative.

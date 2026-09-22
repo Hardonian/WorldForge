@@ -107,19 +107,31 @@ mod tests {
         let log = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
 
         let log1 = log.clone();
-        schedule.add_system("third", 30, Box::new(move |_: &mut SimulationWorld| {
-            log1.lock().unwrap().push("third");
-        }));
+        schedule.add_system(
+            "third",
+            30,
+            Box::new(move |_: &mut SimulationWorld| {
+                log1.lock().unwrap().push("third");
+            }),
+        );
 
         let log2 = log.clone();
-        schedule.add_system("first", 10, Box::new(move |_: &mut SimulationWorld| {
-            log2.lock().unwrap().push("first");
-        }));
+        schedule.add_system(
+            "first",
+            10,
+            Box::new(move |_: &mut SimulationWorld| {
+                log2.lock().unwrap().push("first");
+            }),
+        );
 
         let log3 = log.clone();
-        schedule.add_system("second", 20, Box::new(move |_: &mut SimulationWorld| {
-            log3.lock().unwrap().push("second");
-        }));
+        schedule.add_system(
+            "second",
+            20,
+            Box::new(move |_: &mut SimulationWorld| {
+                log3.lock().unwrap().push("second");
+            }),
+        );
 
         let mut world = SimulationWorld::new();
         schedule.run(&mut world);

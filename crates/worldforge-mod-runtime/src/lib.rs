@@ -51,7 +51,10 @@ impl ModInstance {
     /// Initialize the mod.
     pub fn init(&mut self) -> Result<(), WorldForgeError> {
         self.callbacks.init().map_err(|e| {
-            WorldForgeError::new(ErrorCode::ModInitFailed, format!("mod '{}' init failed: {}", self.name, e))
+            WorldForgeError::new(
+                ErrorCode::ModInitFailed,
+                format!("mod '{}' init failed: {}", self.name, e),
+            )
         })?;
         self.initialized = true;
         Ok(())
@@ -216,10 +219,7 @@ mod tests {
         // All capabilities should be denied
         let result = instance.require_capability(&Capability::EntityRead);
         assert!(result.is_err());
-        assert_eq!(
-            result.unwrap_err().code,
-            ErrorCode::ModCapabilityDenied
-        );
+        assert_eq!(result.unwrap_err().code, ErrorCode::ModCapabilityDenied);
     }
 
     #[test]

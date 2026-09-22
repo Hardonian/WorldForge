@@ -6,8 +6,8 @@
 use std::any::TypeId;
 use std::collections::BTreeMap;
 
-use worldforge_core::{EntityId, Fingerprint, Tick};
 use worldforge_core::hash::FingerprintBuilder;
+use worldforge_core::{EntityId, Fingerprint, Tick};
 
 use crate::component::{AnyComponent, Component, ComponentStorage};
 
@@ -94,7 +94,10 @@ impl SimulationWorld {
     }
 
     /// Get a mutable component reference for an entity.
-    pub fn get_component_mut<T: Component + 'static>(&mut self, entity: &EntityId) -> Option<&mut T> {
+    pub fn get_component_mut<T: Component + 'static>(
+        &mut self,
+        entity: &EntityId,
+    ) -> Option<&mut T> {
         let type_name = std::any::type_name::<T>();
         self.storages
             .get_mut(type_name)
@@ -210,7 +213,13 @@ mod tests {
             for i in 0..10 {
                 let e = EntityId::deterministic(42, i);
                 world.insert_component(e, Health(100 - i as i32));
-                world.insert_component(e, Velocity { dx: i as i32, dy: 0 });
+                world.insert_component(
+                    e,
+                    Velocity {
+                        dx: i as i32,
+                        dy: 0,
+                    },
+                );
             }
             world.set_tick(Tick::new(50));
             world
