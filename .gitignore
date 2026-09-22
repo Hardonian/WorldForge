@@ -1,0 +1,30 @@
+# Build artifacts
+/target/
+**/*.rs.bk
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Environment
+.env
+.env.local
+
+# Package artifacts
+*.world
+*.replay
+
+# Benchmark results (keep baselines in CI)
+target/criterion/
+
+# WASM build artifacts
+*.wasm
+!examples/**/mod.wasm
