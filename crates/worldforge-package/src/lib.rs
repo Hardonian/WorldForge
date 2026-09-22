@@ -132,6 +132,18 @@ pub fn validate_world(world_dir: &Path) -> Result<(), WorldForgeError> {
             format!("no entities.toml found in {}", world_dir.display()),
         ));
     }
+    let entities = std::fs::read_to_string(&entities_path).map_err(|e| {
+        WorldForgeError::new(
+            ErrorCode::WorldNotFound,
+            format!("cannot read entities.toml: {e}"),
+        )
+    })?;
+    toml::from_str::<toml::Value>(&entities).map_err(|e| {
+        WorldForgeError::new(
+            ErrorCode::WorldSchemaViolation,
+            format!("invalid entities.toml: {e}"),
+        )
+    })?;
 
     Ok(())
 }
@@ -253,6 +265,12 @@ fn collect_files(
             }
             collect_files(base, &path, files)?;
         } else {
+            if matches!(
+                path.extension().and_then(|ext| ext.to_str()),
+                Some("replay" | "world")
+            ) {
+                continue;
+            }
             let rel = path
                 .strip_prefix(base)
                 .unwrap()

@@ -10,8 +10,7 @@ use std::collections::BTreeMap;
 use std::path::Path;
 
 use worldforge_core::error::{ErrorCode, WorldForgeError};
-use worldforge_core::hash::{Fingerprint, FingerprintBuilder};
-use worldforge_core::rng::DeterministicRng;
+use worldforge_core::hash::Fingerprint;
 use worldforge_core::version::EngineVersion;
 use worldforge_core::{EntityId, Fixed64, Tick};
 use worldforge_economy::{run_production, run_transfers, update_prices};
@@ -57,9 +56,9 @@ pub struct ObjectiveResult {
 
 /// The simulation runtime — executes worlds.
 pub struct SimulationRuntime {
+    world_path: std::path::PathBuf,
     world: SimulationWorld,
     scenario: Scenario,
-    rng: DeterministicRng,
     state: RunState,
     entity_ids: Vec<(EntityId, String)>,
     entity_id_map: BTreeMap<String, EntityId>,
@@ -94,9 +93,7 @@ impl SimulationRuntime {
         scenario.validate()?;
 
         // Compute fingerprints
-        let manifest_content = std::fs::read_to_string(&manifest_path)
-            .map_err(|e| WorldForgeError::new(ErrorCode::WorldManifestMissing, e.to_string()))?;
-        let world_fingerprint = Fingerprint::hash(manifest_content.as_bytes());
+        let world_fingerprint = worldforge_package::fingerprint_world(world_path)?;
 
         let scenario_content = std::fs::read_to_string(&scenario_path)
             .map_err(|e| WorldForgeError::new(ErrorCode::ScenarioMissing, e.to_string()))?;
@@ -188,8 +185,6 @@ impl SimulationRuntime {
 
         tracked_resources.sort();
 
-        let rng = DeterministicRng::new(seed, "simulation");
-
         let initial_fp = ecs_world.fingerprint();
         let run_id = format!("run-{}-{}", seed, chrono::Utc::now().timestamp());
 
@@ -202,9 +197,9 @@ impl SimulationRuntime {
         );
 
         Ok(Self {
+            world_path: world_path.to_path_buf(),
             world: ecs_world,
             scenario,
-            rng,
             state: RunState::Validated,
             entity_ids,
             entity_id_map,
@@ -241,6 +236,15 @@ impl SimulationRuntime {
                 &mut self.world,
                 &self.supply_links,
                 &self.entity_name_map,
+                tick,
+                &mut tick_events,
+            );
+            update_prices(
+                &mut self.world,
+                &self.entity_ids,
+                &self.tracked_resources,
+                Fixed64::from_int(100),
+                Fixed64::from_ratio(1, 10),
                 tick,
                 &mut tick_events,
             );
@@ -324,7 +328,7 @@ impl SimulationRuntime {
         let engine = EngineVersion::current();
         let format = worldforge_core::version::formats::replay_format();
 
-        ReplayArtifact {
+        let mut replay = ReplayArtifact {
             format_version: format.version.to_string(),
             engine_version: engine.version.to_string(),
             world_fingerprint: result.world_fingerprint,
@@ -338,7 +342,11 @@ impl SimulationRuntime {
             events: self.events.clone(),
             run_id: result.proof.run_id.clone(),
             timestamp: chrono::Utc::now().to_rfc3339(),
-        }
+            world_path: self.world_path.to_string_lossy().into_owned(),
+            integrity_hash: Fingerprint::ZERO,
+        };
+        replay.seal();
+        replay
     }
 
     fn apply_scheduled_events(&mut self, tick: u64) {

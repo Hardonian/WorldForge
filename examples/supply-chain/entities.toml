@@ -73,6 +73,14 @@ region = "city-region"
 goods = 100.0
 money = 10000.0
 
+[entities.production]
+energy_cost = 0.0
+
+[entities.production.inputs]
+goods = 5.0
+
+[entities.production.outputs]
+
 # Supply chain links
 [[links]]
 from = "mine"

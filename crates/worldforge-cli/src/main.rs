@@ -80,19 +80,24 @@ enum Command {
 
 #[derive(Subcommand)]
 enum PackageAction {
+    /// Validate a world directory
+    Validate { path: PathBuf },
     /// Build a .world package from a directory
     Build {
         /// Path to the world directory
         path: PathBuf,
         /// Output file path
         #[arg(long)]
-        output: Option<PathBuf>,
+        #[arg(long = "output")]
+        output_path: Option<PathBuf>,
     },
     /// Inspect a .world package
     Inspect {
         /// Path to the .world file
         file: PathBuf,
     },
+    /// Print a package or world-directory content fingerprint
+    Fingerprint { path: PathBuf },
 }
 
 #[derive(Subcommand)]
@@ -107,6 +112,8 @@ enum ReplayAction {
         /// Path to the replay file
         file: PathBuf,
     },
+    /// Re-run the recorded world and compare the resulting state
+    Run { file: PathBuf },
 }
 
 fn main() -> ExitCode {
@@ -127,14 +134,17 @@ fn main() -> ExitCode {
         Command::Run { path, ticks, seed } => commands::run(&path, ticks, seed, &cli.output),
         Command::TestWorld { path, runs, ticks } => commands::test_world(&path, runs, ticks),
         Command::Package { action } => match action {
-            PackageAction::Build { path, output } => {
-                commands::package_build(&path, output.as_deref())
+            PackageAction::Validate { path } => commands::validate(&path),
+            PackageAction::Build { path, output_path } => {
+                commands::package_build(&path, output_path.as_deref())
             }
             PackageAction::Inspect { file } => commands::package_inspect(&file),
+            PackageAction::Fingerprint { path } => commands::package_fingerprint(&path),
         },
         Command::Replay { action } => match action {
             ReplayAction::Inspect { file } => commands::replay_inspect(&file),
             ReplayAction::Verify { file } => commands::replay_verify(&file),
+            ReplayAction::Run { file } => commands::replay_run(&file),
         },
     };
 

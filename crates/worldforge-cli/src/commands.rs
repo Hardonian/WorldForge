@@ -139,7 +139,7 @@ pub fn test_world(path: &Path, runs: u32, ticks: u64) -> Result<(), WorldForgeEr
     let mut completed = 0u32;
     let mut failed = 0u32;
     let mut determinism_failures = 0u32;
-    let mut invariant_violations = 0u32;
+    let invariant_violations = 0u32;
     let mut shortage_runs = 0u32;
 
     // Run with seed 42 twice to verify determinism
@@ -255,6 +255,16 @@ pub fn package_inspect(file: &Path) -> Result<(), WorldForgeError> {
     Ok(())
 }
 
+pub fn package_fingerprint(path: &Path) -> Result<(), WorldForgeError> {
+    let fingerprint = if path.is_dir() {
+        worldforge_package::fingerprint_world(path)?
+    } else {
+        worldforge_package::inspect_package(path)?.fingerprint
+    };
+    println!("{}", fingerprint);
+    Ok(())
+}
+
 pub fn replay_inspect(file: &Path) -> Result<(), WorldForgeError> {
     println!("Inspecting replay: {}", file.display());
     println!();
@@ -313,6 +323,57 @@ pub fn replay_verify(file: &Path) -> Result<(), WorldForgeError> {
             format!("{} check(s) failed", report.failed_checks().len()),
         ))
     }
+}
+
+pub fn replay_run(file: &Path) -> Result<(), WorldForgeError> {
+    let replay = worldforge_replay::ReplayArtifact::load(file)?;
+    let report = replay.verify_internal();
+    if !report.all_passed() {
+        return Err(WorldForgeError::new(
+            worldforge_core::error::ErrorCode::ReplayHashMismatch,
+            "replay failed integrity verification before execution",
+        ));
+    }
+    if replay.world_path.is_empty() {
+        return Err(WorldForgeError::new(
+            worldforge_core::error::ErrorCode::ReplayFormatInvalid,
+            "replay does not contain a local world path",
+        ));
+    }
+
+    let world_path = Path::new(&replay.world_path);
+    let current_world = worldforge_package::fingerprint_world(world_path)?;
+    if current_world != replay.world_fingerprint {
+        return Err(WorldForgeError::new(
+            worldforge_core::error::ErrorCode::ReplayFingerprintMismatch,
+            "world content does not match the replay",
+        ));
+    }
+    if !replay.mod_fingerprints.is_empty() {
+        return Err(WorldForgeError::new(
+            worldforge_core::error::ErrorCode::ReplayFingerprintMismatch,
+            "recorded mod set is unavailable for local replay",
+        ));
+    }
+
+    let mut runtime = worldforge_runtime::SimulationRuntime::load(
+        world_path,
+        replay.seed,
+        Some(replay.total_ticks),
+    )?;
+    let result = runtime.run()?;
+    if result.initial_state_fingerprint != replay.initial_state_fingerprint
+        || result.final_state_fingerprint != replay.final_state_fingerprint
+        || result.proof.event_chain_root != replay.event_chain_root
+    {
+        return Err(WorldForgeError::new(
+            worldforge_core::error::ErrorCode::ReplayFingerprintMismatch,
+            "re-executed simulation does not match recorded fingerprints",
+        ));
+    }
+    println!("Replay re-execution passed ✓");
+    println!("  Final state: {}", result.final_state_fingerprint);
+    Ok(())
 }
 
 fn print_check(name: &str, passed: bool) {

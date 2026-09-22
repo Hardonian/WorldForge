@@ -1345,6 +1345,7 @@ dependencies = [
 name = "worldforge-runtime"
 version = "0.1.0"
 dependencies = [
+ "chrono",
  "serde",
  "serde_json",
  "toml",
@@ -1352,6 +1353,7 @@ dependencies = [
  "worldforge-core",
  "worldforge-economy",
  "worldforge-ecs",
+ "worldforge-package",
  "worldforge-proof",
  "worldforge-replay",
  "worldforge-world",

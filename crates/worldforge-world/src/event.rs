@@ -111,6 +111,7 @@ impl SimulationEvent {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ScheduledEvent {
     pub tick: u64,
+    #[serde(flatten)]
     pub event_type: ScheduledEventType,
 }
 

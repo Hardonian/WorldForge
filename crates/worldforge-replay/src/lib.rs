@@ -28,9 +28,43 @@ pub struct ReplayArtifact {
     pub events: Vec<SimulationEvent>,
     pub run_id: String,
     pub timestamp: String,
+    /// Local source path used for deterministic re-execution. It is metadata,
+    /// not a remote registry reference.
+    #[serde(default)]
+    pub world_path: String,
+    /// Hash of all replay fields except this hash itself.
+    #[serde(default = "zero_fingerprint")]
+    pub integrity_hash: Fingerprint,
+}
+
+fn zero_fingerprint() -> Fingerprint {
+    Fingerprint::ZERO
 }
 
 impl ReplayArtifact {
+    fn calculated_integrity_hash(&self) -> Fingerprint {
+        Fingerprint::hash_cbor(&(
+            &self.format_version,
+            &self.engine_version,
+            self.world_fingerprint,
+            self.scenario_fingerprint,
+            self.seed,
+            &self.mod_fingerprints,
+            self.initial_state_fingerprint,
+            self.final_state_fingerprint,
+            self.event_chain_root,
+            self.total_ticks,
+            &self.events,
+            &self.run_id,
+            &self.timestamp,
+            &self.world_path,
+        ))
+    }
+
+    /// Seal the replay after all metadata has been populated.
+    pub fn seal(&mut self) {
+        self.integrity_hash = self.calculated_integrity_hash();
+    }
     /// Serialize to CBOR bytes.
     pub fn to_cbor(&self) -> Vec<u8> {
         worldforge_core::serial::to_cbor(self).expect("replay serialization failed")
@@ -90,6 +124,17 @@ impl ReplayArtifact {
     /// Verify internal consistency of the replay.
     pub fn verify_internal(&self) -> worldforge_proof::VerificationReport {
         let mut report = worldforge_proof::VerificationReport::new(&self.run_id);
+
+        let expected_integrity = self.calculated_integrity_hash();
+        report.add_check(
+            "artifact_integrity",
+            expected_integrity == self.integrity_hash,
+            if expected_integrity == self.integrity_hash {
+                "replay metadata and fingerprints are intact"
+            } else {
+                "replay artifact hash mismatch"
+            },
+        );
 
         // Verify event chain
         let mut chain = EventChain::new();
@@ -191,7 +236,7 @@ impl ReplayWriter {
         let engine = EngineVersion::current();
         let format = worldforge_core::version::formats::replay_format();
 
-        ReplayArtifact {
+        let mut artifact = ReplayArtifact {
             format_version: format.version.to_string(),
             engine_version: engine.version.to_string(),
             world_fingerprint: self.world_fingerprint,
@@ -199,13 +244,17 @@ impl ReplayWriter {
             seed: self.seed,
             mod_fingerprints: self.mod_fingerprints,
             initial_state_fingerprint: self.initial_state_fingerprint,
-            final_state_fingerprint: final_state_fingerprint,
+            final_state_fingerprint,
             event_chain_root: self.event_chain.root(),
             total_ticks,
             events: self.events,
             run_id: self.run_id,
             timestamp: chrono::Utc::now().to_rfc3339(),
-        }
+            world_path: String::new(),
+            integrity_hash: Fingerprint::ZERO,
+        };
+        artifact.seal();
+        artifact
     }
 }
 
@@ -303,5 +352,19 @@ mod tests {
             .find(|c| c.name == "event_chain")
             .unwrap();
         assert!(!chain_check.passed); // Tampered replay should fail
+    }
+
+    #[test]
+    fn modified_final_fingerprint_fails_verification() {
+        let writer = ReplayWriter::new(
+            "test".to_string(),
+            Fingerprint::hash(b"w"),
+            Fingerprint::hash(b"s"),
+            42,
+            Fingerprint::hash(b"i"),
+        );
+        let mut replay = writer.finalize(Fingerprint::hash(b"final"), 1);
+        replay.final_state_fingerprint = Fingerprint::hash(b"modified");
+        assert!(!replay.verify_internal().all_passed());
     }
 }

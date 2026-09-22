@@ -13,7 +13,9 @@ worldforge-world = { workspace = true }
 worldforge-economy = { workspace = true }
 worldforge-proof = { workspace = true }
 worldforge-replay = { workspace = true }
+worldforge-package = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 toml = { workspace = true }
 tracing = { workspace = true }
+chrono = { workspace = true }
