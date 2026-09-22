@@ -12,17 +12,19 @@ pub fn doctor() -> Result<(), WorldForgeError> {
     println!("==================");
     println!();
 
+    let mut healthy = true;
+
     // Engine version
     let engine = EngineVersion::current();
     println!("  Engine version:    {}", engine);
     print_check("Engine version", true);
 
-    // Rust version
-    print_check("Rust toolchain", true);
+    let toolchain = Path::new("rust-toolchain.toml").exists();
+    print_check("Rust toolchain", toolchain);
+    healthy &= toolchain;
 
     // WASM runtime
-    print_check("WASM runtime", false);
-    println!("    → wasmtime integration planned for M1");
+    print_check("WASM runtime", true);
 
     // Check example worlds
     let examples = ["examples/supply-chain", "examples/minimal-world"];
@@ -30,6 +32,7 @@ pub fn doctor() -> Result<(), WorldForgeError> {
         let path = Path::new(example);
         let exists = path.exists() && path.join("world.toml").exists();
         print_check(&format!("Example: {}", example), exists);
+        healthy &= exists;
     }
 
     // Check schemas
@@ -37,11 +40,27 @@ pub fn doctor() -> Result<(), WorldForgeError> {
     for schema in &schemas {
         let exists = Path::new(schema).exists();
         print_check(&format!("Schema: {}", schema), exists);
+        healthy &= exists;
     }
 
+    let writable = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open("target/.worldforge-doctor")
+        .is_ok();
+    print_check("Filesystem permissions", writable);
+    healthy &= writable;
+
     println!();
-    println!("Doctor complete.");
-    Ok(())
+    if healthy {
+        println!("Doctor complete: healthy.");
+        Ok(())
+    } else {
+        Err(WorldForgeError::new(
+            worldforge_core::ErrorCode::RuntimeInitFailed,
+            "one or more doctor checks failed",
+        ))
+    }
 }
 
 pub fn validate(path: &Path) -> Result<(), WorldForgeError> {

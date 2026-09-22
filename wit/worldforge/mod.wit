@@ -10,6 +10,7 @@ world mod-guest {
     import entity-api;
     import resource-api;
     import event-api;
+    import economy-api;
 
     // Guest-implemented lifecycle callbacks
     export mod-lifecycle;

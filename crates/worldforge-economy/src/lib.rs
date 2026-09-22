@@ -9,7 +9,7 @@
 //! - Transactions are atomic
 //! - Invalid transfers fail without corrupting state
 
-use worldforge_core::{EntityId, Fixed64, Tick};
+use worldforge_core::{EntityId, ErrorCode, Fixed64, Tick, WorldForgeError};
 use worldforge_ecs::SimulationWorld;
 use worldforge_world::{EventType, Inventory, PriceSignal, ProductionRule, SimulationEvent};
 
@@ -99,15 +99,8 @@ pub fn run_transfers(
             continue;
         }
 
-        // Atomic transfer: subtract from source, add to destination
-        if let Some(from_inv) = world.get_component_mut::<Inventory>(from_id) {
-            if from_inv.try_subtract(resource, transfer_amount).is_err() {
-                continue;
-            }
-        }
-
-        if let Some(to_inv) = world.get_component_mut::<Inventory>(to_id) {
-            to_inv.add(resource, transfer_amount);
+        if transfer_inventory(world, *from_id, *to_id, resource, transfer_amount).is_err() {
+            continue;
         }
 
         let from_name = entity_names
@@ -129,6 +122,52 @@ pub fn run_transfers(
             },
         ));
     }
+}
+
+/// Atomically transfer inventory. All validation occurs before mutation, and a
+/// failed transfer leaves both inventories unchanged.
+pub fn transfer_inventory(
+    world: &mut SimulationWorld,
+    from: EntityId,
+    to: EntityId,
+    resource: &str,
+    amount: Fixed64,
+) -> Result<(), WorldForgeError> {
+    if !amount.is_non_negative() {
+        return Err(WorldForgeError::new(
+            ErrorCode::TransferFailed,
+            "transfer amount cannot be negative",
+        ));
+    }
+    if from == to || amount.is_zero() {
+        return Ok(());
+    }
+    let source = world.get_component::<Inventory>(&from).ok_or_else(|| {
+        WorldForgeError::new(ErrorCode::TransferFailed, "source inventory is missing")
+    })?;
+    if source.get(resource) < amount {
+        return Err(WorldForgeError::new(
+            ErrorCode::InsufficientResource,
+            format!("insufficient {resource} for transfer"),
+        ));
+    }
+    if world.get_component::<Inventory>(&to).is_none() {
+        return Err(WorldForgeError::new(
+            ErrorCode::TransferFailed,
+            "destination inventory is missing",
+        ));
+    }
+
+    world
+        .get_component_mut::<Inventory>(&from)
+        .expect("source validated above")
+        .try_subtract(resource, amount)
+        .map_err(|e| WorldForgeError::new(ErrorCode::TransferFailed, e))?;
+    world
+        .get_component_mut::<Inventory>(&to)
+        .expect("destination validated above")
+        .add(resource, amount);
+    Ok(())
 }
 
 /// Update price signals based on inventory levels.
@@ -282,5 +321,23 @@ mod tests {
         };
 
         assert_eq!(total_before, total_after); // Conservation
+    }
+
+    #[test]
+    fn invalid_destination_does_not_mutate_source() {
+        let mut world = SimulationWorld::new();
+        let from = EntityId::deterministic(1, 0);
+        let missing = EntityId::deterministic(1, 1);
+        let mut inventory = Inventory::new();
+        inventory.set("ore", Fixed64::from_int(10));
+        world.insert_component(from, inventory);
+
+        assert!(
+            transfer_inventory(&mut world, from, missing, "ore", Fixed64::from_int(5)).is_err()
+        );
+        assert_eq!(
+            world.get_component::<Inventory>(&from).unwrap().get("ore"),
+            Fixed64::from_int(10)
+        );
     }
 }

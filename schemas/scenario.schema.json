@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://worldforge.dev/schemas/scenario-0.1.0.json",
+  "title": "World Forge scenario 0.1.0",
+  "type": "object",
+  "required": ["world"],
+  "properties": {
+    "world": { "type": "string", "minLength": 1 },
+    "seed": { "type": "integer", "minimum": 0 },
+    "duration_ticks": { "type": "integer", "minimum": 1 },
+    "events": { "type": "array" },
+    "objectives": { "type": "array" }
+  },
+  "additionalProperties": false
+}

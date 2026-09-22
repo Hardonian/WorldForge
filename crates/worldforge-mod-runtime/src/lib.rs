@@ -99,6 +99,7 @@ struct WasmHostState {
     resource_amount: i64,
     emitted_events: Vec<i64>,
     limits: StoreLimits,
+    capability_denied: bool,
 }
 
 /// A loaded, sandboxed WebAssembly mod using the minimal v0 core ABI.
@@ -129,12 +130,11 @@ impl WasmModInstance {
             .func_wrap(
                 "worldforge",
                 "read_resource",
-                |caller: Caller<'_, WasmHostState>| -> wasmtime::Result<i64> {
-                    caller
-                        .data()
-                        .policy
-                        .require(&Capability::ResourceRead)
-                        .map_err(|e| wasmtime::Error::msg(e.to_string()))?;
+                |mut caller: Caller<'_, WasmHostState>| -> wasmtime::Result<i64> {
+                    if let Err(error) = caller.data().policy.require(&Capability::ResourceRead) {
+                        caller.data_mut().capability_denied = true;
+                        return Err(wasmtime::Error::msg(error.to_string()));
+                    }
                     Ok(caller.data().resource_amount)
                 },
             )
@@ -144,11 +144,10 @@ impl WasmModInstance {
                 "worldforge",
                 "emit_event",
                 |mut caller: Caller<'_, WasmHostState>, event: i64| -> wasmtime::Result<()> {
-                    caller
-                        .data()
-                        .policy
-                        .require(&Capability::EventEmit)
-                        .map_err(|e| wasmtime::Error::msg(e.to_string()))?;
+                    if let Err(error) = caller.data().policy.require(&Capability::EventEmit) {
+                        caller.data_mut().capability_denied = true;
+                        return Err(wasmtime::Error::msg(error.to_string()));
+                    }
                     caller.data_mut().emitted_events.push(event);
                     Ok(())
                 },
@@ -167,6 +166,7 @@ impl WasmModInstance {
                 resource_amount,
                 emitted_events: Vec::new(),
                 limits,
+                capability_denied: false,
             },
         );
         store.limiter(|state| &mut state.limits);
@@ -198,6 +198,7 @@ impl WasmModInstance {
     }
 
     fn prepare_call(&mut self) -> Result<(), WorldForgeError> {
+        self.store.data_mut().capability_denied = false;
         self.store
             .set_fuel(self.config.fuel_per_tick)
             .map_err(|e| WorldForgeError::new(ErrorCode::ModExecutionFailed, e.to_string()))
@@ -205,25 +206,34 @@ impl WasmModInstance {
 
     pub fn init(&mut self) -> Result<(), WorldForgeError> {
         self.prepare_call()?;
-        self.init.call(&mut self.store, ()).map_err(map_wasm_trap)
+        let result = self.init.call(&mut self.store, ());
+        self.map_call_result(result)
     }
 
     pub fn on_tick(&mut self, tick: u64) -> Result<(), WorldForgeError> {
         self.prepare_call()?;
-        self.on_tick
-            .call(&mut self.store, tick as i64)
-            .map_err(map_wasm_trap)
+        let result = self.on_tick.call(&mut self.store, tick as i64);
+        self.map_call_result(result)
     }
 
     pub fn on_event(&mut self, event: i64) -> Result<(), WorldForgeError> {
         self.prepare_call()?;
-        self.on_event
-            .call(&mut self.store, event)
-            .map_err(map_wasm_trap)
+        let result = self.on_event.call(&mut self.store, event);
+        self.map_call_result(result)
     }
 
     pub fn emitted_events(&self) -> &[i64] {
         &self.store.data().emitted_events
+    }
+
+    fn map_call_result(&self, result: wasmtime::Result<()>) -> Result<(), WorldForgeError> {
+        result.map_err(|error| {
+            if self.store.data().capability_denied {
+                WorldForgeError::new(ErrorCode::ModCapabilityDenied, error.to_string())
+            } else {
+                map_wasm_trap(error)
+            }
+        })
     }
 }
 
