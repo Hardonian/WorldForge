@@ -1,0 +1,18 @@
+world = "supply-chain"
+seed = 42
+duration_ticks = 1000
+
+[[events]]
+tick = 250
+type = "capacity_change"
+target = "factory"
+value = 0.5
+
+[[objectives]]
+type = "maintain_inventory"
+resource = "goods"
+minimum = 50.0
+
+[[objectives]]
+type = "avoid_shortage"
+resource = "goods"

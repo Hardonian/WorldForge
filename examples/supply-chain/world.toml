@@ -1,0 +1,3 @@
+name = "supply-chain"
+description = "Three-region supply chain demonstrating production, transfer, shortage, and price dynamics"
+version = "0.1.0"

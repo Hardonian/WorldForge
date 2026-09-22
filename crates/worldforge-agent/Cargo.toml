@@ -1,0 +1,11 @@
+[package]
+name = "worldforge-agent"
+description = "Deterministic agent system for World Forge simulations"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+worldforge-core = { workspace = true }
+serde = { workspace = true }

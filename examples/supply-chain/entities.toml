@@ -1,0 +1,99 @@
+[[entities]]
+name = "mine"
+entity_type = "producer"
+region = "mining-region"
+
+[entities.initial_inventory]
+ore = 500.0
+energy = 1000.0
+
+[entities.production]
+energy_cost = 1.0
+
+[entities.production.inputs]
+energy = 1.0
+
+[entities.production.outputs]
+ore = 10.0
+
+[[entities]]
+name = "steel-mill"
+entity_type = "processor"
+region = "industrial-region"
+
+[entities.initial_inventory]
+ore = 100.0
+steel = 50.0
+energy = 1000.0
+
+[entities.production]
+energy_cost = 2.0
+
+[entities.production.inputs]
+ore = 5.0
+energy = 2.0
+
+[entities.production.outputs]
+steel = 3.0
+
+[[entities]]
+name = "factory"
+entity_type = "manufacturer"
+region = "industrial-region"
+
+[entities.initial_inventory]
+steel = 100.0
+goods = 50.0
+energy = 1000.0
+
+[entities.production]
+energy_cost = 3.0
+
+[entities.production.inputs]
+steel = 2.0
+energy = 3.0
+
+[entities.production.outputs]
+goods = 5.0
+
+[[entities]]
+name = "warehouse"
+entity_type = "storage"
+region = "distribution-region"
+
+[entities.initial_inventory]
+goods = 200.0
+
+[[entities]]
+name = "city-market"
+entity_type = "consumer"
+region = "city-region"
+
+[entities.initial_inventory]
+goods = 100.0
+money = 10000.0
+
+# Supply chain links
+[[links]]
+from = "mine"
+to = "steel-mill"
+resource = "ore"
+max_per_tick = 8.0
+
+[[links]]
+from = "steel-mill"
+to = "factory"
+resource = "steel"
+max_per_tick = 4.0
+
+[[links]]
+from = "factory"
+to = "warehouse"
+resource = "goods"
+max_per_tick = 6.0
+
+[[links]]
+from = "warehouse"
+to = "city-market"
+resource = "goods"
+max_per_tick = 4.0

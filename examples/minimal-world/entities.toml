@@ -1,0 +1,7 @@
+[[entities]]
+name = "depot"
+entity_type = "storage"
+region = "central"
+
+[entities.initial_inventory]
+supplies = 100.0

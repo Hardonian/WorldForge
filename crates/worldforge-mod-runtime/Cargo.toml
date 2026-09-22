@@ -1,0 +1,16 @@
+[package]
+name = "worldforge-mod-runtime"
+description = "WASM mod execution runtime for World Forge (wasmtime-based)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+worldforge-core = { workspace = true }
+worldforge-mod-api = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tracing = { workspace = true }
+# wasmtime integration is a future dependency
+# For now, we provide the host API contract and a mock runtime

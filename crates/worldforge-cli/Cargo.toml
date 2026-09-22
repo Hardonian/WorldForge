@@ -1,0 +1,29 @@
+[package]
+name = "worldforge-cli"
+description = "World Forge command-line interface"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[[bin]]
+name = "worldforge"
+path = "src/main.rs"
+
+[dependencies]
+worldforge-core = { workspace = true }
+worldforge-ecs = { workspace = true }
+worldforge-world = { workspace = true }
+worldforge-runtime = { workspace = true }
+worldforge-replay = { workspace = true }
+worldforge-proof = { workspace = true }
+worldforge-package = { workspace = true }
+worldforge-mod-api = { workspace = true }
+worldforge-mod-runtime = { workspace = true }
+worldforge-economy = { workspace = true }
+worldforge-agent = { workspace = true }
+clap = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
