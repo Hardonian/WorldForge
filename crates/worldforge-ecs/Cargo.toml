@@ -1,0 +1,14 @@
+[package]
+name = "worldforge-ecs"
+description = "Deterministic Entity-Component-System architecture for World Forge"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+worldforge-core = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+blake3 = { workspace = true }
+tracing = { workspace = true }
