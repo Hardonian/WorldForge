@@ -12,4 +12,4 @@ worldforge-mod-api = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 tracing = { workspace = true }
-wasmtime = { version = "24", default-features = false, features = ["cranelift", "wat"] }
+wasmtime = { version = "24", default-features = false, features = ["cranelift", "runtime", "wat"] }

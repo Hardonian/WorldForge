@@ -20,7 +20,7 @@ struct Cli {
     command: Command,
 
     /// Output format (text or json)
-    #[arg(long, default_value = "text", global = true)]
+    #[arg(long = "format", default_value = "text", global = true)]
     output: OutputFormat,
 }
 

@@ -19,7 +19,11 @@ pub fn doctor() -> Result<(), WorldForgeError> {
     println!("  Engine version:    {}", engine);
     print_check("Engine version", true);
 
-    let toolchain = Path::new("rust-toolchain.toml").exists();
+    let toolchain = std::process::Command::new("rustc")
+        .arg("--version")
+        .output()
+        .map(|output| output.status.success())
+        .unwrap_or(false);
     print_check("Rust toolchain", toolchain);
     healthy &= toolchain;
 
@@ -161,33 +165,31 @@ pub fn test_world(path: &Path, runs: u32, ticks: u64) -> Result<(), WorldForgeEr
     let invariant_violations = 0u32;
     let mut shortage_runs = 0u32;
 
-    // Run with seed 42 twice to verify determinism
+    // Use the same seed for every run so all requested runs participate in the
+    // determinism gate. Seed variation is exercised separately with `run`.
     let mut reference_fp: Option<Fingerprint> = None;
 
     for run_idx in 0..runs {
-        let seed = if run_idx < 2 { 42 } else { run_idx as u64 + 1 };
+        let seed = 42;
 
         match worldforge_runtime::SimulationRuntime::load(path, seed, Some(ticks)) {
             Ok(mut runtime) => match runtime.run() {
                 Ok(result) => {
                     completed += 1;
 
-                    // Check determinism for seed 42 runs
-                    if run_idx < 2 {
-                        match &reference_fp {
-                            None => {
-                                reference_fp = Some(result.final_state_fingerprint);
-                            }
-                            Some(ref_fp) => {
-                                if *ref_fp != result.final_state_fingerprint {
-                                    determinism_failures += 1;
-                                    eprintln!(
-                                        "  DETERMINISM FAILURE at run {}: expected {}, got {}",
-                                        run_idx,
-                                        ref_fp.to_short_hex(),
-                                        result.final_state_fingerprint.to_short_hex()
-                                    );
-                                }
+                    match &reference_fp {
+                        None => {
+                            reference_fp = Some(result.final_state_fingerprint);
+                        }
+                        Some(ref_fp) => {
+                            if *ref_fp != result.final_state_fingerprint {
+                                determinism_failures += 1;
+                                eprintln!(
+                                    "  DETERMINISM FAILURE at run {}: expected {}, got {}",
+                                    run_idx,
+                                    ref_fp.to_short_hex(),
+                                    result.final_state_fingerprint.to_short_hex()
+                                );
                             }
                         }
                     }
