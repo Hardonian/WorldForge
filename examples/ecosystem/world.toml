@@ -1,0 +1,3 @@
+name = "ecosystem"
+description = "Predator-prey ecosystem demonstrating population dynamics, food web interactions, and environmental carrying capacity"
+version = "0.1.0"

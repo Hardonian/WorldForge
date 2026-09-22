@@ -2031,6 +2031,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "worldforge-bench"
+version = "0.1.0"
+dependencies = [
+ "criterion",
+ "worldforge-core",
+ "worldforge-economy",
+ "worldforge-ecs",
+ "worldforge-package",
+ "worldforge-proof",
+ "worldforge-runtime",
+ "worldforge-world",
+]
+
+[[package]]
 name = "worldforge-cli"
 version = "0.1.0"
 dependencies = [

@@ -13,6 +13,7 @@ members = [
     "crates/worldforge-agent",
     "crates/worldforge-proof",
     "crates/worldforge-cli",
+    "crates/worldforge-bench",
 ]
 
 [workspace.package]

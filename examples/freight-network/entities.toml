@@ -1,0 +1,166 @@
+# Continental freight logistics network
+
+[[entities]]
+name = "port-of-entry"
+entity_type = "source"
+region = "coastal"
+
+[entities.initial_inventory]
+containers = 2000.0
+fuel = 500.0
+
+[entities.production]
+energy_cost = 0.0
+
+[entities.production.inputs]
+fuel = 1.0
+
+[entities.production.outputs]
+containers = 6.0
+
+[[entities]]
+name = "coastal-depot"
+entity_type = "processor"
+region = "coastal"
+
+[entities.initial_inventory]
+containers = 300.0
+parcels = 100.0
+fuel = 300.0
+
+[entities.production]
+energy_cost = 1.0
+
+[entities.production.inputs]
+containers = 3.0
+fuel = 1.0
+
+[entities.production.outputs]
+parcels = 8.0
+
+[[entities]]
+name = "midwest-hub"
+entity_type = "processor"
+region = "central"
+
+[entities.initial_inventory]
+parcels = 500.0
+sorted_parcels = 200.0
+fuel = 400.0
+
+[entities.production]
+energy_cost = 2.0
+
+[entities.production.inputs]
+parcels = 5.0
+fuel = 1.0
+
+[entities.production.outputs]
+sorted_parcels = 5.0
+
+[[entities]]
+name = "mountain-depot"
+entity_type = "storage"
+region = "western"
+
+[entities.initial_inventory]
+sorted_parcels = 100.0
+delivered = 0.0
+fuel = 200.0
+
+[entities.production]
+energy_cost = 1.0
+
+[entities.production.inputs]
+sorted_parcels = 3.0
+fuel = 2.0
+
+[entities.production.outputs]
+delivered = 3.0
+
+[[entities]]
+name = "east-depot"
+entity_type = "storage"
+region = "eastern"
+
+[entities.initial_inventory]
+sorted_parcels = 100.0
+delivered = 0.0
+fuel = 200.0
+
+[entities.production]
+energy_cost = 1.0
+
+[entities.production.inputs]
+sorted_parcels = 3.0
+fuel = 1.0
+
+[entities.production.outputs]
+delivered = 3.0
+
+[[entities]]
+name = "fuel-refinery"
+entity_type = "producer"
+region = "central"
+
+[entities.initial_inventory]
+crude = 10000.0
+fuel = 500.0
+
+[entities.production]
+energy_cost = 0.0
+
+[entities.production.inputs]
+crude = 5.0
+
+[entities.production.outputs]
+fuel = 12.0
+
+# Supply chain routes
+[[links]]
+from = "port-of-entry"
+to = "coastal-depot"
+resource = "containers"
+max_per_tick = 8.0
+
+[[links]]
+from = "coastal-depot"
+to = "midwest-hub"
+resource = "parcels"
+max_per_tick = 6.0
+
+[[links]]
+from = "midwest-hub"
+to = "mountain-depot"
+resource = "sorted_parcels"
+max_per_tick = 3.0
+
+[[links]]
+from = "midwest-hub"
+to = "east-depot"
+resource = "sorted_parcels"
+max_per_tick = 4.0
+
+[[links]]
+from = "fuel-refinery"
+to = "coastal-depot"
+resource = "fuel"
+max_per_tick = 5.0
+
+[[links]]
+from = "fuel-refinery"
+to = "midwest-hub"
+resource = "fuel"
+max_per_tick = 5.0
+
+[[links]]
+from = "fuel-refinery"
+to = "mountain-depot"
+resource = "fuel"
+max_per_tick = 3.0
+
+[[links]]
+from = "fuel-refinery"
+to = "east-depot"
+resource = "fuel"
+max_per_tick = 3.0

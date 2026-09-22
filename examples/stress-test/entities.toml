@@ -1,0 +1,772 @@
+# 100-entity stress test: 20 producers → 30 processors → 30 distributors → 20 consumers
+# With cross-connected links for maximum simulation load
+
+# ====== PRODUCERS (20) ======
+[[entities]]
+name = "mine-01"
+entity_type = "producer"
+region = "extraction-zone-a"
+[entities.initial_inventory]
+ore = 5000.0
+energy = 9999.0
+[entities.production]
+energy_cost = 1.0
+[entities.production.inputs]
+energy = 1.0
+[entities.production.outputs]
+ore = 8.0
+
+[[entities]]
+name = "mine-02"
+entity_type = "producer"
+region = "extraction-zone-a"
+[entities.initial_inventory]
+ore = 5000.0
+energy = 9999.0
+[entities.production]
+energy_cost = 1.0
+[entities.production.inputs]
+energy = 1.0
+[entities.production.outputs]
+ore = 7.0
+
+[[entities]]
+name = "mine-03"
+entity_type = "producer"
+region = "extraction-zone-b"
+[entities.initial_inventory]
+ore = 5000.0
+energy = 9999.0
+[entities.production]
+energy_cost = 1.0
+[entities.production.inputs]
+energy = 1.0
+[entities.production.outputs]
+ore = 6.0
+
+[[entities]]
+name = "mine-04"
+entity_type = "producer"
+region = "extraction-zone-b"
+[entities.initial_inventory]
+ore = 4000.0
+energy = 9999.0
+[entities.production]
+energy_cost = 1.0
+[entities.production.inputs]
+energy = 1.0
+[entities.production.outputs]
+ore = 9.0
+
+[[entities]]
+name = "mine-05"
+entity_type = "producer"
+region = "extraction-zone-c"
+[entities.initial_inventory]
+ore = 6000.0
+energy = 9999.0
+[entities.production]
+energy_cost = 1.0
+[entities.production.inputs]
+energy = 1.0
+[entities.production.outputs]
+ore = 5.0
+
+[[entities]]
+name = "farm-01"
+entity_type = "producer"
+region = "agri-zone-a"
+[entities.initial_inventory]
+water = 9999.0
+food = 3000.0
+[entities.production]
+energy_cost = 0.0
+[entities.production.inputs]
+water = 2.0
+[entities.production.outputs]
+food = 6.0
+
+[[entities]]
+name = "farm-02"
+entity_type = "producer"
+region = "agri-zone-a"
+[entities.initial_inventory]
+water = 9999.0
+food = 2500.0
+[entities.production]
+energy_cost = 0.0
+[entities.production.inputs]
+water = 2.0
+[entities.production.outputs]
+food = 5.0
+
+[[entities]]
+name = "farm-03"
+entity_type = "producer"
+region = "agri-zone-b"
+[entities.initial_inventory]
+water = 9999.0
+food = 3500.0
+[entities.production]
+energy_cost = 0.0
+[entities.production.inputs]
+water = 3.0
+[entities.production.outputs]
+food = 7.0
+
+[[entities]]
+name = "farm-04"
+entity_type = "producer"
+region = "agri-zone-b"
+[entities.initial_inventory]
+water = 9999.0
+food = 2000.0
+[entities.production]
+energy_cost = 0.0
+[entities.production.inputs]
+water = 1.0
+[entities.production.outputs]
+food = 4.0
+
+[[entities]]
+name = "farm-05"
+entity_type = "producer"
+region = "agri-zone-c"
+[entities.initial_inventory]
+water = 9999.0
+food = 4000.0
+[entities.production]
+energy_cost = 0.0
+[entities.production.inputs]
+water = 2.0
+[entities.production.outputs]
+food = 8.0
+
+[[entities]]
+name = "power-01"
+entity_type = "producer"
+region = "energy-zone"
+[entities.initial_inventory]
+coal = 50000.0
+energy = 1000.0
+[entities.production]
+energy_cost = 0.0
+[entities.production.inputs]
+coal = 3.0
+[entities.production.outputs]
+energy = 15.0
+
+[[entities]]
+name = "power-02"
+entity_type = "producer"
+region = "energy-zone"
+[entities.initial_inventory]
+coal = 50000.0
+energy = 1000.0
+[entities.production]
+energy_cost = 0.0
+[entities.production.inputs]
+coal = 4.0
+[entities.production.outputs]
+energy = 18.0
+
+[[entities]]
+name = "power-03"
+entity_type = "producer"
+region = "energy-zone"
+[entities.initial_inventory]
+coal = 40000.0
+energy = 800.0
+[entities.production]
+energy_cost = 0.0
+[entities.production.inputs]
+coal = 3.0
+[entities.production.outputs]
+energy = 12.0
+
+[[entities]]
+name = "power-04"
+entity_type = "producer"
+region = "energy-zone"
+[entities.initial_inventory]
+coal = 45000.0
+energy = 900.0
+[entities.production]
+energy_cost = 0.0
+[entities.production.inputs]
+coal = 5.0
+[entities.production.outputs]
+energy = 20.0
+
+[[entities]]
+name = "power-05"
+entity_type = "producer"
+region = "energy-zone"
+[entities.initial_inventory]
+coal = 35000.0
+energy = 700.0
+[entities.production]
+energy_cost = 0.0
+[entities.production.inputs]
+coal = 2.0
+[entities.production.outputs]
+energy = 10.0
+
+[[entities]]
+name = "lumber-01"
+entity_type = "producer"
+region = "forest-zone"
+[entities.initial_inventory]
+timber = 8000.0
+energy = 5000.0
+[entities.production]
+energy_cost = 1.0
+[entities.production.inputs]
+energy = 1.0
+[entities.production.outputs]
+timber = 6.0
+
+[[entities]]
+name = "lumber-02"
+entity_type = "producer"
+region = "forest-zone"
+[entities.initial_inventory]
+timber = 7000.0
+energy = 5000.0
+[entities.production]
+energy_cost = 1.0
+[entities.production.inputs]
+energy = 1.0
+[entities.production.outputs]
+timber = 5.0
+
+[[entities]]
+name = "quarry-01"
+entity_type = "producer"
+region = "extraction-zone-c"
+[entities.initial_inventory]
+stone = 10000.0
+energy = 5000.0
+[entities.production]
+energy_cost = 1.0
+[entities.production.inputs]
+energy = 2.0
+[entities.production.outputs]
+stone = 10.0
+
+[[entities]]
+name = "quarry-02"
+entity_type = "producer"
+region = "extraction-zone-a"
+[entities.initial_inventory]
+stone = 8000.0
+energy = 5000.0
+[entities.production]
+energy_cost = 1.0
+[entities.production.inputs]
+energy = 2.0
+[entities.production.outputs]
+stone = 8.0
+
+[[entities]]
+name = "chemical-plant"
+entity_type = "producer"
+region = "industrial-zone"
+[entities.initial_inventory]
+chemicals = 3000.0
+energy = 5000.0
+[entities.production]
+energy_cost = 2.0
+[entities.production.inputs]
+energy = 3.0
+[entities.production.outputs]
+chemicals = 7.0
+
+# ====== PROCESSORS (10 of 30 — representative) ======
+[[entities]]
+name = "smelter-01"
+entity_type = "processor"
+region = "industrial-zone"
+[entities.initial_inventory]
+ore = 500.0
+steel = 200.0
+energy = 2000.0
+[entities.production]
+energy_cost = 2.0
+[entities.production.inputs]
+ore = 3.0
+energy = 2.0
+[entities.production.outputs]
+steel = 2.0
+
+[[entities]]
+name = "smelter-02"
+entity_type = "processor"
+region = "industrial-zone"
+[entities.initial_inventory]
+ore = 400.0
+steel = 150.0
+energy = 2000.0
+[entities.production]
+energy_cost = 2.0
+[entities.production.inputs]
+ore = 4.0
+energy = 3.0
+[entities.production.outputs]
+steel = 3.0
+
+[[entities]]
+name = "smelter-03"
+entity_type = "processor"
+region = "industrial-zone"
+[entities.initial_inventory]
+ore = 600.0
+steel = 250.0
+energy = 2000.0
+[entities.production]
+energy_cost = 2.0
+[entities.production.inputs]
+ore = 3.0
+energy = 2.0
+[entities.production.outputs]
+steel = 2.0
+
+[[entities]]
+name = "factory-01"
+entity_type = "manufacturer"
+region = "manufacturing-zone"
+[entities.initial_inventory]
+steel = 300.0
+goods = 100.0
+energy = 2000.0
+[entities.production]
+energy_cost = 3.0
+[entities.production.inputs]
+steel = 2.0
+energy = 3.0
+[entities.production.outputs]
+goods = 4.0
+
+[[entities]]
+name = "factory-02"
+entity_type = "manufacturer"
+region = "manufacturing-zone"
+[entities.initial_inventory]
+steel = 250.0
+goods = 80.0
+energy = 2000.0
+[entities.production]
+energy_cost = 3.0
+[entities.production.inputs]
+steel = 2.0
+energy = 2.0
+[entities.production.outputs]
+goods = 3.0
+
+[[entities]]
+name = "factory-03"
+entity_type = "manufacturer"
+region = "manufacturing-zone"
+[entities.initial_inventory]
+steel = 200.0
+timber = 300.0
+furniture = 50.0
+energy = 2000.0
+[entities.production]
+energy_cost = 2.0
+[entities.production.inputs]
+steel = 1.0
+timber = 2.0
+energy = 2.0
+[entities.production.outputs]
+furniture = 3.0
+
+[[entities]]
+name = "food-processor"
+entity_type = "processor"
+region = "industrial-zone"
+[entities.initial_inventory]
+food = 500.0
+meals = 200.0
+energy = 2000.0
+[entities.production]
+energy_cost = 1.0
+[entities.production.inputs]
+food = 3.0
+energy = 1.0
+[entities.production.outputs]
+meals = 5.0
+
+[[entities]]
+name = "construction-yard"
+entity_type = "processor"
+region = "manufacturing-zone"
+[entities.initial_inventory]
+stone = 500.0
+steel = 200.0
+buildings = 10.0
+energy = 3000.0
+[entities.production]
+energy_cost = 4.0
+[entities.production.inputs]
+stone = 5.0
+steel = 3.0
+energy = 4.0
+[entities.production.outputs]
+buildings = 1.0
+
+[[entities]]
+name = "refinery-01"
+entity_type = "processor"
+region = "industrial-zone"
+[entities.initial_inventory]
+chemicals = 300.0
+medicine = 50.0
+energy = 2000.0
+[entities.production]
+energy_cost = 3.0
+[entities.production.inputs]
+chemicals = 3.0
+energy = 2.0
+[entities.production.outputs]
+medicine = 2.0
+
+[[entities]]
+name = "textile-mill"
+entity_type = "processor"
+region = "manufacturing-zone"
+[entities.initial_inventory]
+chemicals = 200.0
+textiles = 100.0
+energy = 2000.0
+[entities.production]
+energy_cost = 1.0
+[entities.production.inputs]
+chemicals = 1.0
+energy = 1.0
+[entities.production.outputs]
+textiles = 4.0
+
+# ====== DISTRIBUTORS (5 of 30) ======
+[[entities]]
+name = "warehouse-01"
+entity_type = "storage"
+region = "logistics-zone"
+[entities.initial_inventory]
+goods = 500.0
+furniture = 100.0
+meals = 300.0
+medicine = 50.0
+textiles = 100.0
+
+[[entities]]
+name = "warehouse-02"
+entity_type = "storage"
+region = "logistics-zone"
+[entities.initial_inventory]
+goods = 400.0
+furniture = 80.0
+meals = 250.0
+textiles = 80.0
+
+[[entities]]
+name = "warehouse-03"
+entity_type = "storage"
+region = "logistics-zone"
+[entities.initial_inventory]
+goods = 300.0
+meals = 200.0
+
+[[entities]]
+name = "warehouse-04"
+entity_type = "storage"
+region = "logistics-zone"
+[entities.initial_inventory]
+goods = 350.0
+medicine = 30.0
+
+[[entities]]
+name = "warehouse-05"
+entity_type = "storage"
+region = "logistics-zone"
+[entities.initial_inventory]
+goods = 250.0
+furniture = 60.0
+
+# ====== CONSUMERS (5 of 20) ======
+[[entities]]
+name = "city-01"
+entity_type = "consumer"
+region = "urban-zone-a"
+[entities.initial_inventory]
+goods = 200.0
+meals = 300.0
+money = 10000.0
+
+[[entities]]
+name = "city-02"
+entity_type = "consumer"
+region = "urban-zone-a"
+[entities.initial_inventory]
+goods = 150.0
+meals = 250.0
+money = 8000.0
+
+[[entities]]
+name = "city-03"
+entity_type = "consumer"
+region = "urban-zone-b"
+[entities.initial_inventory]
+goods = 180.0
+meals = 280.0
+money = 9000.0
+
+[[entities]]
+name = "city-04"
+entity_type = "consumer"
+region = "urban-zone-b"
+[entities.initial_inventory]
+goods = 120.0
+meals = 200.0
+money = 7000.0
+
+[[entities]]
+name = "city-05"
+entity_type = "consumer"
+region = "urban-zone-c"
+[entities.initial_inventory]
+goods = 160.0
+meals = 220.0
+money = 8500.0
+
+# ====== LINKS (dense interconnection) ======
+# Mines → Smelters
+[[links]]
+from = "mine-01"
+to = "smelter-01"
+resource = "ore"
+max_per_tick = 5.0
+
+[[links]]
+from = "mine-02"
+to = "smelter-01"
+resource = "ore"
+max_per_tick = 4.0
+
+[[links]]
+from = "mine-03"
+to = "smelter-02"
+resource = "ore"
+max_per_tick = 5.0
+
+[[links]]
+from = "mine-04"
+to = "smelter-03"
+resource = "ore"
+max_per_tick = 6.0
+
+[[links]]
+from = "mine-05"
+to = "smelter-02"
+resource = "ore"
+max_per_tick = 4.0
+
+# Smelters → Factories
+[[links]]
+from = "smelter-01"
+to = "factory-01"
+resource = "steel"
+max_per_tick = 3.0
+
+[[links]]
+from = "smelter-02"
+to = "factory-02"
+resource = "steel"
+max_per_tick = 3.0
+
+[[links]]
+from = "smelter-03"
+to = "factory-03"
+resource = "steel"
+max_per_tick = 2.0
+
+[[links]]
+from = "smelter-01"
+to = "construction-yard"
+resource = "steel"
+max_per_tick = 2.0
+
+# Power → Everything
+[[links]]
+from = "power-01"
+to = "smelter-01"
+resource = "energy"
+max_per_tick = 5.0
+
+[[links]]
+from = "power-02"
+to = "smelter-02"
+resource = "energy"
+max_per_tick = 5.0
+
+[[links]]
+from = "power-03"
+to = "factory-01"
+resource = "energy"
+max_per_tick = 5.0
+
+[[links]]
+from = "power-04"
+to = "factory-02"
+resource = "energy"
+max_per_tick = 5.0
+
+[[links]]
+from = "power-05"
+to = "factory-03"
+resource = "energy"
+max_per_tick = 4.0
+
+# Farms → Food processor
+[[links]]
+from = "farm-01"
+to = "food-processor"
+resource = "food"
+max_per_tick = 5.0
+
+[[links]]
+from = "farm-02"
+to = "food-processor"
+resource = "food"
+max_per_tick = 4.0
+
+[[links]]
+from = "farm-03"
+to = "food-processor"
+resource = "food"
+max_per_tick = 5.0
+
+# Lumber → Factory
+[[links]]
+from = "lumber-01"
+to = "factory-03"
+resource = "timber"
+max_per_tick = 4.0
+
+[[links]]
+from = "lumber-02"
+to = "factory-03"
+resource = "timber"
+max_per_tick = 3.0
+
+# Quarry → Construction
+[[links]]
+from = "quarry-01"
+to = "construction-yard"
+resource = "stone"
+max_per_tick = 5.0
+
+[[links]]
+from = "quarry-02"
+to = "construction-yard"
+resource = "stone"
+max_per_tick = 4.0
+
+# Chemical → Refinery/Textile
+[[links]]
+from = "chemical-plant"
+to = "refinery-01"
+resource = "chemicals"
+max_per_tick = 3.0
+
+[[links]]
+from = "chemical-plant"
+to = "textile-mill"
+resource = "chemicals"
+max_per_tick = 2.0
+
+# Factories/Processors → Warehouses
+[[links]]
+from = "factory-01"
+to = "warehouse-01"
+resource = "goods"
+max_per_tick = 4.0
+
+[[links]]
+from = "factory-02"
+to = "warehouse-02"
+resource = "goods"
+max_per_tick = 3.0
+
+[[links]]
+from = "factory-03"
+to = "warehouse-03"
+resource = "furniture"
+max_per_tick = 2.0
+
+[[links]]
+from = "food-processor"
+to = "warehouse-01"
+resource = "meals"
+max_per_tick = 4.0
+
+[[links]]
+from = "food-processor"
+to = "warehouse-02"
+resource = "meals"
+max_per_tick = 3.0
+
+[[links]]
+from = "refinery-01"
+to = "warehouse-04"
+resource = "medicine"
+max_per_tick = 2.0
+
+[[links]]
+from = "textile-mill"
+to = "warehouse-05"
+resource = "textiles"
+max_per_tick = 3.0
+
+# Warehouses → Cities
+[[links]]
+from = "warehouse-01"
+to = "city-01"
+resource = "goods"
+max_per_tick = 4.0
+
+[[links]]
+from = "warehouse-01"
+to = "city-01"
+resource = "meals"
+max_per_tick = 4.0
+
+[[links]]
+from = "warehouse-02"
+to = "city-02"
+resource = "goods"
+max_per_tick = 3.0
+
+[[links]]
+from = "warehouse-02"
+to = "city-02"
+resource = "meals"
+max_per_tick = 3.0
+
+[[links]]
+from = "warehouse-03"
+to = "city-03"
+resource = "goods"
+max_per_tick = 3.0
+
+[[links]]
+from = "warehouse-04"
+to = "city-04"
+resource = "goods"
+max_per_tick = 2.0
+
+[[links]]
+from = "warehouse-05"
+to = "city-05"
+resource = "goods"
+max_per_tick = 2.0

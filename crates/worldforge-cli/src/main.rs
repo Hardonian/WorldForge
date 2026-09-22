@@ -65,6 +65,33 @@ enum Command {
         ticks: u64,
     },
 
+    /// Export simulation data (JSON with tick-by-tick snapshots)
+    Export {
+        /// Path to the world directory
+        path: PathBuf,
+        /// Number of ticks
+        #[arg(long, default_value = "1000")]
+        ticks: u64,
+        /// Random seed
+        #[arg(long, default_value = "42")]
+        seed: u64,
+        /// Output file path (stdout if omitted)
+        #[arg(long)]
+        output: Option<PathBuf>,
+    },
+
+    /// Run performance benchmarks
+    Benchmark {
+        /// Path to the world directory
+        path: PathBuf,
+        /// Number of ticks per run
+        #[arg(long, default_value = "1000")]
+        ticks: u64,
+        /// Number of repetitions
+        #[arg(long, default_value = "5")]
+        reps: u32,
+    },
+
     /// Package operations
     Package {
         #[command(subcommand)]
@@ -133,6 +160,13 @@ fn main() -> ExitCode {
         Command::Validate { path } => commands::validate(&path),
         Command::Run { path, ticks, seed } => commands::run(&path, ticks, seed, &cli.output),
         Command::TestWorld { path, runs, ticks } => commands::test_world(&path, runs, ticks),
+        Command::Export {
+            path,
+            ticks,
+            seed,
+            output,
+        } => commands::export(&path, ticks, seed, output.as_deref()),
+        Command::Benchmark { path, ticks, reps } => commands::benchmark(&path, ticks, reps),
         Command::Package { action } => match action {
             PackageAction::Validate { path } => commands::validate(&path),
             PackageAction::Build { path, output_path } => {

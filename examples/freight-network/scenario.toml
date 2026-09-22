@@ -1,0 +1,18 @@
+world = "freight-network"
+seed = 314
+duration_ticks = 800
+
+[[events]]
+tick = 200
+type = "capacity_change"
+target = "midwest-hub"
+value = 0.2
+
+[[objectives]]
+type = "maintain_inventory"
+resource = "parcels"
+minimum = 20.0
+
+[[objectives]]
+type = "avoid_shortage"
+resource = "fuel"

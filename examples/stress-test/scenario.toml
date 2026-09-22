@@ -1,0 +1,3 @@
+world = "stress-test-100"
+seed = 12345
+duration_ticks = 5000

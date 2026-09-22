@@ -1,0 +1,3 @@
+name = "freight-network"
+description = "Continental freight logistics with warehouses, routes, fuel depots, and delivery deadlines"
+version = "0.1.0"

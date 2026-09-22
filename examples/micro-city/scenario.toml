@@ -1,0 +1,23 @@
+world = "micro-city"
+seed = 99
+duration_ticks = 1500
+
+[[events]]
+tick = 400
+type = "capacity_change"
+target = "coal-plant"
+value = 0.4
+
+[[objectives]]
+type = "maintain_inventory"
+resource = "happiness"
+minimum = 30.0
+
+[[objectives]]
+type = "avoid_shortage"
+resource = "power"
+
+[[objectives]]
+type = "maintain_inventory"
+resource = "population"
+minimum = 500.0

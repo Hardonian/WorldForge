@@ -1,0 +1,117 @@
+# Ecology simulation: grass → deer → wolves food web
+
+[[entities]]
+name = "grassland"
+entity_type = "producer"
+region = "plains"
+
+[entities.initial_inventory]
+sunlight = 99999.0
+water = 5000.0
+grass = 500.0
+
+[entities.production]
+energy_cost = 0.0
+
+[entities.production.inputs]
+sunlight = 1.0
+water = 1.0
+
+[entities.production.outputs]
+grass = 8.0
+
+[[entities]]
+name = "forest"
+entity_type = "producer"
+region = "highlands"
+
+[entities.initial_inventory]
+sunlight = 99999.0
+water = 3000.0
+berries = 200.0
+
+[entities.production]
+energy_cost = 0.0
+
+[entities.production.inputs]
+sunlight = 1.0
+water = 2.0
+
+[entities.production.outputs]
+berries = 3.0
+
+[[entities]]
+name = "deer-herd"
+entity_type = "consumer"
+region = "plains"
+
+[entities.initial_inventory]
+grass = 200.0
+berries = 50.0
+deer = 100.0
+
+[entities.production]
+energy_cost = 0.0
+
+[entities.production.inputs]
+grass = 5.0
+
+[entities.production.outputs]
+deer = 2.0
+
+[[entities]]
+name = "wolf-pack"
+entity_type = "predator"
+region = "highlands"
+
+[entities.initial_inventory]
+deer = 30.0
+wolves = 20.0
+
+[entities.production]
+energy_cost = 0.0
+
+[entities.production.inputs]
+deer = 3.0
+
+[entities.production.outputs]
+wolves = 1.0
+
+[[entities]]
+name = "river"
+entity_type = "source"
+region = "plains"
+
+[entities.initial_inventory]
+water = 50000.0
+
+# Resource flows
+[[links]]
+from = "grassland"
+to = "deer-herd"
+resource = "grass"
+max_per_tick = 10.0
+
+[[links]]
+from = "forest"
+to = "deer-herd"
+resource = "berries"
+max_per_tick = 5.0
+
+[[links]]
+from = "deer-herd"
+to = "wolf-pack"
+resource = "deer"
+max_per_tick = 4.0
+
+[[links]]
+from = "river"
+to = "grassland"
+resource = "water"
+max_per_tick = 20.0
+
+[[links]]
+from = "river"
+to = "forest"
+resource = "water"
+max_per_tick = 10.0

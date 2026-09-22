@@ -401,3 +401,109 @@ fn print_check(name: &str, passed: bool) {
     let icon = if passed { "✓" } else { "✗" };
     println!("  {} {}", icon, name);
 }
+
+pub fn export(
+    path: &Path,
+    ticks: u64,
+    seed: u64,
+    output: Option<&Path>,
+) -> Result<(), WorldForgeError> {
+    let mut runtime = worldforge_runtime::SimulationRuntime::load(path, seed, Some(ticks))?;
+    let result = runtime.run()?;
+
+    let export_data = serde_json::json!({
+        "meta": {
+            "world": path.display().to_string(),
+            "seed": seed,
+            "ticks": ticks,
+            "engine_version": EngineVersion::current().to_string(),
+            "world_fingerprint": result.world_fingerprint.to_string(),
+            "initial_state": result.initial_state_fingerprint.to_string(),
+            "final_state": result.final_state_fingerprint.to_string(),
+            "event_chain_root": result.proof.event_chain_root.to_string(),
+        },
+        "summary": {
+            "total_events": result.event_count,
+            "shortage_events": result.shortage_count,
+            "objectives": result.objective_results.iter().map(|o| {
+                serde_json::json!({
+                    "name": o.name,
+                    "status": format!("{:?}", o.status),
+                })
+            }).collect::<Vec<_>>(),
+        },
+        "proof": {
+            "event_chain_root": result.proof.event_chain_root.to_string(),
+            "initial_fingerprint": result.initial_state_fingerprint.to_string(),
+            "final_fingerprint": result.final_state_fingerprint.to_string(),
+        },
+    });
+
+    let json = serde_json::to_string_pretty(&export_data).unwrap_or_default();
+
+    match output {
+        Some(out_path) => {
+            std::fs::write(out_path, &json)
+                .map_err(|e| WorldForgeError::new(worldforge_core::ErrorCode::PackageBuildFailed, e.to_string()))?;
+            println!("Exported to: {}", out_path.display());
+        }
+        None => {
+            println!("{}", json);
+        }
+    }
+
+    Ok(())
+}
+
+pub fn benchmark(
+    path: &Path,
+    ticks: u64,
+    reps: u32,
+) -> Result<(), WorldForgeError> {
+    println!("World Forge Benchmark");
+    println!("=====================");
+    println!("  World:  {}", path.display());
+    println!("  Ticks:  {}", ticks);
+    println!("  Reps:   {}", reps);
+    println!();
+
+    let mut durations = Vec::new();
+    let mut event_counts = Vec::new();
+
+    for i in 0..reps {
+        let start = std::time::Instant::now();
+        let mut runtime = worldforge_runtime::SimulationRuntime::load(path, 42, Some(ticks))?;
+        let result = runtime.run()?;
+        let elapsed = start.elapsed();
+
+        durations.push(elapsed);
+        event_counts.push(result.event_count);
+
+        println!(
+            "  Run {}/{}: {:.2}ms ({} events)",
+            i + 1,
+            reps,
+            elapsed.as_secs_f64() * 1000.0,
+            result.event_count
+        );
+    }
+
+    let total: std::time::Duration = durations.iter().sum();
+    let avg = total / reps;
+    let min = durations.iter().min().unwrap();
+    let max = durations.iter().max().unwrap();
+    let avg_events = event_counts.iter().sum::<usize>() / reps as usize;
+    let ticks_per_sec = (ticks as f64) / avg.as_secs_f64();
+    let events_per_sec = (avg_events as f64) / avg.as_secs_f64();
+
+    println!();
+    println!("Results:");
+    println!("  Avg time:        {:.2}ms", avg.as_secs_f64() * 1000.0);
+    println!("  Min time:        {:.2}ms", min.as_secs_f64() * 1000.0);
+    println!("  Max time:        {:.2}ms", max.as_secs_f64() * 1000.0);
+    println!("  Ticks/sec:       {:.0}", ticks_per_sec);
+    println!("  Events/sec:      {:.0}", events_per_sec);
+    println!("  Avg events/run:  {}", avg_events);
+
+    Ok(())
+}

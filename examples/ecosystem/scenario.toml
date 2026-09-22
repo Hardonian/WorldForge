@@ -1,0 +1,23 @@
+world = "ecosystem"
+seed = 7
+duration_ticks = 2000
+
+[[events]]
+tick = 500
+type = "capacity_change"
+target = "grassland"
+value = 0.3
+
+[[objectives]]
+type = "maintain_inventory"
+resource = "wolves"
+minimum = 5.0
+
+[[objectives]]
+type = "avoid_shortage"
+resource = "deer"
+
+[[objectives]]
+type = "maintain_inventory"
+resource = "grass"
+minimum = 100.0

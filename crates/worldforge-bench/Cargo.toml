@@ -1,0 +1,21 @@
+[package]
+name = "worldforge-bench"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[[bench]]
+name = "simulation"
+harness = false
+
+[dependencies]
+worldforge-core = { path = "../worldforge-core" }
+worldforge-ecs = { path = "../worldforge-ecs" }
+worldforge-economy = { path = "../worldforge-economy" }
+worldforge-proof = { path = "../worldforge-proof" }
+worldforge-runtime = { path = "../worldforge-runtime" }
+worldforge-package = { path = "../worldforge-package" }
+worldforge-world = { path = "../worldforge-world" }
+
+[dev-dependencies]
+criterion = { version = "0.5", features = ["html_reports"] }
