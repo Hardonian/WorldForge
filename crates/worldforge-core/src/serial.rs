@@ -4,32 +4,36 @@
 //! compact storage of simulation state.
 
 use serde::{de::DeserializeOwned, Serialize};
+use std::fmt;
 
 /// Serialize a value to canonical CBOR bytes.
-pub fn to_cbor<T: Serialize>(value: &T) -> Result<Vec<u8>, CborError> {
+pub fn to_cbor<T: Serialize>(value: &T) -> Result<Vec<u8>, SerialError> {
     let mut buf = Vec::new();
-    ciborium::into_writer(value, &mut buf).map_err(|e| CborError::Serialize(e.to_string()))?;
+    ciborium::into_writer(value, &mut buf).map_err(|e| SerialError(format!("CBOR serialize: {}", e)))?;
     Ok(buf)
 }
 
 /// Deserialize a value from CBOR bytes.
-pub fn from_cbor<T: DeserializeOwned>(data: &[u8]) -> Result<T, CborError> {
-    ciborium::from_reader(data).map_err(|e| CborError::Deserialize(e.to_string()))
+pub fn from_cbor<T: DeserializeOwned>(data: &[u8]) -> Result<T, SerialError> {
+    ciborium::from_reader(data).map_err(|e| SerialError(format!("CBOR deserialize: {}", e)))
 }
 
 /// Serialize a value to JSON bytes (for human-readable output).
-pub fn to_json<T: Serialize>(value: &T) -> Result<Vec<u8>, CborError> {
-    serde_json::to_vec_pretty(value).map_err(|e| CborError::Serialize(e.to_string()))
+pub fn to_json<T: Serialize>(value: &T) -> Result<Vec<u8>, SerialError> {
+    serde_json::to_vec_pretty(value).map_err(|e| SerialError(format!("JSON serialize: {}", e)))
 }
 
 /// Errors from serialization operations.
-#[derive(Debug, thiserror::Error)]
-pub enum CborError {
-    #[error("serialization failed: {0}")]
-    Serialize(String),
-    #[error("deserialization failed: {0}")]
-    Deserialize(String),
+#[derive(Debug)]
+pub struct SerialError(pub String);
+
+impl fmt::Display for SerialError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "serialization error: {}", self.0)
+    }
 }
+
+impl std::error::Error for SerialError {}
 
 #[cfg(test)]
 mod tests {

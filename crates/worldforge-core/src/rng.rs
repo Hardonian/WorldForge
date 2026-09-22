@@ -3,6 +3,7 @@
 //! Uses ChaCha8 for fast, cryptographically-derived deterministic RNG.
 //! Every simulation run with the same seed produces identical random sequences.
 
+use rand::prelude::*;
 use rand::SeedableRng;
 use rand_chacha::ChaCha8Rng;
 use serde::{Deserialize, Serialize};
@@ -57,19 +58,17 @@ impl DeterministicRng {
 
     /// Generate a random u64.
     pub fn next_u64(&mut self) -> u64 {
-        use rand::Rng;
-        self.rng.random()
+        self.rng.gen()
     }
 
     /// Generate a random u32 in [0, max).
     pub fn next_u32_below(&mut self, max: u32) -> u32 {
-        use rand::Rng;
-        self.rng.random_range(0..max)
+        self.rng.gen_range(0..max)
     }
 
     /// Generate a deterministic Fixed64 in [0, 1).
     pub fn next_fixed(&mut self) -> Fixed64 {
-        let v = self.next_u64();
+        let v: u64 = self.rng.gen();
         // Map u64 to [0, 1) by using upper 32 bits as fractional part
         Fixed64::from_raw((v >> 32) as i64)
     }
@@ -112,7 +111,6 @@ mod tests {
     fn different_seeds_different_sequences() {
         let mut a = DeterministicRng::new(42, "test");
         let mut b = DeterministicRng::new(43, "test");
-        // Extremely unlikely to be equal
         let mut any_different = false;
         for _ in 0..10 {
             if a.next_u64() != b.next_u64() {

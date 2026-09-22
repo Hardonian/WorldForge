@@ -68,44 +68,37 @@ impl ErrorCode {
     /// Get the numeric code for this error.
     pub fn code(&self) -> u16 {
         match self {
-            // World
             ErrorCode::WorldManifestInvalid => 1001,
             ErrorCode::WorldManifestMissing => 1002,
             ErrorCode::WorldNotFound => 1003,
             ErrorCode::WorldSchemaViolation => 1004,
             ErrorCode::ScenarioInvalid => 1005,
             ErrorCode::ScenarioMissing => 1006,
-            // Mod
             ErrorCode::ModLoadFailed => 2001,
             ErrorCode::ModInitFailed => 2002,
             ErrorCode::ModCapabilityDenied => 2004,
             ErrorCode::ModExecutionFailed => 2005,
             ErrorCode::ModFuelExhausted => 2006,
             ErrorCode::ModTrap => 2007,
-            // Replay
             ErrorCode::ReplayFormatInvalid => 3001,
             ErrorCode::ReplayHashMismatch => 3002,
             ErrorCode::ReplayVersionIncompatible => 3003,
             ErrorCode::ReplayEventChainCorrupted => 3004,
             ErrorCode::ReplayFingerprintMismatch => 3005,
-            // Economy
             ErrorCode::ResourceInvariantFailed => 4001,
             ErrorCode::InsufficientResource => 4002,
             ErrorCode::TransferFailed => 4003,
             ErrorCode::ProductionFailed => 4004,
             ErrorCode::NegativeInventory => 4005,
-            // Runtime
             ErrorCode::RuntimeInitFailed => 5001,
             ErrorCode::RuntimeTickFailed => 5002,
             ErrorCode::RuntimeStateMismatch => 5003,
             ErrorCode::SystemRegistrationFailed => 5004,
             ErrorCode::SimulationDegraded => 5005,
-            // Package
             ErrorCode::PackageBuildFailed => 6001,
             ErrorCode::PackageInvalid => 6002,
             ErrorCode::PackageFingerprintMismatch => 6003,
             ErrorCode::PackageDependencyMissing => 6004,
-            // Internal
             ErrorCode::InternalError => 9001,
             ErrorCode::NotImplemented => 9002,
         }
@@ -158,13 +151,11 @@ impl fmt::Display for ErrorCode {
 }
 
 /// The primary error type for World Forge operations.
-#[derive(Debug, thiserror::Error)]
-#[error("[{code}] {code_name}: {message}")]
+#[derive(Debug)]
 pub struct WorldForgeError {
     pub code: ErrorCode,
     pub code_name: &'static str,
     pub message: String,
-    #[source]
     pub source: Option<Box<dyn std::error::Error + Send + Sync>>,
 }
 
@@ -189,6 +180,20 @@ impl WorldForgeError {
             message: message.into(),
             source: Some(Box::new(source)),
         }
+    }
+}
+
+impl fmt::Display for WorldForgeError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "[{}] {}: {}", self.code, self.code_name, self.message)
+    }
+}
+
+impl std::error::Error for WorldForgeError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        self.source
+            .as_ref()
+            .map(|e| e.as_ref() as &(dyn std::error::Error + 'static))
     }
 }
 
