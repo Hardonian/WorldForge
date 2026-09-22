@@ -12,5 +12,4 @@ worldforge-mod-api = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 tracing = { workspace = true }
-# wasmtime integration is a future dependency
-# For now, we provide the host API contract and a mock runtime
+wasmtime = { version = "17", default-features = false, features = ["cranelift", "wat"] }

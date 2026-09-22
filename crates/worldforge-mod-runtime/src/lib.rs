@@ -2,18 +2,15 @@
 //!
 //! WASM mod execution runtime for World Forge.
 //!
-//! ## Current Status
-//!
-//! The WASM Component Model runtime using wasmtime is designed but
-//! not yet compiled against wasmtime crate dependencies. The host API
-//! contract, capability enforcement, and lifecycle management are
-//! fully implemented as a mock runtime for testing.
-//!
-//! When wasmtime is integrated, mods will execute in sandboxed WASM
-//! with fuel limits, memory bounds, and capability-gated host functions.
+//! Wasmtime executes core WebAssembly modules without WASI, so filesystem,
+//! network, environment, process, and shell APIs are absent. The deliberately
+//! small v0 host ABI is capability-gated and execution is bounded by fuel and
+//! linear-memory limits. The versioned Component Model contract lives in `/wit`.
 
+use wasmtime::{
+    Caller, Config, Engine, Linker, Module, Store, StoreLimits, StoreLimitsBuilder, TypedFunc,
+};
 use worldforge_core::error::{ErrorCode, WorldForgeError};
-use worldforge_core::FeatureStatus;
 use worldforge_mod_api::{Capability, CapabilityPolicy, ModCallbacks};
 
 /// Configuration for the mod runtime.
@@ -97,14 +94,160 @@ impl ModInstance {
     }
 }
 
-/// Load a WASM mod from file.
-pub fn load_wasm_mod(
-    _path: &std::path::Path,
-    _config: ModRuntimeConfig,
-) -> FeatureStatus<ModInstance> {
-    FeatureStatus::Unavailable {
-        reason: "WASM mod runtime requires wasmtime integration (planned for M1)",
+struct WasmHostState {
+    policy: CapabilityPolicy,
+    resource_amount: i64,
+    emitted_events: Vec<i64>,
+    limits: StoreLimits,
+}
+
+/// A loaded, sandboxed WebAssembly mod using the minimal v0 core ABI.
+pub struct WasmModInstance {
+    store: Store<WasmHostState>,
+    init: TypedFunc<(), ()>,
+    on_tick: TypedFunc<i64, ()>,
+    on_event: TypedFunc<i64, ()>,
+    config: ModRuntimeConfig,
+}
+
+impl WasmModInstance {
+    /// Load a module from bytes. No WASI interfaces are linked.
+    pub fn from_bytes(
+        bytes: &[u8],
+        policy: CapabilityPolicy,
+        config: ModRuntimeConfig,
+        resource_amount: i64,
+    ) -> Result<Self, WorldForgeError> {
+        let mut engine_config = Config::new();
+        engine_config.consume_fuel(true);
+        let engine = Engine::new(&engine_config)
+            .map_err(|e| WorldForgeError::new(ErrorCode::ModLoadFailed, e.to_string()))?;
+        let module = Module::new(&engine, bytes)
+            .map_err(|e| WorldForgeError::new(ErrorCode::ModLoadFailed, e.to_string()))?;
+        let mut linker = Linker::new(&engine);
+        linker
+            .func_wrap(
+                "worldforge",
+                "read_resource",
+                |caller: Caller<'_, WasmHostState>| -> wasmtime::Result<i64> {
+                    caller
+                        .data()
+                        .policy
+                        .require(&Capability::ResourceRead)
+                        .map_err(|e| wasmtime::Error::msg(e.to_string()))?;
+                    Ok(caller.data().resource_amount)
+                },
+            )
+            .map_err(|e| WorldForgeError::new(ErrorCode::ModLoadFailed, e.to_string()))?;
+        linker
+            .func_wrap(
+                "worldforge",
+                "emit_event",
+                |mut caller: Caller<'_, WasmHostState>, event: i64| -> wasmtime::Result<()> {
+                    caller
+                        .data()
+                        .policy
+                        .require(&Capability::EventEmit)
+                        .map_err(|e| wasmtime::Error::msg(e.to_string()))?;
+                    caller.data_mut().emitted_events.push(event);
+                    Ok(())
+                },
+            )
+            .map_err(|e| WorldForgeError::new(ErrorCode::ModLoadFailed, e.to_string()))?;
+
+        let limits = StoreLimitsBuilder::new()
+            .memory_size(config.max_memory_bytes)
+            .instances(1)
+            .memories(1)
+            .build();
+        let mut store = Store::new(
+            &engine,
+            WasmHostState {
+                policy,
+                resource_amount,
+                emitted_events: Vec::new(),
+                limits,
+            },
+        );
+        store.limiter(|state| &mut state.limits);
+        store
+            .set_fuel(config.fuel_per_tick)
+            .map_err(|e| WorldForgeError::new(ErrorCode::ModLoadFailed, e.to_string()))?;
+        let instance = linker.instantiate(&mut store, &module).map_err(|e| {
+            WorldForgeError::new(
+                ErrorCode::ModCapabilityDenied,
+                format!("mod imports denied host API: {e}"),
+            )
+        })?;
+        let init = instance
+            .get_typed_func::<(), ()>(&mut store, "init")
+            .map_err(|e| WorldForgeError::new(ErrorCode::ModLoadFailed, e.to_string()))?;
+        let on_tick = instance
+            .get_typed_func::<i64, ()>(&mut store, "on_tick")
+            .map_err(|e| WorldForgeError::new(ErrorCode::ModLoadFailed, e.to_string()))?;
+        let on_event = instance
+            .get_typed_func::<i64, ()>(&mut store, "on_event")
+            .map_err(|e| WorldForgeError::new(ErrorCode::ModLoadFailed, e.to_string()))?;
+        Ok(Self {
+            store,
+            init,
+            on_tick,
+            on_event,
+            config,
+        })
     }
+
+    fn prepare_call(&mut self) -> Result<(), WorldForgeError> {
+        self.store
+            .set_fuel(self.config.fuel_per_tick)
+            .map_err(|e| WorldForgeError::new(ErrorCode::ModExecutionFailed, e.to_string()))
+    }
+
+    pub fn init(&mut self) -> Result<(), WorldForgeError> {
+        self.prepare_call()?;
+        self.init.call(&mut self.store, ()).map_err(map_wasm_trap)
+    }
+
+    pub fn on_tick(&mut self, tick: u64) -> Result<(), WorldForgeError> {
+        self.prepare_call()?;
+        self.on_tick
+            .call(&mut self.store, tick as i64)
+            .map_err(map_wasm_trap)
+    }
+
+    pub fn on_event(&mut self, event: i64) -> Result<(), WorldForgeError> {
+        self.prepare_call()?;
+        self.on_event
+            .call(&mut self.store, event)
+            .map_err(map_wasm_trap)
+    }
+
+    pub fn emitted_events(&self) -> &[i64] {
+        &self.store.data().emitted_events
+    }
+}
+
+fn map_wasm_trap(error: wasmtime::Error) -> WorldForgeError {
+    let message = error.to_string();
+    let code = if message.contains("fuel") {
+        ErrorCode::ModFuelExhausted
+    } else if message.contains("WF2004") || message.contains("not granted") {
+        ErrorCode::ModCapabilityDenied
+    } else {
+        ErrorCode::ModTrap
+    };
+    WorldForgeError::new(code, message)
+}
+
+/// Load a sandboxed WASM mod from a file using a deny-by-default policy.
+pub fn load_wasm_mod(
+    path: &std::path::Path,
+    policy: CapabilityPolicy,
+    config: ModRuntimeConfig,
+) -> Result<WasmModInstance, WorldForgeError> {
+    let bytes = std::fs::read(path)
+        .map_err(|e| WorldForgeError::new(ErrorCode::ModLoadFailed, e.to_string()))?;
+    WasmModInstance::from_bytes(&bytes, policy, config, 0)
 }
 
 /// A mock mod for testing the mod lifecycle without WASM.
@@ -223,11 +366,74 @@ mod tests {
     }
 
     #[test]
-    fn wasm_mod_loading_reports_unavailable() {
+    fn wasm_mod_loading_reports_missing_file() {
         let result = load_wasm_mod(
             std::path::Path::new("nonexistent.wasm"),
+            CapabilityPolicy::deny_all(),
             ModRuntimeConfig::default(),
         );
-        assert!(!result.is_available());
+        assert!(result.is_err());
+    }
+
+    const ALLOWED_MOD: &str = r#"
+        (module
+          (import "worldforge" "read_resource" (func $read (result i64)))
+          (import "worldforge" "emit_event" (func $emit (param i64)))
+          (func (export "init"))
+          (func (export "on_tick") (param i64)
+            call $read
+            call $emit)
+          (func (export "on_event") (param i64)))
+    "#;
+
+    #[test]
+    fn real_wasm_reads_resource_and_emits_event() {
+        let policy = CapabilityPolicy::with_capabilities(vec![
+            Capability::ResourceRead,
+            Capability::EventEmit,
+        ]);
+        let mut instance = WasmModInstance::from_bytes(
+            ALLOWED_MOD.as_bytes(),
+            policy,
+            ModRuntimeConfig::default(),
+            73,
+        )
+        .unwrap();
+        instance.init().unwrap();
+        instance.on_tick(1).unwrap();
+        assert_eq!(instance.emitted_events(), &[73]);
+    }
+
+    #[test]
+    fn denied_capability_traps_closed() {
+        let mut instance = WasmModInstance::from_bytes(
+            ALLOWED_MOD.as_bytes(),
+            CapabilityPolicy::with_capabilities(vec![Capability::EventEmit]),
+            ModRuntimeConfig::default(),
+            73,
+        )
+        .unwrap();
+        instance.init().unwrap();
+        let error = instance.on_tick(1).unwrap_err();
+        assert_eq!(error.code, ErrorCode::ModCapabilityDenied);
+        assert!(instance.emitted_events().is_empty());
+    }
+
+    #[test]
+    fn network_import_is_not_linked() {
+        let network_mod = br#"(module
+          (import "wasi:sockets/network" "connect" (func $connect))
+          (func (export "init"))
+          (func (export "on_tick") (param i64))
+          (func (export "on_event") (param i64)))"#;
+        let error = WasmModInstance::from_bytes(
+            network_mod,
+            CapabilityPolicy::deny_all(),
+            ModRuntimeConfig::default(),
+            0,
+        )
+        .err()
+        .expect("network import must be denied");
+        assert_eq!(error.code, ErrorCode::ModCapabilityDenied);
     }
 }
