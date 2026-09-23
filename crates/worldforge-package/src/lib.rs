@@ -8,7 +8,7 @@ use std::path::Path;
 
 use worldforge_core::error::{ErrorCode, WorldForgeError};
 use worldforge_core::hash::{Fingerprint, FingerprintBuilder};
-use worldforge_world::{EntitiesConfig, Scenario, WorldManifest};
+use worldforge_world::WorldManifest;
 
 mod resolver;
 pub use resolver::{resolve_world, ResolvedDependency, ResolvedWorld};
