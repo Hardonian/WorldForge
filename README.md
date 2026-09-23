@@ -23,7 +23,7 @@ World Forge is a simulation operating system for building games, simulations, wo
 | Agent framework | ✅ Implemented | Rule-based and utility-based policies |
 | Capability-based mod API | ✅ Implemented | Deny-by-default capability system |
 | WASM mod runtime | ✅ Implemented | Wasmtime core-Wasm sandbox, fuel/memory limits, capability-gated host ABI |
-| Simulation Studio | ✅ Implemented | Engine-backed catalog, charts, events, objectives, proofs, comparisons, benchmarks, export, run history |
+| Simulation Studio | ✅ Implemented | Play Mode, live decisions, charts, events, objectives, proofs, comparisons, benchmarks, export, run history |
 | CLI | ✅ Implemented | doctor, validate, run, export, benchmark, dashboard, package, replay |
 | CI pipeline | ✅ Implemented | Cross-platform tests + determinism verification |
 
@@ -161,6 +161,8 @@ WIT interfaces for the Component Model are defined in `wit/worldforge/`. The exe
 `worldforge dashboard` serves the bundled UI and a localhost-only simulation API. Every chart, event, objective, benchmark, and fingerprint comes from the Rust runtime. The studio includes:
 
 - A world catalog derived from the packaged examples instead of hardcoded UI data
+- A fully engine-backed Play Mode with play, pause, single-step, speed control, restart, live topology, resources, objectives, and event feed
+- Deterministic production-capacity decisions recorded inside the replay proof chain
 - Responsive resource, topology, and event visualizations
 - Filterable event audit trails and objective status
 - Same-seed determinism checks and cross-seed run comparison

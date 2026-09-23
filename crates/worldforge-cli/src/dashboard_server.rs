@@ -1,9 +1,9 @@
 //! Small, dependency-free localhost dashboard server backed by the real engine.
 
+use std::collections::BTreeMap;
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::path::{Path, PathBuf};
-use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
@@ -24,9 +24,12 @@ const MAX_PLAY_SESSIONS: usize = 32;
 const MAX_STEP_TICKS: u64 = 5_000;
 const SESSION_TTL: Duration = Duration::from_secs(4 * 60 * 60);
 
+type SharedPlaySession = Arc<Mutex<PlaySession>>;
+type SessionRegistry = BTreeMap<String, SharedPlaySession>;
+
 struct ServerState {
     worlds_dir: PathBuf,
-    sessions: Mutex<BTreeMap<String, Arc<Mutex<PlaySession>>>>,
+    sessions: Mutex<SessionRegistry>,
 }
 
 struct PlaySession {
@@ -243,6 +246,245 @@ fn handle_connection(stream: &mut TcpStream, state: &ServerState) -> Result<(), 
             false,
         ),
     }
+}
+
+fn play_session_id(route: &str) -> Option<&str> {
+    let id = route.strip_prefix("/api/play/sessions/")?;
+    (!id.is_empty() && !id.contains('/')).then_some(id)
+}
+
+fn play_action_id<'a>(route: &'a str, action: &str) -> Option<&'a str> {
+    let prefix = "/api/play/sessions/";
+    let suffix = format!("/{action}");
+    let middle = route.strip_prefix(prefix)?.strip_suffix(&suffix)?;
+    (!middle.is_empty() && !middle.contains('/')).then_some(middle)
+}
+
+fn lock_sessions(
+    state: &ServerState,
+) -> Result<std::sync::MutexGuard<'_, SessionRegistry>, WorldForgeError> {
+    state.sessions.lock().map_err(|_| {
+        WorldForgeError::new(
+            ErrorCode::InternalError,
+            "play session registry is unavailable",
+        )
+    })
+}
+
+fn create_play_session(state: &ServerState, request: RunRequest) -> Result<Value, WorldForgeError> {
+    let world_path = resolve_world(&state.worlds_dir, &request.world)?;
+    let runtime = SimulationRuntime::load(&world_path, request.seed, Some(request.ticks))?;
+    let progress = runtime.current_progress();
+    let id = uuid::Uuid::new_v4().simple().to_string();
+    let session = Arc::new(Mutex::new(PlaySession {
+        world: request.world.clone(),
+        runtime,
+        last_access: Instant::now(),
+    }));
+
+    let mut sessions = lock_sessions(state)?;
+    sessions.retain(|_, session| {
+        session
+            .lock()
+            .is_ok_and(|session| session.last_access.elapsed() < SESSION_TTL)
+    });
+    if sessions.len() >= MAX_PLAY_SESSIONS {
+        return Err(WorldForgeError::new(
+            ErrorCode::RuntimeInitFailed,
+            format!("at most {MAX_PLAY_SESSIONS} play sessions may be active"),
+        ));
+    }
+    sessions.insert(id.clone(), session);
+    Ok(play_document(&id, &request.world, &progress, None))
+}
+
+fn inspect_play_session(state: &ServerState, id: &str) -> Result<Value, WorldForgeError> {
+    with_play_session(state, id, |session| {
+        let progress = session.runtime.current_progress();
+        Ok(play_document(
+            id,
+            &session.world,
+            &progress,
+            session.runtime.replay(),
+        ))
+    })
+}
+
+fn step_play_session(state: &ServerState, id: &str, ticks: u64) -> Result<Value, WorldForgeError> {
+    with_play_session(state, id, |session| {
+        let progress = session.runtime.step(ticks)?;
+        Ok(play_document(
+            id,
+            &session.world,
+            &progress,
+            session.runtime.replay(),
+        ))
+    })
+}
+
+fn intervene_play_session(
+    state: &ServerState,
+    id: &str,
+    request: InterventionRequest,
+) -> Result<Value, WorldForgeError> {
+    with_play_session(state, id, |session| {
+        let progress = session
+            .runtime
+            .set_capacity(&request.entity, request.capacity)?;
+        Ok(play_document(
+            id,
+            &session.world,
+            &progress,
+            session.runtime.replay(),
+        ))
+    })
+}
+
+fn with_play_session<T>(
+    state: &ServerState,
+    id: &str,
+    operation: impl FnOnce(&mut PlaySession) -> Result<T, WorldForgeError>,
+) -> Result<T, WorldForgeError> {
+    let session = lock_sessions(state)?.get(id).cloned().ok_or_else(|| {
+        WorldForgeError::new(ErrorCode::WorldNotFound, "play session does not exist")
+    })?;
+    let mut session = session.lock().map_err(|_| {
+        WorldForgeError::new(ErrorCode::InternalError, "play session is unavailable")
+    })?;
+    if session.last_access.elapsed() >= SESSION_TTL {
+        return Err(WorldForgeError::new(
+            ErrorCode::WorldNotFound,
+            "play session has expired",
+        ));
+    }
+    session.last_access = Instant::now();
+    operation(&mut session)
+}
+
+fn delete_play_session(state: &ServerState, id: &str) -> Result<(), WorldForgeError> {
+    if lock_sessions(state)?.remove(id).is_none() {
+        return Err(WorldForgeError::new(
+            ErrorCode::WorldNotFound,
+            "play session does not exist",
+        ));
+    }
+    Ok(())
+}
+
+fn play_document(
+    id: &str,
+    world: &str,
+    progress: &RunProgress,
+    replay: Option<&worldforge_replay::ReplayArtifact>,
+) -> Value {
+    let events = progress
+        .recent_events
+        .iter()
+        .map(event_document)
+        .collect::<Vec<_>>();
+    let proof = replay.map(|replay| {
+        json!({
+            "world": replay.world_fingerprint.to_string(),
+            "scenario": replay.scenario_fingerprint.to_string(),
+            "initial": replay.initial_state_fingerprint.to_string(),
+            "final": replay.final_state_fingerprint.to_string(),
+            "eventChain": replay.event_chain_root.to_string(),
+            "runId": replay.run_id,
+        })
+    });
+    json!({
+        "sessionId": id,
+        "world": world,
+        "state": progress.state,
+        "seed": progress.seed,
+        "currentTick": progress.current_tick,
+        "totalTicks": progress.total_ticks,
+        "stateFingerprint": progress.state_fingerprint.to_string(),
+        "eventCount": progress.event_count,
+        "shortageCount": progress.shortage_count,
+        "snapshot": progress.snapshot,
+        "entityStates": progress.entity_states,
+        "objectives": progress.objective_results.iter().map(|objective| json!({
+            "name": objective.name,
+            "status": format!("{:?}", objective.status),
+        })).collect::<Vec<_>>(),
+        "recentEvents": events,
+        "entities": progress.entities,
+        "links": progress.links,
+        "proof": proof,
+        "completed": replay.is_some(),
+    })
+}
+
+fn event_document(event: &SimulationEvent) -> Value {
+    let (event_type, entity, resource, amount) = match &event.event_type {
+        EventType::ProductionCompleted {
+            entity,
+            resource,
+            amount,
+        } => (
+            "production",
+            entity.clone(),
+            resource.clone(),
+            amount.to_f64_lossy(),
+        ),
+        EventType::ResourceTransferred {
+            from,
+            to,
+            resource,
+            amount,
+        } => (
+            "transfer",
+            format!("{from} → {to}"),
+            resource.clone(),
+            amount.to_f64_lossy(),
+        ),
+        EventType::InventoryShortage {
+            entity,
+            resource,
+            needed,
+            ..
+        } => (
+            "shortage",
+            entity.clone(),
+            resource.clone(),
+            needed.to_f64_lossy(),
+        ),
+        EventType::PriceChanged {
+            resource,
+            new_price,
+            ..
+        } => (
+            "price",
+            "market".to_string(),
+            resource.clone(),
+            new_price.to_f64_lossy(),
+        ),
+        EventType::CapacityChanged {
+            entity,
+            new_capacity,
+            ..
+        } => (
+            "system",
+            entity.clone(),
+            "capacity".to_string(),
+            new_capacity.to_f64_lossy(),
+        ),
+        EventType::ObjectiveUpdated { objective, .. } => {
+            ("system", "objective".to_string(), objective.clone(), 0.0)
+        }
+        EventType::SimulationDegraded { reason } => {
+            ("system", "runtime".to_string(), reason.clone(), 0.0)
+        }
+    };
+    json!({
+        "tick": event.tick.value(),
+        "type": event_type,
+        "entity": entity,
+        "resource": resource,
+        "amount": amount,
+        "summary": event.summary(),
+    })
 }
 
 fn catalog(worlds_dir: &Path) -> Result<Value, WorldForgeError> {
@@ -506,6 +748,7 @@ fn status_for_error(error: &WorldForgeError) -> &'static str {
         ErrorCode::WorldManifestInvalid
         | ErrorCode::WorldSchemaViolation
         | ErrorCode::ScenarioInvalid => "400 Bad Request",
+        ErrorCode::RuntimeStateMismatch => "409 Conflict",
         _ => "500 Internal Server Error",
     }
 }
@@ -552,5 +795,59 @@ mod tests {
         assert!(validate_ticks(0).is_err());
         assert!(validate_ticks(MAX_TICKS + 1).is_err());
         assert!(validate_ticks(1000).is_ok());
+    }
+
+    #[test]
+    fn play_routes_only_accept_exact_session_shapes() {
+        assert_eq!(play_session_id("/api/play/sessions/abc"), Some("abc"));
+        assert_eq!(play_session_id("/api/play/sessions/abc/step"), None);
+        assert_eq!(
+            play_action_id("/api/play/sessions/abc/step", "step"),
+            Some("abc")
+        );
+        assert_eq!(play_action_id("/api/play/sessions//step", "step"), None);
+    }
+
+    #[test]
+    fn play_sessions_step_intervene_and_delete() {
+        let state = ServerState {
+            worlds_dir: examples_dir(),
+            sessions: Mutex::new(BTreeMap::new()),
+        };
+        let created = create_play_session(
+            &state,
+            RunRequest {
+                world: "supply-chain".to_string(),
+                seed: 42,
+                ticks: 8,
+            },
+        )
+        .unwrap();
+        let id = created["sessionId"].as_str().unwrap();
+        assert_eq!(created["currentTick"], 0);
+
+        let stepped = step_play_session(&state, id, 3).unwrap();
+        assert_eq!(stepped["currentTick"], 3);
+        assert_eq!(stepped["state"], "Running");
+        assert!(!stepped["recentEvents"].as_array().unwrap().is_empty());
+
+        let changed = intervene_play_session(
+            &state,
+            id,
+            InterventionRequest {
+                entity: "factory".to_string(),
+                capacity: 0.5,
+            },
+        )
+        .unwrap();
+        assert_eq!(changed["recentEvents"][0]["type"], "system");
+
+        let completed = step_play_session(&state, id, 20).unwrap();
+        assert_eq!(completed["currentTick"], 8);
+        assert_eq!(completed["completed"], true);
+        assert!(completed["proof"]["eventChain"].is_string());
+
+        delete_play_session(&state, id).unwrap();
+        assert!(inspect_play_session(&state, id).is_err());
     }
 }

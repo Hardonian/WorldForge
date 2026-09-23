@@ -4,6 +4,8 @@
 
 ### Simulation Studio
 
+- Added persistent Play Mode sessions with pause, step, variable speed, restart, live entity topology, inventory meters, mission status, and world activity feed.
+- Added proof-chained player interventions for production capacity, with deterministic incremental runtime execution.
 - Added an engine-derived world catalog and health metadata API.
 - Added complete run comparison, server-side benchmark, JSON export, recent-run, event filtering, and proof-copy workflows.
 - Added responsive navigation, keyboard operation, accessible live states, reduced-motion support, polished charts, animation, and original ambient atlas artwork.

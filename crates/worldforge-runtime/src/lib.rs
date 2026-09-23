@@ -865,8 +865,14 @@ goods = 2.0
         assert_eq!(final_progress.state, RunState::Completed);
         let actual = incremental.completed_result().unwrap();
 
-        assert_eq!(actual.final_state_fingerprint, expected.final_state_fingerprint);
-        assert_eq!(actual.proof.event_chain_root, expected.proof.event_chain_root);
+        assert_eq!(
+            actual.final_state_fingerprint,
+            expected.final_state_fingerprint
+        );
+        assert_eq!(
+            actual.proof.event_chain_root,
+            expected.proof.event_chain_root
+        );
         assert_eq!(actual.event_count, expected.event_count);
         assert_eq!(actual.shortage_count, expected.shortage_count);
     }
@@ -886,7 +892,10 @@ goods = 2.0
 
         let first = run_intervention();
         let second = run_intervention();
-        assert_eq!(first.final_state_fingerprint, second.final_state_fingerprint);
+        assert_eq!(
+            first.final_state_fingerprint,
+            second.final_state_fingerprint
+        );
         assert_eq!(first.proof.event_chain_root, second.proof.event_chain_root);
     }
 }

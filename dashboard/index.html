@@ -47,6 +47,13 @@
                 <section class="sidebar-section" aria-labelledby="tools-label">
                     <div class="section-heading"><span id="tools-label">Analysis tools</span></div>
                     <div class="nav-stack">
+                        <button class="nav-item nav-play" id="nav-play" type="button">
+                            <span class="nav-icon" aria-hidden="true">
+                                <svg viewBox="0 0 24 24"><path d="m9 7 8 5-8 5V7Z"/><circle cx="12" cy="12" r="9"/></svg>
+                            </span>
+                            <span class="nav-copy"><strong>Play world</strong><small>Live simulation mode</small></span>
+                            <span class="live-badge">Live</span>
+                        </button>
                         <button class="nav-item" id="nav-compare" type="button">
                             <span class="nav-icon" aria-hidden="true">
                                 <svg viewBox="0 0 24 24"><path d="M4 19V9m8 10V5m8 14v-7M2 19h20"/></svg>
@@ -232,6 +239,97 @@
                 <div id="compare-results" class="tool-results"><div class="empty-state"><span class="empty-mark">⇄</span><h3>Two runs, one clear view</h3><p>Compare event totals, shortages, objectives, and final fingerprints.</p></div></div>
             </div>
         </form>
+    </dialog>
+
+    <dialog class="tool-dialog play-dialog" id="play-dialog" aria-labelledby="play-title">
+        <div class="dialog-shell play-shell">
+            <header class="dialog-header play-header">
+                <div class="play-heading">
+                    <div class="panel-kicker">Interactive simulation</div>
+                    <h2 id="play-title">Play World</h2>
+                    <p id="play-subtitle">Make decisions while the deterministic engine advances.</p>
+                </div>
+                <div class="play-header-actions">
+                    <span class="play-status" id="play-status"><span></span>Ready</span>
+                    <button class="icon-button dialog-close" id="play-close" type="button" aria-label="Close play mode"><svg viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></svg></button>
+                </div>
+            </header>
+
+            <div class="play-toolbar" aria-label="Simulation playback controls">
+                <button class="button button-primary" id="play-new" type="button">
+                    <svg viewBox="0 0 20 20" aria-hidden="true"><path d="m7 5 7 5-7 5V5Z"/></svg>
+                    Start world
+                </button>
+                <button class="button button-secondary play-toggle" id="play-toggle" type="button" disabled>
+                    <svg class="play-control-icon" viewBox="0 0 20 20" aria-hidden="true"><path d="m7 5 7 5-7 5V5Z"/></svg>
+                    <span>Play</span>
+                </button>
+                <button class="button button-secondary" id="play-step" type="button" disabled>
+                    <svg viewBox="0 0 20 20" aria-hidden="true"><path d="m5 5 6 5-6 5V5Zm9 0v10"/></svg>
+                    Step
+                </button>
+                <label class="speed-control"><span>Speed</span><select id="play-speed"><option value="1">1×</option><option value="2">2×</option><option value="5" selected>5×</option><option value="10">10×</option></select></label>
+                <div class="tick-progress" aria-label="Simulation progress">
+                    <div class="tick-progress-copy"><span>Timeline</span><strong id="play-tick-label">Tick 0 / 0</strong></div>
+                    <div class="progress-track"><span id="play-progress-bar"></span></div>
+                </div>
+                <button class="button button-quiet" id="play-reset" type="button" disabled>
+                    <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 10a6 6 0 1 0 2-4.5M4 3v5h5"/></svg>
+                    Restart
+                </button>
+            </div>
+
+            <div class="play-body">
+                <div class="play-intro" id="play-intro">
+                    <div class="intro-core" aria-hidden="true"><span></span><span></span><span></span></div>
+                    <div class="panel-kicker">Your world is ready</div>
+                    <h3>Shape the system. Protect the outcome.</h3>
+                    <p>Start a live session, watch resources move through the network, and adjust producer capacity before shortages cascade. Every decision becomes part of the verified replay.</p>
+                    <div class="play-rules">
+                        <span><strong>Observe</strong> live inventory and flow</span>
+                        <span><strong>Decide</strong> how hard producers run</span>
+                        <span><strong>Finish</strong> with objectives intact</span>
+                    </div>
+                    <button class="button button-primary" id="play-intro-start" type="button">Start simulation</button>
+                </div>
+
+                <div class="play-grid" id="play-grid" aria-hidden="true">
+                    <section class="play-stage" aria-labelledby="play-network-title">
+                        <div class="play-panel-heading"><div><span>World topology</span><h3 id="play-network-title">Live entity network</h3></div><span class="live-indicator"><i></i>Engine live</span></div>
+                        <div class="play-network-wrap"><svg id="play-network" viewBox="0 0 800 420" role="img" aria-label="Live entity and resource network"></svg></div>
+                    </section>
+
+                    <aside class="play-sidebar">
+                        <section class="play-card intervention-card" aria-labelledby="intervention-title">
+                            <div class="play-panel-heading"><div><span>Decision console</span><h3 id="intervention-title">Production capacity</h3></div><span class="proof-mini">Proof-chained</span></div>
+                            <label class="field"><span>Producer</span><select id="play-entity-select"></select></label>
+                            <label class="capacity-control">
+                                <span><b>Capacity target</b><strong id="capacity-value">100%</strong></span>
+                                <input id="capacity-slider" type="range" min="0" max="200" step="5" value="100">
+                                <span class="range-labels"><small>Off</small><small>Normal</small><small>Overdrive</small></span>
+                            </label>
+                            <button class="button button-primary" id="apply-capacity" type="button">Apply decision</button>
+                            <p class="decision-hint">Higher capacity increases output and input consumption. Changes apply at the current tick.</p>
+                        </section>
+
+                        <section class="play-card" aria-labelledby="live-objectives-title">
+                            <div class="play-panel-heading"><div><span>Mission status</span><h3 id="live-objectives-title">Objectives</h3></div></div>
+                            <div class="live-objectives" id="live-objectives"></div>
+                        </section>
+                    </aside>
+
+                    <section class="play-card resources-card" aria-labelledby="live-resources-title">
+                        <div class="play-panel-heading"><div><span>World inventory</span><h3 id="live-resources-title">Live resources</h3></div><strong id="play-fingerprint" class="mono play-fingerprint">—</strong></div>
+                        <div class="live-resources" id="live-resources"></div>
+                    </section>
+
+                    <section class="play-card live-feed-card" aria-labelledby="live-feed-title">
+                        <div class="play-panel-heading"><div><span>Latest activity</span><h3 id="live-feed-title">World feed</h3></div><span id="play-event-count">0 events</span></div>
+                        <div class="live-feed" id="live-feed"></div>
+                    </section>
+                </div>
+            </div>
+        </div>
     </dialog>
 
     <dialog class="tool-dialog" id="benchmark-dialog" aria-labelledby="benchmark-title">

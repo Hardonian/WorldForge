@@ -23,6 +23,10 @@ const state = {
     eventsVisible: EVENTS_PAGE_SIZE,
     history: loadHistory(),
     busy: false,
+    play: {
+        sessionId: null, worldId: null, data: null, events: [], maxima: {},
+        running: false, requestInFlight: false, timer: null,
+    },
 };
 
 const el = id => document.getElementById(id);
@@ -36,6 +40,7 @@ const dom = {
     eventLog: el('event-log'), eventFilter: el('log-filter'), eventType: el('log-type-filter'),
     eventFooter: el('event-footer'), eventCountLabel: el('event-count-label'), loadMore: el('load-more-events'),
     compareDialog: el('compare-dialog'), benchmarkDialog: el('benchmark-dialog'),
+    playDialog: el('play-dialog'),
 };
 
 function currentWorld() {
@@ -92,9 +97,21 @@ function bindInteractions() {
     });
     el('nav-compare').addEventListener('click', openComparison);
     el('nav-benchmark').addEventListener('click', openBenchmark);
+    el('nav-play').addEventListener('click', openPlayMode);
     el('compare-run').addEventListener('click', runComparison);
     el('benchmark-run').addEventListener('click', runBenchmark);
     el('clear-history').addEventListener('click', clearHistory);
+    el('play-new').addEventListener('click', startPlaySession);
+    el('play-intro-start').addEventListener('click', startPlaySession);
+    el('play-toggle').addEventListener('click', () => setPlayRunning(!state.play.running));
+    el('play-step').addEventListener('click', () => advancePlaySession(1));
+    el('play-reset').addEventListener('click', startPlaySession);
+    el('play-close').addEventListener('click', closePlayMode);
+    dom.playDialog.addEventListener('close', () => setPlayRunning(false));
+    el('play-speed').addEventListener('change', () => state.play.running && schedulePlayStep());
+    el('capacity-slider').addEventListener('input', updateCapacityLabel);
+    el('play-entity-select').addEventListener('change', syncCapacityControl);
+    el('apply-capacity').addEventListener('click', applyCapacityDecision);
     el('menu-button').addEventListener('click', () => toggleSidebar(true));
     el('sidebar-close').addEventListener('click', () => toggleSidebar(false));
     el('mobile-backdrop').addEventListener('click', () => toggleSidebar(false));
@@ -169,6 +186,7 @@ function renderWorldNavigation() {
 function selectWorld(worldId, options = {}) {
     const world = state.worlds.find(item => item.id === worldId);
     if (!world) return;
+    if (state.play.sessionId && state.play.worldId !== worldId) endPlaySession();
     state.worldId = worldId;
     state.data = null;
     document.querySelectorAll('[data-world]').forEach(button => {
@@ -509,6 +527,329 @@ function clearHistory() {
     saveHistory();
     renderHistory();
     showToast('History cleared', 'Saved run summaries were removed from this browser.');
+}
+
+/* Interactive play mode */
+function openPlayMode() {
+    const world = currentWorld();
+    if (!world) return;
+    el('play-title').textContent = `Play ${world.title}`;
+    el('play-subtitle').textContent = world.description || 'Shape a deterministic world in real time.';
+    if (state.play.sessionId && state.play.worldId === state.worldId) {
+        el('play-intro').classList.add('hidden');
+        el('play-grid').setAttribute('aria-hidden', 'false');
+        renderPlayState();
+    } else {
+        showPlayIntro();
+    }
+    dom.playDialog.showModal();
+}
+
+function closePlayMode() {
+    setPlayRunning(false);
+    dom.playDialog.close();
+}
+
+function showPlayIntro() {
+    el('play-intro').classList.remove('hidden');
+    el('play-grid').setAttribute('aria-hidden', 'true');
+    el('play-status').className = 'play-status';
+    el('play-status').lastChild.textContent = 'Ready';
+}
+
+async function startPlaySession() {
+    if (!currentWorld() || state.play.requestInFlight) return;
+    let seed, ticks;
+    try {
+        seed = numericInput(dom.seed, { min: 0, max: Number.MAX_SAFE_INTEGER, name: 'Seed' });
+        ticks = numericInput(dom.ticks, { min: 1, max: 1_000_000, name: 'Ticks' });
+    } catch (error) {
+        showToast('Check the play settings', error.message, 'error'); return;
+    }
+    setPlayRunning(false);
+    state.play.requestInFlight = true;
+    setButtonBusy(el('play-new'), true, 'Starting…');
+    setButtonBusy(el('play-intro-start'), true, 'Starting…');
+    try {
+        if (state.play.sessionId) {
+            await api(`/api/play/sessions/${state.play.sessionId}`, { method: 'DELETE' }).catch(() => {});
+            state.play.sessionId = null;
+            state.play.data = null;
+            state.play.events = [];
+            state.play.maxima = {};
+        }
+        const data = await api('/api/play/sessions', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ world: state.worldId, seed, ticks }),
+        });
+        state.play.sessionId = data.sessionId;
+        state.play.worldId = state.worldId;
+        state.play.data = data;
+        state.play.events = [];
+        state.play.maxima = { ...data.snapshot.levels };
+        el('play-intro').classList.add('hidden');
+        el('play-grid').setAttribute('aria-hidden', 'false');
+        el('play-toggle').disabled = false;
+        el('play-step').disabled = false;
+        el('play-reset').disabled = false;
+        el('apply-capacity').disabled = false;
+        renderPlayState();
+        setPlayRunning(true);
+        showToast('World started', 'The deterministic session is live. Pause at any time to make decisions.');
+    } catch (error) {
+        showPlayIntro();
+        showToast('Could not start world', error.message, 'error');
+    } finally {
+        state.play.requestInFlight = false;
+        setButtonBusy(el('play-new'), false, state.play.sessionId ? 'New world' : 'Start world');
+        setButtonBusy(el('play-intro-start'), false, 'Start simulation');
+    }
+}
+
+function setPlayRunning(running) {
+    const play = state.play;
+    if (!play.sessionId || play.data?.completed) running = false;
+    play.running = running;
+    clearTimeout(play.timer);
+    play.timer = null;
+    const button = el('play-toggle');
+    const icon = button.querySelector('svg');
+    button.querySelector('span').textContent = running ? 'Pause' : 'Play';
+    icon.innerHTML = running
+        ? '<path d="M7 5v10M13 5v10"/>'
+        : '<path d="m7 5 7 5-7 5V5Z"/>';
+    updatePlayStatus();
+    if (running) schedulePlayStep();
+}
+
+function schedulePlayStep() {
+    clearTimeout(state.play.timer);
+    if (!state.play.running || state.play.data?.completed) return;
+    const speed = Number(el('play-speed').value);
+    const delay = { 1: 600, 2: 400, 5: 250, 10: 160 }[speed] || 300;
+    const batch = { 1: 1, 2: 5, 5: 20, 10: 50 }[speed] || 10;
+    state.play.timer = setTimeout(async () => {
+        await advancePlaySession(batch);
+        if (state.play.running) schedulePlayStep();
+    }, delay);
+}
+
+async function advancePlaySession(ticks) {
+    const play = state.play;
+    if (!play.sessionId || play.requestInFlight || play.data?.completed) return;
+    play.requestInFlight = true;
+    el('play-step').disabled = true;
+    try {
+        const data = await api(`/api/play/sessions/${play.sessionId}/step`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ticks }),
+        });
+        if (state.play !== play) return;
+        consumePlayUpdate(data);
+        if (data.completed) completePlaySession(data);
+    } catch (error) {
+        setPlayRunning(false);
+        showToast('Play session interrupted', error.message, 'error');
+    } finally {
+        if (state.play !== play) return;
+        play.requestInFlight = false;
+        el('play-step').disabled = Boolean(play.data?.completed);
+    }
+}
+
+function consumePlayUpdate(data) {
+    state.play.data = data;
+    if (data.recentEvents?.length) {
+        state.play.events.push(...data.recentEvents);
+        state.play.events = state.play.events.slice(-120);
+    }
+    Object.entries(data.snapshot.levels).forEach(([resource, value]) => {
+        state.play.maxima[resource] = Math.max(state.play.maxima[resource] || 0, value, 1);
+    });
+    renderPlayState();
+}
+
+function completePlaySession(data) {
+    setPlayRunning(false);
+    el('play-toggle').disabled = true;
+    el('play-step').disabled = true;
+    el('apply-capacity').disabled = true;
+    el('play-new').textContent = 'Play again';
+    const passed = data.objectives.filter(objective => objective.status === 'Passed').length;
+    const allPassed = passed === data.objectives.length;
+    showToast(
+        allPassed ? 'World secured' : 'Simulation complete',
+        `${passed} of ${data.objectives.length} objectives passed. The final proof is verified.`,
+        allPassed ? 'success' : 'error',
+    );
+}
+
+async function applyCapacityDecision() {
+    const play = state.play;
+    if (!play.sessionId || play.requestInFlight || play.data?.completed) return;
+    const entity = el('play-entity-select').value;
+    const capacity = Number(el('capacity-slider').value) / 100;
+    play.requestInFlight = true;
+    el('apply-capacity').disabled = true;
+    try {
+        const data = await api(`/api/play/sessions/${play.sessionId}/intervene`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ entity, capacity }),
+        });
+        if (state.play !== play) return;
+        consumePlayUpdate(data);
+        showToast('Decision applied', `${prettyName(entity)} capacity is now ${Math.round(capacity * 100)}%.`);
+    } catch (error) {
+        showToast('Decision rejected', error.message, 'error');
+    } finally {
+        if (state.play !== play) return;
+        play.requestInFlight = false;
+        el('apply-capacity').disabled = Boolean(play.data?.completed);
+    }
+}
+
+function updateCapacityLabel() {
+    el('capacity-value').textContent = `${el('capacity-slider').value}%`;
+}
+
+function syncCapacityControl() {
+    const entity = state.play.data?.entityStates.find(item => item.name === el('play-entity-select').value);
+    if (!entity || entity.capacity == null) return;
+    el('capacity-slider').value = Math.round(entity.capacity * 100);
+    updateCapacityLabel();
+}
+
+function renderPlayState() {
+    const data = state.play.data;
+    if (!data) return;
+    el('play-tick-label').textContent = `Tick ${formatNumber(data.currentTick)} / ${formatNumber(data.totalTicks)}`;
+    el('play-progress-bar').style.width = `${Math.min(100, data.currentTick / Math.max(1, data.totalTicks) * 100)}%`;
+    el('play-event-count').textContent = `${formatNumber(data.eventCount)} events`;
+    el('play-fingerprint').textContent = shortHash(data.stateFingerprint, 18);
+    el('play-fingerprint').title = data.stateFingerprint;
+    renderLiveResources(data.snapshot.levels);
+    renderLiveObjectives(data.objectives);
+    renderLiveFeed();
+    renderPlayNetwork(data);
+    renderProducerOptions(data.entityStates);
+    updatePlayStatus();
+}
+
+function updatePlayStatus() {
+    const node = el('play-status');
+    let status = 'Ready';
+    let className = 'play-status';
+    if (state.play.data?.completed) { status = 'Completed'; className += ' completed'; }
+    else if (state.play.running) { status = 'Running'; className += ' running'; }
+    else if (state.play.sessionId) { status = 'Paused'; className += ' paused'; }
+    node.className = className;
+    node.lastChild.textContent = status;
+}
+
+function renderLiveResources(levels) {
+    const container = el('live-resources');
+    container.replaceChildren();
+    Object.entries(levels).forEach(([resource, value], index) => {
+        const card = document.createElement('div'); card.className = 'live-resource';
+        const copy = document.createElement('span');
+        const name = document.createElement('b'); name.textContent = prettyName(resource);
+        const amount = document.createElement('strong'); amount.textContent = formatDecimal(value, 1);
+        copy.append(name, amount);
+        const meter = document.createElement('div'); meter.className = 'resource-meter';
+        const fill = document.createElement('i');
+        fill.style.width = `${Math.max(1, value / Math.max(1, state.play.maxima[resource]) * 100)}%`;
+        fill.style.setProperty('--resource-color', COLORS[index % COLORS.length]);
+        meter.append(fill); card.append(copy, meter); container.append(card);
+    });
+}
+
+function renderLiveObjectives(objectives) {
+    const container = el('live-objectives'); container.replaceChildren();
+    if (!objectives.length) {
+        const empty = document.createElement('p'); empty.className = 'feed-empty'; empty.textContent = 'No objectives configured.'; container.append(empty); return;
+    }
+    objectives.forEach(objective => {
+        const row = document.createElement('div'); row.className = `live-objective ${objective.status.toLowerCase()}`;
+        const icon = document.createElement('i'); icon.textContent = objective.status === 'Passed' ? '✓' : objective.status === 'Failed' ? '×' : '·';
+        const name = document.createElement('span'); name.textContent = objective.name;
+        row.append(icon, name); container.append(row);
+    });
+}
+
+function renderLiveFeed() {
+    const container = el('live-feed'); container.replaceChildren();
+    const events = state.play.events.slice(-50).reverse();
+    if (!events.length) {
+        const empty = document.createElement('div'); empty.className = 'feed-empty'; empty.textContent = 'Advance the world to see live activity.'; container.append(empty); return;
+    }
+    events.forEach(event => {
+        const row = document.createElement('div'); row.className = 'feed-event';
+        const tick = document.createElement('time'); tick.textContent = `t${event.tick}`;
+        const type = document.createElement('span'); type.className = `log-type ${event.type}`; type.textContent = event.type;
+        const copy = document.createElement('p'); copy.textContent = event.summary;
+        row.append(tick, type, copy); container.append(row);
+    });
+}
+
+function renderProducerOptions(entityStates) {
+    const select = el('play-entity-select');
+    const current = select.value;
+    const producers = entityStates.filter(entity => entity.capacity != null);
+    const existing = [...select.options].map(option => option.value);
+    const names = producers.map(entity => entity.name);
+    const rebuilt = existing.join('|') !== names.join('|');
+    if (rebuilt) {
+        select.replaceChildren(...producers.map(entity => new Option(prettyName(entity.name), entity.name)));
+    }
+    if (names.includes(current)) select.value = current;
+    if (rebuilt || document.activeElement !== el('capacity-slider')) syncCapacityControl();
+}
+
+function renderPlayNetwork(data) {
+    const svg = el('play-network');
+    svg.replaceChildren();
+    const entities = data.entities.map(entity => entity.name);
+    const count = entities.length;
+    if (!count) return;
+    const cx = 400, cy = 208;
+    const radiusX = count > 14 ? 310 : 270, radiusY = count > 14 ? 155 : 140;
+    const positions = new Map(entities.map((name, index) => [name, {
+        x: cx + radiusX * Math.cos(index / count * Math.PI * 2 - Math.PI / 2),
+        y: cy + radiusY * Math.sin(index / count * Math.PI * 2 - Math.PI / 2),
+    }]));
+    const recentShortages = new Set(state.play.events.filter(event => event.type === 'shortage').slice(-20).map(event => event.entity));
+    data.links.forEach(link => {
+        const from = positions.get(link.from), to = positions.get(link.to);
+        if (!from || !to) return;
+        const line = svgNode('path', { d: `M${from.x},${from.y} L${to.x},${to.y}`, class: 'network-link network-link-hot' });
+        svg.append(line);
+    });
+    data.entityStates.forEach((entity, index) => {
+        const position = positions.get(entity.name); if (!position) return;
+        const group = svgNode('g', { transform: `translate(${position.x} ${position.y})` });
+        group.append(svgNode('circle', { r: count > 20 ? 17 : 25, class: 'network-node-glow' }));
+        group.append(svgNode('circle', { r: count > 20 ? 6 : 10, class: `network-node-core${recentShortages.has(entity.name) ? ' warning' : ''}` }));
+        if (count <= 16) {
+            const label = svgNode('text', { y: 27, class: 'network-node-label' }); label.textContent = prettyName(entity.name);
+            const total = Object.values(entity.inventory).reduce((sum, value) => sum + value, 0);
+            const detail = svgNode('text', { y: 40, class: 'network-node-detail' }); detail.textContent = compactNumber(total);
+            group.append(label, detail);
+        }
+        svg.append(group);
+    });
+}
+
+function svgNode(name, attributes) {
+    const node = document.createElementNS('http://www.w3.org/2000/svg', name);
+    Object.entries(attributes).forEach(([key, value]) => node.setAttribute(key, value));
+    return node;
+}
+
+async function endPlaySession() {
+    const id = state.play.sessionId;
+    clearTimeout(state.play.timer);
+    state.play = { sessionId: null, worldId: null, data: null, events: [], maxima: {}, running: false, requestInFlight: false, timer: null };
+    if (id) await api(`/api/play/sessions/${id}`, { method: 'DELETE' }).catch(() => {});
 }
 
 function openComparison() {
