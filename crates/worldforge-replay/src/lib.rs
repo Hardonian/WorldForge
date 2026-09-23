@@ -221,9 +221,9 @@ impl ReplayWriter {
     }
 
     /// Record multiple events.
-    pub fn record_events(&mut self, events: &[SimulationEvent]) {
+    pub fn record_events(&mut self, events: Vec<SimulationEvent>) {
         for event in events {
-            self.record_event(event.clone());
+            self.record_event(event);
         }
     }
 

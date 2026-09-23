@@ -21,15 +21,12 @@ pub fn run_production(
     events: &mut Vec<SimulationEvent>,
 ) {
     for (entity_id, entity_name) in entity_ids {
-        // Get production rule
         let rule = match world.get_component::<ProductionRule>(entity_id) {
-            Some(r) => r.clone(),
+            Some(rule) => rule,
             None => continue,
         };
-
-        // Get inventory
         let inventory = match world.get_component::<Inventory>(entity_id) {
-            Some(inv) => inv.clone(),
+            Some(inventory) => inventory,
             None => continue,
         };
 
@@ -38,7 +35,6 @@ pub fn run_production(
             continue;
         }
 
-        // Check if we have all inputs
         let mut can_produce = true;
         for (resource, amount) in &rule.inputs {
             let needed = *amount * capacity;
@@ -57,15 +53,16 @@ pub fn run_production(
         }
 
         if can_produce {
-            // Consume inputs and produce outputs
-            let inv = world.get_component_mut::<Inventory>(entity_id).unwrap();
+            let inventory = world
+                .get_component_mut::<Inventory>(entity_id)
+                .expect("production inventory was validated");
             for (resource, amount) in &rule.inputs {
                 let consumed = *amount * capacity;
-                let _ = inv.try_subtract(resource, consumed);
+                let _ = inventory.try_subtract(resource, consumed);
             }
             for (resource, amount) in &rule.outputs {
                 let produced = *amount * capacity;
-                inv.add(resource, produced);
+                inventory.add(resource, produced);
                 events.push(SimulationEvent::new(
                     tick,
                     EventType::ProductionCompleted {
@@ -182,28 +179,25 @@ pub fn update_prices(
 ) {
     for (entity_id, _entity_name) in entity_ids {
         let inventory = match world.get_component::<Inventory>(entity_id) {
-            Some(inv) => inv.clone(),
+            Some(inventory) => inventory,
+            None => continue,
+        };
+        let prices = match world.get_component_mut::<PriceSignal>(entity_id) {
+            Some(prices) => prices,
             None => continue,
         };
 
-        let old_prices = match world.get_component::<PriceSignal>(entity_id) {
-            Some(ps) => ps.clone(),
-            None => PriceSignal::new(),
-        };
-
-        let mut new_prices = PriceSignal::new();
         for resource in resources {
             let stock = inventory.get(resource);
-            // Simple price model: price increases as stock decreases
             let price = if stock.is_zero() {
-                base_price * Fixed64::from_int(10) // Scarcity premium
+                base_price * Fixed64::from_int(10)
             } else if stock < Fixed64::from_int(50) {
                 base_price + (Fixed64::from_int(50) - stock) * sensitivity
             } else {
                 base_price
             };
 
-            let old_price = old_prices.get(resource);
+            let old_price = prices.get(resource);
             if old_price != price {
                 events.push(SimulationEvent::new(
                     tick,
@@ -214,10 +208,8 @@ pub fn update_prices(
                     },
                 ));
             }
-            new_prices.set(resource, price);
+            prices.set(resource, price);
         }
-
-        world.insert_component(*entity_id, new_prices);
     }
 }
 

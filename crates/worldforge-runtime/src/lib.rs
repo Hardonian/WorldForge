@@ -6,7 +6,7 @@
 //! initialization, tick execution, event dispatch, replay recording,
 //! proof generation, and result reporting.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 
 use worldforge_core::error::{ErrorCode, WorldForgeError};
@@ -17,6 +17,8 @@ use worldforge_ecs::SimulationWorld;
 use worldforge_proof::RunProof;
 use worldforge_replay::{ReplayArtifact, ReplayWriter};
 use worldforge_world::*;
+
+const MAX_RECENT_EVENTS: usize = 256;
 
 /// State of a simulation run.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
@@ -114,8 +116,9 @@ pub struct SimulationRuntime {
     entity_id_map: BTreeMap<String, EntityId>,
     entity_name_map: BTreeMap<EntityId, String>,
     supply_links: Vec<(EntityId, EntityId, String, Fixed64)>,
+    scheduled_events: BTreeMap<u64, Vec<ScheduledEvent>>,
     tracked_resources: Vec<String>,
-    events: Vec<SimulationEvent>,
+    resource_totals: BTreeMap<String, Fixed64>,
     replay_writer: Option<ReplayWriter>,
     replay: Option<ReplayArtifact>,
     world_fingerprint: Fingerprint,
@@ -123,7 +126,9 @@ pub struct SimulationRuntime {
     run_entities: Vec<RunEntity>,
     run_links: Vec<RunLink>,
     initial_state_fingerprint: Fingerprint,
+    state_fingerprint: Fingerprint,
     shortage_count: usize,
+    event_count: usize,
     production_totals: BTreeMap<String, Fixed64>,
     objectives: Vec<Objective>,
     snapshots: Vec<ResourceSnapshot>,
@@ -185,6 +190,7 @@ impl SimulationRuntime {
         let mut entity_name_map = BTreeMap::new();
         let mut supply_links = Vec::new();
         let mut tracked_resources = Vec::new();
+        let mut tracked_resource_set = BTreeSet::new();
         let mut run_entities = Vec::new();
         let mut run_links = Vec::new();
 
@@ -207,7 +213,7 @@ impl SimulationRuntime {
             let mut inventory = Inventory::new();
             for (resource, amount) in &entity_cfg.initial_inventory {
                 inventory.set(resource, Fixed64::from_f64_lossy(*amount));
-                if !tracked_resources.contains(resource) {
+                if tracked_resource_set.insert(resource.clone()) {
                     tracked_resources.push(resource.clone());
                 }
             }
@@ -265,7 +271,7 @@ impl SimulationRuntime {
                 link_cfg.resource.clone(),
                 Fixed64::from_f64_lossy(link_cfg.max_per_tick),
             ));
-            if !tracked_resources.contains(&link_cfg.resource) {
+            if tracked_resource_set.insert(link_cfg.resource.clone()) {
                 tracked_resources.push(link_cfg.resource.clone());
             }
             run_links.push(RunLink {
@@ -277,6 +283,26 @@ impl SimulationRuntime {
         }
 
         tracked_resources.sort();
+
+        let mut resource_totals = BTreeMap::new();
+        for resource in &tracked_resources {
+            resource_totals.insert(resource.clone(), Fixed64::ZERO);
+        }
+        for (_, entity_id) in &entity_ids {
+            if let Some(inventory) = ecs_world.get_component::<Inventory>(entity_id) {
+                for (resource, amount) in &inventory.resources {
+                    *resource_totals.entry(resource.clone()).or_insert(Fixed64::ZERO) += *amount;
+                }
+            }
+        }
+
+        let mut scheduled_events = BTreeMap::new();
+        for scheduled in &scenario.events {
+            scheduled_events
+                .entry(scheduled.tick)
+                .or_insert_with(Vec::new)
+                .push(scheduled.clone());
+        }
 
         let initial_fp = ecs_world.fingerprint();
         let run_id = format!(
@@ -304,8 +330,9 @@ impl SimulationRuntime {
             entity_id_map,
             entity_name_map,
             supply_links,
+            scheduled_events,
             tracked_resources,
-            events: Vec::new(),
+            resource_totals,
             replay_writer: Some(replay_writer),
             replay: None,
             world_fingerprint,
@@ -313,7 +340,9 @@ impl SimulationRuntime {
             run_entities,
             run_links,
             initial_state_fingerprint: initial_fp,
+            state_fingerprint: initial_fp,
             shortage_count: 0,
+            event_count: 0,
             production_totals: BTreeMap::new(),
             objectives,
             snapshots: Vec::new(),
@@ -356,7 +385,6 @@ impl SimulationRuntime {
             self.evaluate_objectives(0, false);
         }
 
-        let first_event = self.events.len();
         let duration = self.scenario.duration_ticks;
         let remaining = duration.saturating_sub(self.world.current_tick().value());
         let steps = tick_count.min(remaining);
@@ -366,11 +394,7 @@ impl SimulationRuntime {
             let tick = Tick::new(tick_num);
             self.world.set_tick(tick);
 
-            // Check for scheduled events
-            self.apply_scheduled_events(tick_num)?;
-
-            // Run economy systems
-            let mut tick_events = Vec::new();
+            let mut tick_events = self.apply_scheduled_events(tick_num)?;
 
             run_production(&mut self.world, &self.entity_ids, tick, &mut tick_events);
             run_transfers(
@@ -389,8 +413,8 @@ impl SimulationRuntime {
                 tick,
                 &mut tick_events,
             );
+            self.refresh_resource_totals();
 
-            // Count shortages
             for event in &tick_events {
                 match &event.event_type {
                     EventType::InventoryShortage { resource, .. } => {
@@ -421,13 +445,20 @@ impl SimulationRuntime {
 
             self.evaluate_objectives(tick_num + 1, false);
 
-            // Record to replay
+            let recent_events = tick_events
+                .iter()
+                .rev()
+                .take(MAX_RECENT_EVENTS)
+                .rev()
+                .cloned()
+                .collect::<Vec<_>>();
+            let event_count = tick_events.len();
             if let Some(ref mut writer) = self.replay_writer {
-                writer.record_events(&tick_events);
+                writer.record_events(tick_events);
             }
-
-            self.events.extend(tick_events);
+            self.event_count += event_count;
             self.world.advance_tick();
+            self.state_fingerprint = self.world.fingerprint();
             self.snapshots.push(self.resource_snapshot(tick_num + 1));
         }
 
@@ -435,7 +466,7 @@ impl SimulationRuntime {
             self.finalize()?;
         }
 
-        Ok(self.progress_with_events(self.events[first_event..].to_vec()))
+        Ok(self.progress_with_events(recent_events))
     }
 
     /// Change a producer's capacity during an interactive run.
@@ -485,7 +516,8 @@ impl SimulationRuntime {
         if let Some(writer) = &mut self.replay_writer {
             writer.record_event(event.clone());
         }
-        self.events.push(event.clone());
+        self.event_count += 1;
+        self.state_fingerprint = self.world.fingerprint();
         Ok(self.progress_with_events(vec![event]))
     }
 

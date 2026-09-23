@@ -72,13 +72,15 @@ impl Inventory {
     }
 
     pub fn set(&mut self, resource: &str, amount: Fixed64) {
-        self.resources.insert(resource.to_string(), amount);
+        if self.get(resource) != amount {
+            self.resources.insert(resource.to_string(), amount);
+        }
     }
 
     pub fn add(&mut self, resource: &str, amount: Fixed64) {
-        let current = self.get(resource);
-        self.resources
-            .insert(resource.to_string(), current + amount);
+        if !amount.is_zero() {
+            self.set(resource, self.get(resource) + amount);
+        }
     }
 
     /// Try to subtract. Returns Err if would go negative.
@@ -86,7 +88,7 @@ impl Inventory {
         let current = self.get(resource);
         match current.checked_sub_non_negative(amount) {
             Some(new_val) => {
-                self.resources.insert(resource.to_string(), new_val);
+                self.set(resource, new_val);
                 Ok(())
             }
             None => Err(format!(
@@ -141,7 +143,9 @@ impl PriceSignal {
     }
 
     pub fn set(&mut self, resource: &str, price: Fixed64) {
-        self.prices.insert(resource.to_string(), price);
+        if self.get(resource) != price {
+            self.prices.insert(resource.to_string(), price);
+        }
     }
 }
 
