@@ -12,7 +12,10 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use worldforge_core::{EngineVersion, ErrorCode, WorldForgeError};
 use worldforge_runtime::{RunProgress, SimulationRuntime};
-use worldforge_world::{EntitiesConfig, EventType, Scenario, SimulationEvent, WorldManifest};
+use worldforge_world::{
+    EntitiesConfig, EntityConfig, EventType, LinkConfig, Objective, ObjectiveStatus, ObjectiveType,
+    ProductionConfig, Scenario, ScheduledEvent, ScheduledEventType, SimulationEvent, WorldManifest,
+};
 
 const INDEX: &str = include_str!("../../../dashboard/index.html");
 const SCRIPT: &str = include_str!("../../../dashboard/dashboard.js");
@@ -27,6 +30,10 @@ const MAX_DASHBOARD_EVENTS: usize = 5_000;
 const SESSION_TTL: Duration = Duration::from_secs(4 * 60 * 60);
 const MAX_SERVER_WORKERS: usize = 16;
 const REQUEST_QUEUE_CAPACITY: usize = 128;
+const MAX_SAVE_SLOTS: usize = 100;
+const MAX_SAVE_BYTES: u64 = 2 * 1024 * 1024;
+const MAX_SAVE_INTERVENTIONS: usize = 50_000;
+const MAX_WORLD_PACKAGES: usize = 200;
 
 type SharedPlaySession = Arc<Mutex<PlaySession>>;
 type SessionRegistry = BTreeMap<String, SharedPlaySession>;
@@ -35,6 +42,8 @@ struct ServerState {
     worlds_dir: PathBuf,
     saves_dir: PathBuf,
     sessions: Mutex<SessionRegistry>,
+    save_io: Mutex<()>,
+    world_io: Mutex<()>,
 }
 
 struct PlaySession {
@@ -106,6 +115,19 @@ struct SaveRequest {
     save_id: Option<String>,
 }
 
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct WorldBuildRequest {
+    id: String,
+    title: String,
+    #[serde(default)]
+    description: String,
+    template: String,
+    difficulty: String,
+    seed: u64,
+    ticks: u64,
+}
+
 fn default_step_ticks() -> u64 {
     1
 }
@@ -124,6 +146,7 @@ pub fn serve(bind: &str, worlds_dir: &Path, saves_dir: &Path) -> Result<(), Worl
     let worlds_dir = std::fs::canonicalize(worlds_dir).map_err(io_error)?;
     std::fs::create_dir_all(saves_dir).map_err(io_error)?;
     let saves_dir = std::fs::canonicalize(saves_dir).map_err(io_error)?;
+    recover_save_directory(&saves_dir)?;
     let listener = TcpListener::bind(bind).map_err(|error| {
         WorldForgeError::new(
             ErrorCode::RuntimeInitFailed,
@@ -139,6 +162,8 @@ pub fn serve(bind: &str, worlds_dir: &Path, saves_dir: &Path) -> Result<(), Worl
         worlds_dir,
         saves_dir,
         sessions: Mutex::new(BTreeMap::new()),
+        save_io: Mutex::new(()),
+        world_io: Mutex::new(()),
     });
     let worker_count = std::thread::available_parallelism()
         .map(usize::from)
@@ -246,6 +271,12 @@ fn handle_connection(stream: &mut TcpStream, state: &ServerState) -> Result<(), 
         ("GET", "/api/worlds") => {
             let worlds = catalog(&state.worlds_dir)?;
             respond_json(stream, "200 OK", &json!({ "worlds": worlds }))
+        }
+        ("POST", "/api/worlds") => {
+            require_json_content_type(&header)?;
+            let request: WorldBuildRequest = parse_json(body)?;
+            let world = create_world(state, request)?;
+            respond_json(stream, "201 Created", &json!({ "world": world }))
         }
         ("POST", "/api/run") => {
             require_json_content_type(&header)?;
@@ -530,11 +561,7 @@ fn save_play_session(
     request: SaveRequest,
 ) -> Result<SaveGame, WorldForgeError> {
     let name = request.name.trim();
-    if name.is_empty() || name.len() > 64 || name.chars().any(char::is_control) {
-        return Err(invalid_request(
-            "save name must contain 1 to 64 printable characters",
-        ));
-    }
+    validate_save_name(name)?;
     if request
         .save_id
         .as_deref()
@@ -547,8 +574,9 @@ fn save_play_session(
     let id = request
         .save_id
         .unwrap_or_else(|| uuid::Uuid::new_v4().simple().to_string());
+    let _save_guard = lock_save_io(state)?;
     let existing = if save_path(state, &id).is_file() {
-        Some(read_save(state, &id)?)
+        Some(read_save_unlocked(state, &id)?)
     } else {
         None
     };
@@ -556,6 +584,12 @@ fn save_play_session(
         return Err(WorldForgeError::new(
             ErrorCode::WorldNotFound,
             "save slot does not exist",
+        ));
+    }
+    if existing.is_none() && save_slot_count(&state.saves_dir)? >= MAX_SAVE_SLOTS {
+        return Err(WorldForgeError::new(
+            ErrorCode::RuntimeInitFailed,
+            format!("at most {MAX_SAVE_SLOTS} save slots may be stored"),
         ));
     }
 
@@ -579,11 +613,12 @@ fn save_play_session(
     })?;
     let encoded = serde_json::to_vec_pretty(&save)
         .map_err(|error| WorldForgeError::new(ErrorCode::InternalError, error.to_string()))?;
-    std::fs::write(save_path(state, &id), encoded).map_err(io_error)?;
+    atomic_replace(&save_path(state, &id), &encoded)?;
     Ok(save)
 }
 
 fn list_saves(state: &ServerState) -> Result<Vec<SaveGame>, WorldForgeError> {
+    let _save_guard = lock_save_io(state)?;
     let mut saves = std::fs::read_dir(&state.saves_dir)
         .map_err(io_error)?
         .filter_map(Result::ok)
@@ -593,8 +628,10 @@ fn list_saves(state: &ServerState) -> Result<Vec<SaveGame>, WorldForgeError> {
                 .extension()
                 .is_some_and(|extension| extension == "json")
         })
-        .filter_map(|entry| std::fs::read(entry.path()).ok())
-        .filter_map(|bytes| serde_json::from_slice::<SaveGame>(&bytes).ok())
+        .filter_map(|entry| {
+            let id = entry.path().file_stem()?.to_str()?.to_string();
+            read_save_unlocked(state, &id).ok()
+        })
         .collect::<Vec<_>>();
     saves.sort_by_key(|save| std::cmp::Reverse(save.updated_at));
     Ok(saves)
@@ -669,6 +706,10 @@ fn load_save(state: &ServerState, id: &str) -> Result<Value, WorldForgeError> {
 }
 
 fn delete_save(state: &ServerState, id: &str) -> Result<(), WorldForgeError> {
+    if !valid_save_id(id) {
+        return Err(invalid_request("save id is invalid"));
+    }
+    let _save_guard = lock_save_io(state)?;
     let path = save_path(state, id);
     if !path.is_file() {
         return Err(WorldForgeError::new(
@@ -680,25 +721,222 @@ fn delete_save(state: &ServerState, id: &str) -> Result<(), WorldForgeError> {
 }
 
 fn read_save(state: &ServerState, id: &str) -> Result<SaveGame, WorldForgeError> {
+    let _save_guard = lock_save_io(state)?;
+    read_save_unlocked(state, id)
+}
+
+fn read_save_unlocked(state: &ServerState, id: &str) -> Result<SaveGame, WorldForgeError> {
     if !valid_save_id(id) {
         return Err(invalid_request("save id is invalid"));
     }
-    let bytes = std::fs::read(save_path(state, id)).map_err(|error| {
+    let path = save_path(state, id);
+    let metadata = std::fs::metadata(&path).map_err(|error| {
         WorldForgeError::new(
             ErrorCode::WorldNotFound,
             format!("cannot read save slot: {error}"),
         )
     })?;
-    serde_json::from_slice(&bytes).map_err(|error| {
+    if metadata.len() > MAX_SAVE_BYTES {
+        return Err(WorldForgeError::new(
+            ErrorCode::ReplayFormatInvalid,
+            format!("save slot exceeds the {MAX_SAVE_BYTES}-byte limit"),
+        ));
+    }
+    let bytes = std::fs::read(path).map_err(io_error)?;
+    let save = serde_json::from_slice(&bytes).map_err(|error| {
         WorldForgeError::new(
             ErrorCode::ReplayFormatInvalid,
             format!("save slot is invalid: {error}"),
         )
-    })
+    })?;
+    validate_save_game(&save, id)?;
+    Ok(save)
 }
 
 fn save_path(state: &ServerState, id: &str) -> PathBuf {
     state.saves_dir.join(format!("{id}.json"))
+}
+
+fn lock_save_io(state: &ServerState) -> Result<std::sync::MutexGuard<'_, ()>, WorldForgeError> {
+    state
+        .save_io
+        .lock()
+        .map_err(|_| WorldForgeError::new(ErrorCode::InternalError, "save storage is unavailable"))
+}
+
+fn validate_save_name(name: &str) -> Result<(), WorldForgeError> {
+    if name.is_empty() || name.len() > 64 || name.chars().any(char::is_control) {
+        return Err(invalid_request(
+            "save name must contain 1 to 64 printable characters",
+        ));
+    }
+    Ok(())
+}
+
+fn validate_save_game(save: &SaveGame, expected_id: &str) -> Result<(), WorldForgeError> {
+    if save.format_version != 1 {
+        return Err(WorldForgeError::new(
+            ErrorCode::ReplayVersionIncompatible,
+            format!("save format {} is not supported", save.format_version),
+        ));
+    }
+    if save.id != expected_id || !valid_save_id(&save.id) {
+        return Err(WorldForgeError::new(
+            ErrorCode::ReplayFormatInvalid,
+            "save id does not match its file name",
+        ));
+    }
+    validate_save_name(save.name.trim())?;
+    if save.world.is_empty()
+        || !save
+            .world
+            .chars()
+            .all(|character| character.is_ascii_alphanumeric() || character == '-')
+    {
+        return Err(WorldForgeError::new(
+            ErrorCode::ReplayFormatInvalid,
+            "save contains an invalid world id",
+        ));
+    }
+    if save.world_fingerprint.len() != 64
+        || !save
+            .world_fingerprint
+            .chars()
+            .all(|character| character.is_ascii_hexdigit())
+    {
+        return Err(WorldForgeError::new(
+            ErrorCode::ReplayFormatInvalid,
+            "save contains an invalid world fingerprint",
+        ));
+    }
+    validate_ticks(save.total_ticks)?;
+    if save.current_tick > save.total_ticks || save.created_at > save.updated_at {
+        return Err(WorldForgeError::new(
+            ErrorCode::ReplayFormatInvalid,
+            "save contains an invalid tick or timestamp range",
+        ));
+    }
+    if save.interventions.len() > MAX_SAVE_INTERVENTIONS {
+        return Err(WorldForgeError::new(
+            ErrorCode::ReplayFormatInvalid,
+            format!("save exceeds {MAX_SAVE_INTERVENTIONS} interventions"),
+        ));
+    }
+    let mut previous_tick = 0;
+    for (index, intervention) in save.interventions.iter().enumerate() {
+        if intervention.tick > save.current_tick
+            || (index > 0 && intervention.tick < previous_tick)
+            || intervention.entity.trim().is_empty()
+            || intervention.entity.len() > 128
+            || intervention.entity.chars().any(char::is_control)
+            || !intervention.capacity.is_finite()
+            || !(0.0..=2.0).contains(&intervention.capacity)
+        {
+            return Err(WorldForgeError::new(
+                ErrorCode::ReplayFormatInvalid,
+                "save contains an invalid intervention",
+            ));
+        }
+        previous_tick = intervention.tick;
+    }
+    Ok(())
+}
+
+fn save_slot_count(saves_dir: &Path) -> Result<usize, WorldForgeError> {
+    Ok(std::fs::read_dir(saves_dir)
+        .map_err(io_error)?
+        .filter_map(Result::ok)
+        .filter(|entry| entry.path().extension().is_some_and(|ext| ext == "json"))
+        .count())
+}
+
+fn atomic_replace(destination: &Path, bytes: &[u8]) -> Result<(), WorldForgeError> {
+    if bytes.len() as u64 > MAX_SAVE_BYTES {
+        return Err(WorldForgeError::new(
+            ErrorCode::RuntimeInitFailed,
+            format!("save exceeds the {MAX_SAVE_BYTES}-byte limit"),
+        ));
+    }
+    let parent = destination
+        .parent()
+        .ok_or_else(|| WorldForgeError::new(ErrorCode::InternalError, "save path has no parent"))?;
+    let stem = destination
+        .file_stem()
+        .and_then(|value| value.to_str())
+        .ok_or_else(|| WorldForgeError::new(ErrorCode::InternalError, "save path is invalid"))?;
+    let temporary = parent.join(format!(
+        ".worldforge-save-{stem}-{}.tmp",
+        uuid::Uuid::new_v4().simple()
+    ));
+    let backup = destination.with_extension("json.bak");
+
+    let write_result = (|| -> Result<(), WorldForgeError> {
+        let mut file = std::fs::OpenOptions::new()
+            .create_new(true)
+            .write(true)
+            .open(&temporary)
+            .map_err(io_error)?;
+        file.write_all(bytes).map_err(io_error)?;
+        file.sync_all().map_err(io_error)?;
+        drop(file);
+
+        if destination.exists() {
+            if backup.exists() {
+                std::fs::remove_file(&backup).map_err(io_error)?;
+            }
+            std::fs::rename(destination, &backup).map_err(io_error)?;
+            if let Err(error) = std::fs::rename(&temporary, destination) {
+                let _ = std::fs::rename(&backup, destination);
+                return Err(io_error(error));
+            }
+            // The destination is already durable. A leftover backup is safe
+            // and will be cleaned during the next startup recovery pass.
+            let _ = std::fs::remove_file(&backup);
+        } else {
+            std::fs::rename(&temporary, destination).map_err(io_error)?;
+        }
+        if let Ok(directory) = std::fs::File::open(parent) {
+            let _ = directory.sync_all();
+        }
+        Ok(())
+    })();
+    if write_result.is_err() && temporary.exists() {
+        let _ = std::fs::remove_file(&temporary);
+    }
+    write_result
+}
+
+fn recover_save_directory(saves_dir: &Path) -> Result<(), WorldForgeError> {
+    for entry in std::fs::read_dir(saves_dir).map_err(io_error)? {
+        let entry = entry.map_err(io_error)?;
+        let path = entry.path();
+        let name = entry.file_name();
+        let name = name.to_string_lossy();
+        if name.starts_with(".worldforge-save-") && path.extension().is_some_and(|ext| ext == "tmp")
+        {
+            std::fs::remove_file(path).map_err(io_error)?;
+            continue;
+        }
+        if path.extension().is_some_and(|extension| extension == "bak") {
+            let destination = path.with_extension("");
+            let is_save_backup = destination
+                .extension()
+                .is_some_and(|extension| extension == "json")
+                && destination
+                    .file_stem()
+                    .and_then(|stem| stem.to_str())
+                    .is_some_and(valid_save_id);
+            if !is_save_backup {
+                continue;
+            }
+            if destination.exists() {
+                std::fs::remove_file(path).map_err(io_error)?;
+            } else {
+                std::fs::rename(path, destination).map_err(io_error)?;
+            }
+        }
+    }
+    Ok(())
 }
 
 fn unix_timestamp() -> Result<u64, WorldForgeError> {
@@ -823,6 +1061,318 @@ fn event_document(event: &SimulationEvent) -> Value {
         "amount": amount,
         "summary": event.summary(),
     })
+}
+
+fn create_world(state: &ServerState, request: WorldBuildRequest) -> Result<Value, WorldForgeError> {
+    let id = request.id.trim();
+    let title = request.title.trim();
+    let description = request.description.trim();
+    validate_world_build_request(id, title, description, &request)?;
+    let _world_guard = state.world_io.lock().map_err(|_| {
+        WorldForgeError::new(ErrorCode::InternalError, "world storage is unavailable")
+    })?;
+    let destination = state.worlds_dir.join(id);
+    if destination.exists() {
+        return Err(WorldForgeError::new(
+            ErrorCode::RuntimeStateMismatch,
+            format!("world '{id}' already exists"),
+        ));
+    }
+    let world_count = catalog(&state.worlds_dir)?.as_array().map_or(0, Vec::len);
+    if world_count >= MAX_WORLD_PACKAGES {
+        return Err(WorldForgeError::new(
+            ErrorCode::RuntimeInitFailed,
+            format!("at most {MAX_WORLD_PACKAGES} worlds may be stored"),
+        ));
+    }
+
+    let (manifest, scenario, entities) = build_world_package(
+        title,
+        description,
+        &request.template,
+        &request.difficulty,
+        request.seed,
+        request.ticks,
+    )?;
+    let temporary = state.worlds_dir.join(format!(
+        ".worldforge-new-{id}-{}",
+        uuid::Uuid::new_v4().simple()
+    ));
+    std::fs::create_dir(&temporary).map_err(io_error)?;
+    let result = (|| -> Result<Value, WorldForgeError> {
+        write_toml_file(&temporary.join("world.toml"), &manifest)?;
+        write_toml_file(&temporary.join("scenario.toml"), &scenario)?;
+        write_toml_file(&temporary.join("entities.toml"), &entities)?;
+        worldforge_package::validate_world(&temporary)?;
+        std::fs::rename(&temporary, &destination).map_err(|error| {
+            if destination.exists() {
+                WorldForgeError::new(
+                    ErrorCode::RuntimeStateMismatch,
+                    format!("world '{id}' was created by another request"),
+                )
+            } else {
+                io_error(error)
+            }
+        })?;
+        if let Ok(directory) = std::fs::File::open(&state.worlds_dir) {
+            let _ = directory.sync_all();
+        }
+        catalog_entry(&destination)?.ok_or_else(|| {
+            WorldForgeError::new(
+                ErrorCode::InternalError,
+                "created world is missing required files",
+            )
+        })
+    })();
+    if result.is_err() && temporary.exists() {
+        let _ = std::fs::remove_dir_all(&temporary);
+    }
+    result
+}
+
+fn validate_world_build_request(
+    id: &str,
+    title: &str,
+    description: &str,
+    request: &WorldBuildRequest,
+) -> Result<(), WorldForgeError> {
+    if id.len() < 3
+        || id.len() > 48
+        || id.starts_with('-')
+        || id.ends_with('-')
+        || id.contains("--")
+        || !id.chars().all(|character| {
+            character.is_ascii_lowercase() || character.is_ascii_digit() || character == '-'
+        })
+    {
+        return Err(invalid_request(
+            "world id must be 3 to 48 lowercase letters, numbers, or single hyphens",
+        ));
+    }
+    if title.len() < 2 || title.len() > 80 || title.chars().any(char::is_control) {
+        return Err(invalid_request(
+            "world title must contain 2 to 80 printable characters",
+        ));
+    }
+    if description.len() > 240 || description.chars().any(char::is_control) {
+        return Err(invalid_request(
+            "world description must contain at most 240 printable characters",
+        ));
+    }
+    if !matches!(
+        request.template.as_str(),
+        "industrial" | "city" | "ecosystem"
+    ) {
+        return Err(invalid_request(
+            "template must be industrial, city, or ecosystem",
+        ));
+    }
+    if !matches!(request.difficulty.as_str(), "easy" | "standard" | "hard") {
+        return Err(invalid_request(
+            "difficulty must be easy, standard, or hard",
+        ));
+    }
+    if !(10..=MAX_TICKS).contains(&request.ticks) {
+        return Err(invalid_request(format!(
+            "ticks must be between 10 and {MAX_TICKS}"
+        )));
+    }
+    Ok(())
+}
+
+fn build_world_package(
+    title: &str,
+    description: &str,
+    template: &str,
+    difficulty: &str,
+    seed: u64,
+    ticks: u64,
+) -> Result<(WorldManifest, Scenario, EntitiesConfig), WorldForgeError> {
+    let (names, resources, region) = match template {
+        "industrial" => (
+            ["quarry", "refinery", "assembly", "depot", "market"],
+            ["ore", "alloy", "goods", "energy"],
+            "forge-district",
+        ),
+        "city" => (
+            [
+                "reservoir",
+                "waterworks",
+                "urban-farm",
+                "distribution-center",
+                "residential-district",
+            ],
+            ["water", "clean-water", "food", "power"],
+            "metro-core",
+        ),
+        "ecosystem" => (
+            [
+                "sunlit-meadow",
+                "plant-colony",
+                "herbivore-herd",
+                "habitat",
+                "predator-pack",
+            ],
+            ["sunlight", "biomass", "prey", "water"],
+            "living-basin",
+        ),
+        _ => return Err(invalid_request("unknown world template")),
+    };
+    let (stock, demand, disruption, objective_minimum) = match difficulty {
+        "easy" => (1.5, 2.0, 0.8, 20.0),
+        "standard" => (1.0, 3.0, 0.55, 30.0),
+        "hard" => (0.7, 4.0, 0.3, 40.0),
+        _ => return Err(invalid_request("unknown difficulty")),
+    };
+    let [raw, processed, final_resource, energy] = resources;
+    let energy_supply = ticks as f64 * 2.0 + 100.0;
+    let entities = vec![
+        EntityConfig {
+            name: names[0].to_string(),
+            entity_type: "source".to_string(),
+            region: region.to_string(),
+            initial_inventory: resource_amounts([(raw, 120.0 * stock), (energy, energy_supply)]),
+            production: Some(ProductionConfig {
+                inputs: resource_amounts([(energy, 1.0)]),
+                outputs: resource_amounts([(raw, 10.0)]),
+                energy_cost: 1.0,
+            }),
+        },
+        EntityConfig {
+            name: names[1].to_string(),
+            entity_type: "processor".to_string(),
+            region: region.to_string(),
+            initial_inventory: resource_amounts([
+                (raw, 80.0 * stock),
+                (processed, 30.0 * stock),
+                (energy, energy_supply),
+            ]),
+            production: Some(ProductionConfig {
+                inputs: resource_amounts([(raw, 5.0), (energy, 1.0)]),
+                outputs: resource_amounts([(processed, 4.0)]),
+                energy_cost: 1.0,
+            }),
+        },
+        EntityConfig {
+            name: names[2].to_string(),
+            entity_type: "producer".to_string(),
+            region: region.to_string(),
+            initial_inventory: resource_amounts([
+                (processed, 70.0 * stock),
+                (final_resource, 20.0 * stock),
+                (energy, energy_supply),
+            ]),
+            production: Some(ProductionConfig {
+                inputs: resource_amounts([(processed, 3.0), (energy, 1.0)]),
+                outputs: resource_amounts([(final_resource, 5.0)]),
+                energy_cost: 1.0,
+            }),
+        },
+        EntityConfig {
+            name: names[3].to_string(),
+            entity_type: "storage".to_string(),
+            region: region.to_string(),
+            initial_inventory: resource_amounts([(final_resource, 90.0 * stock)]),
+            production: None,
+        },
+        EntityConfig {
+            name: names[4].to_string(),
+            entity_type: "consumer".to_string(),
+            region: region.to_string(),
+            initial_inventory: resource_amounts([(final_resource, 60.0 * stock)]),
+            production: Some(ProductionConfig {
+                inputs: resource_amounts([(final_resource, demand)]),
+                outputs: BTreeMap::new(),
+                energy_cost: 0.0,
+            }),
+        },
+    ];
+    let links = vec![
+        LinkConfig {
+            from: names[0].to_string(),
+            to: names[1].to_string(),
+            resource: raw.to_string(),
+            max_per_tick: 8.0,
+        },
+        LinkConfig {
+            from: names[1].to_string(),
+            to: names[2].to_string(),
+            resource: processed.to_string(),
+            max_per_tick: 5.0,
+        },
+        LinkConfig {
+            from: names[2].to_string(),
+            to: names[3].to_string(),
+            resource: final_resource.to_string(),
+            max_per_tick: 6.0,
+        },
+        LinkConfig {
+            from: names[3].to_string(),
+            to: names[4].to_string(),
+            resource: final_resource.to_string(),
+            max_per_tick: 5.0,
+        },
+    ];
+    let manifest = WorldManifest {
+        name: title.to_string(),
+        description: description.to_string(),
+        version: "0.1.0".to_string(),
+        extends: Vec::new(),
+        mods: Vec::new(),
+    };
+    let scenario = Scenario {
+        world: title.to_string(),
+        seed,
+        duration_ticks: ticks,
+        events: vec![ScheduledEvent {
+            tick: (ticks / 3).max(1).min(ticks - 1),
+            event_type: ScheduledEventType::CapacityChange {
+                target: names[2].to_string(),
+                value: disruption,
+            },
+        }],
+        objectives: vec![
+            Objective {
+                objective_type: ObjectiveType::MaintainInventory {
+                    resource: final_resource.to_string(),
+                    minimum: objective_minimum,
+                },
+                status: ObjectiveStatus::Pending,
+                ever_failed: false,
+            },
+            Objective {
+                objective_type: ObjectiveType::AvoidShortage {
+                    resource: final_resource.to_string(),
+                },
+                status: ObjectiveStatus::Pending,
+                ever_failed: false,
+            },
+        ],
+    };
+    let config = EntitiesConfig { entities, links };
+    manifest.validate()?;
+    config.validate()?;
+    scenario.validate_against(&manifest, &config)?;
+    Ok((manifest, scenario, config))
+}
+
+fn resource_amounts<const N: usize>(pairs: [(&str, f64); N]) -> BTreeMap<String, f64> {
+    pairs
+        .into_iter()
+        .map(|(resource, amount)| (resource.to_string(), amount))
+        .collect()
+}
+
+fn write_toml_file<T: Serialize>(path: &Path, value: &T) -> Result<(), WorldForgeError> {
+    let encoded = toml::to_string_pretty(value)
+        .map_err(|error| WorldForgeError::new(ErrorCode::InternalError, error.to_string()))?;
+    let mut file = std::fs::OpenOptions::new()
+        .create_new(true)
+        .write(true)
+        .open(path)
+        .map_err(io_error)?;
+    file.write_all(encoded.as_bytes()).map_err(io_error)?;
+    file.sync_all().map_err(io_error)
 }
 
 fn catalog(worlds_dir: &Path) -> Result<Value, WorldForgeError> {
@@ -1146,6 +1696,8 @@ mod tests {
                 worlds_dir: examples_dir(),
                 saves_dir: saves_dir.clone(),
                 sessions: Mutex::new(BTreeMap::new()),
+                save_io: Mutex::new(()),
+                world_io: Mutex::new(()),
             },
             saves_dir,
         )
@@ -1288,6 +1840,23 @@ mod tests {
         .unwrap();
         assert_eq!(list_saves(&state).unwrap().len(), 1);
 
+        let overwritten = save_play_session(
+            &state,
+            SaveRequest {
+                session_id: original_id.to_string(),
+                name: "Before the disruption · updated".to_string(),
+                save_id: Some(save.id.clone()),
+            },
+        )
+        .unwrap();
+        assert_eq!(overwritten.id, save.id);
+        assert_eq!(overwritten.created_at, save.created_at);
+        assert_eq!(read_save(&state, &save.id).unwrap().name, overwritten.name);
+        assert!(std::fs::read_dir(&saves_dir).unwrap().all(|entry| {
+            let name = entry.unwrap().file_name().to_string_lossy().into_owned();
+            !name.ends_with(".tmp") && !name.ends_with(".bak")
+        }));
+
         let original_final = step_play_session(&state, original_id, 100).unwrap();
         let resumed = load_save(&state, &save.id).unwrap();
         assert_eq!(resumed["currentTick"], 7);
@@ -1305,5 +1874,102 @@ mod tests {
         delete_save(&state, &save.id).unwrap();
         assert!(list_saves(&state).unwrap().is_empty());
         std::fs::remove_dir_all(saves_dir).unwrap();
+    }
+
+    #[test]
+    fn save_recovery_restores_backup_and_removes_partial_temporary_files() {
+        let saves_dir = std::env::temp_dir().join(format!(
+            "worldforge-dashboard-recovery-{}",
+            uuid::Uuid::new_v4().simple()
+        ));
+        std::fs::create_dir_all(&saves_dir).unwrap();
+        let id = uuid::Uuid::new_v4().simple().to_string();
+        let backup = saves_dir.join(format!("{id}.json.bak"));
+        let temporary = saves_dir.join(format!(".worldforge-save-{id}-partial.tmp"));
+        std::fs::write(&backup, b"recoverable").unwrap();
+        std::fs::write(&temporary, b"partial").unwrap();
+
+        recover_save_directory(&saves_dir).unwrap();
+
+        assert_eq!(
+            std::fs::read(saves_dir.join(format!("{id}.json"))).unwrap(),
+            b"recoverable"
+        );
+        assert!(!backup.exists());
+        assert!(!temporary.exists());
+        std::fs::remove_dir_all(saves_dir).unwrap();
+    }
+
+    #[test]
+    fn world_builder_creates_valid_playable_templates_atomically() {
+        let root = std::env::temp_dir().join(format!(
+            "worldforge-dashboard-builder-{}",
+            uuid::Uuid::new_v4().simple()
+        ));
+        let worlds_dir = root.join("worlds");
+        let saves_dir = root.join("saves");
+        std::fs::create_dir_all(&worlds_dir).unwrap();
+        std::fs::create_dir_all(&saves_dir).unwrap();
+        let state = ServerState {
+            worlds_dir: worlds_dir.clone(),
+            saves_dir,
+            sessions: Mutex::new(BTreeMap::new()),
+            save_io: Mutex::new(()),
+            world_io: Mutex::new(()),
+        };
+
+        for (index, template) in ["industrial", "city", "ecosystem"].into_iter().enumerate() {
+            let id = format!("generated-{template}");
+            let created = create_world(
+                &state,
+                WorldBuildRequest {
+                    id: id.clone(),
+                    title: format!("Generated {template}"),
+                    description: "Generated by the validated builder".to_string(),
+                    template: template.to_string(),
+                    difficulty: ["easy", "standard", "hard"][index].to_string(),
+                    seed: 100 + index as u64,
+                    ticks: 60,
+                },
+            )
+            .unwrap();
+            assert_eq!(created["id"], id);
+            worldforge_package::validate_world(&worlds_dir.join(&id)).unwrap();
+            let mut runtime = SimulationRuntime::load(&worlds_dir.join(&id), 42, Some(20)).unwrap();
+            assert_eq!(runtime.run().unwrap().total_ticks, 20);
+        }
+        assert_eq!(catalog(&worlds_dir).unwrap().as_array().unwrap().len(), 3);
+        assert!(create_world(
+            &state,
+            WorldBuildRequest {
+                id: "generated-city".to_string(),
+                title: "Duplicate".to_string(),
+                description: String::new(),
+                template: "city".to_string(),
+                difficulty: "standard".to_string(),
+                seed: 42,
+                ticks: 100,
+            }
+        )
+        .is_err());
+        assert!(create_world(
+            &state,
+            WorldBuildRequest {
+                id: "../escape".to_string(),
+                title: "Invalid".to_string(),
+                description: String::new(),
+                template: "industrial".to_string(),
+                difficulty: "standard".to_string(),
+                seed: 42,
+                ticks: 100,
+            }
+        )
+        .is_err());
+        assert!(std::fs::read_dir(&worlds_dir).unwrap().all(|entry| !entry
+            .unwrap()
+            .file_name()
+            .to_string_lossy()
+            .starts_with(".worldforge-new-")));
+        std::fs::remove_dir_all(root).unwrap();
     }
 }

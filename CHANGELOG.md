@@ -11,6 +11,8 @@
 - Added responsive navigation, keyboard operation, accessible live states, reduced-motion support, polished charts, animation, and original ambient atlas artwork.
 - Added structured API errors, request bounds, traversal protection, concurrent request handling, immutable asset caching, and browser security headers.
 - Added dashboard catalog and path-validation regression tests plus a configurable `--worlds-dir` option.
+- Added a responsive World Builder with industrial, city, and ecosystem templates, difficulty profiles, typed validation, atomic publication, and immediate Play Mode handoff.
+- Added crash-safe local save slots with synchronized writes, backup recovery, strict size/count/content limits, world-fingerprint checks, and deterministic resume parity.
 
 ### Release readiness
 
@@ -19,6 +21,7 @@
 - Replaced unbounded request threads with a CPU-sized worker pool and bounded overload queue.
 - Added high-density visualization budgets, linear topology lookup, dense-network effect reduction, and explicit performance documentation.
 - Fixed Criterion world discovery and added 40-entity stress benchmarks plus bounded-capture regression coverage.
+- Added full create → catalog → play → save → resume → complete → replay lifecycle verification.
 
 All notable changes to World Forge will be documented in this file.
 

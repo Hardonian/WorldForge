@@ -30,6 +30,7 @@ const state = {
         running: false, requestInFlight: false, timer: null,
     },
     saves: [],
+    builderIdTouched: false,
 };
 
 const el = id => document.getElementById(id);
@@ -45,6 +46,7 @@ const dom = {
     compareDialog: el('compare-dialog'), benchmarkDialog: el('benchmark-dialog'),
     playDialog: el('play-dialog'),
     saveDialog: el('save-dialog'),
+    builderDialog: el('builder-dialog'),
 };
 
 function currentWorld() {
@@ -102,6 +104,7 @@ function bindInteractions() {
     el('nav-compare').addEventListener('click', openComparison);
     el('nav-benchmark').addEventListener('click', openBenchmark);
     el('nav-play').addEventListener('click', openPlayMode);
+    el('nav-builder').addEventListener('click', openWorldBuilder);
     el('compare-run').addEventListener('click', runComparison);
     el('benchmark-run').addEventListener('click', runBenchmark);
     el('clear-history').addEventListener('click', clearHistory);
@@ -122,6 +125,11 @@ function bindInteractions() {
     el('save-close').addEventListener('click', () => dom.saveDialog.close());
     el('save-form').addEventListener('submit', saveCurrentSession);
     el('refresh-saves').addEventListener('click', refreshSaves);
+    el('builder-close').addEventListener('click', () => dom.builderDialog.close());
+    el('builder-form').addEventListener('submit', createWorld);
+    el('builder-world-title').addEventListener('input', syncBuilderSlug);
+    el('builder-world-id').addEventListener('input', () => { state.builderIdTouched = true; });
+    el('builder-description').addEventListener('input', updateBuilderDescriptionCount);
     el('menu-button').addEventListener('click', () => toggleSidebar(true));
     el('sidebar-close').addEventListener('click', () => toggleSidebar(false));
     el('mobile-backdrop').addEventListener('click', () => toggleSidebar(false));
@@ -191,6 +199,83 @@ function renderWorldNavigation() {
         });
         dom.worldNav.append(button);
     });
+}
+
+function openWorldBuilder() {
+    toggleSidebar(false);
+    const form = el('builder-form');
+    form.reset();
+    state.builderIdTouched = false;
+    el('builder-world-id').value = '';
+    updateBuilderDescriptionCount();
+    setButtonBusy(el('builder-submit'), false, 'Create & play');
+    if (!dom.builderDialog.open) dom.builderDialog.showModal();
+    el('builder-world-title').focus();
+}
+
+function syncBuilderSlug() {
+    if (state.builderIdTouched) return;
+    el('builder-world-id').value = slugify(el('builder-world-title').value);
+}
+
+function updateBuilderDescriptionCount() {
+    el('builder-description-count').textContent = el('builder-description').value.length.toString();
+}
+
+async function createWorld(event) {
+    event.preventDefault();
+    const form = el('builder-form');
+    if (!form.reportValidity()) return;
+    const button = el('builder-submit');
+    let seed, ticks;
+    try {
+        seed = numericInput(el('builder-seed'), { min: 0, max: Number.MAX_SAFE_INTEGER, name: 'Seed' });
+        ticks = numericInput(el('builder-ticks'), { min: 10, max: 1_000_000, name: 'Duration' });
+    } catch (error) {
+        showToast('Check the world settings', error.message, 'error');
+        return;
+    }
+    const id = el('builder-world-id').value.trim();
+    const template = form.elements.namedItem('builder-template').value;
+    setButtonBusy(button, true, 'Forging world…');
+    try {
+        await api('/api/worlds', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                id,
+                title: el('builder-world-title').value.trim(),
+                description: el('builder-description').value.trim(),
+                template,
+                difficulty: el('builder-difficulty').value,
+                seed,
+                ticks,
+            }),
+        });
+        const catalog = await api('/api/worlds');
+        state.worlds = catalog.worlds || [];
+        renderWorldNavigation();
+        selectWorld(id, { useDefaults: true });
+        setEngineStatus(true, 'Engine ready', `${state.worlds.length} worlds available`);
+        dom.builderDialog.close();
+        showToast('World forged', `${el('builder-world-title').value.trim()} passed validation and is ready to play.`);
+        setTimeout(openPlayMode, 120);
+    } catch (error) {
+        showToast('World creation failed', `${error.code ? `${error.code}: ` : ''}${error.message}`, 'error');
+    } finally {
+        setButtonBusy(button, false, 'Create & play');
+    }
+}
+
+function slugify(value) {
+    return String(value)
+        .normalize('NFKD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '')
+        .replace(/-{2,}/g, '-')
+        .slice(0, 48)
+        .replace(/-+$/g, '');
 }
 
 function selectWorld(worldId, options = {}) {
