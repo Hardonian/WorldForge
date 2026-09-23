@@ -1,0 +1,51 @@
+world = "coastal-resilience"
+seed = 31415
+duration_ticks = 600
+
+# A wind collapse is followed by desalination damage, then a staged recovery.
+[[events]]
+tick = 150
+type = "capacity_change"
+target = "offshore-wind"
+value = 0.35
+
+[[events]]
+tick = 240
+type = "capacity_change"
+target = "desalination-plant"
+value = 0.55
+
+[[events]]
+tick = 360
+type = "capacity_change"
+target = "offshore-wind"
+value = 1.15
+
+[[events]]
+tick = 420
+type = "capacity_change"
+target = "desalination-plant"
+value = 1.10
+
+[[objectives]]
+type = "maintain_inventory"
+resource = "wellbeing"
+minimum = 120.0
+
+[[objectives]]
+type = "avoid_shortage"
+resource = "power"
+
+[[objectives]]
+type = "reach_production_target"
+resource = "water"
+target = 7000.0
+
+[[objectives]]
+type = "reach_inventory_target"
+resource = "wellbeing"
+target = 500.0
+
+[[objectives]]
+type = "survive_until_tick"
+tick = 500

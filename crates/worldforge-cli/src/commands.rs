@@ -607,10 +607,16 @@ fn simulation_export_with_event_limit(
         "eventsTruncated": event_start > 0,
         "eventWindowStart": event_start,
         "eventTypeCounts": event_type_counts,
+        "resourceMetrics": result.resource_metrics,
         "objectives": result.objective_results.iter().map(|objective| {
             serde_json::json!({
                 "name": objective.name,
                 "status": format!("{:?}", objective.status),
+                "kind": objective.kind,
+                "resource": objective.resource,
+                "current": objective.current,
+                "target": objective.target,
+                "progress": objective.progress,
             })
         }).collect::<Vec<_>>(),
         "fingerprints": {

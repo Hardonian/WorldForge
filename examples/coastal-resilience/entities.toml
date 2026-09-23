@@ -1,0 +1,225 @@
+# A coupled civic system: energy enables water, food, medicine, and care.
+
+[[entities]]
+name = "offshore-wind"
+entity_type = "renewable-producer"
+region = "outer-bay"
+[entities.initial_inventory]
+wind = 100000.0
+power = 1200.0
+[entities.production]
+energy_cost = 0.0
+[entities.production.inputs]
+wind = 1.0
+[entities.production.outputs]
+power = 32.0
+
+[[entities]]
+name = "desalination-plant"
+entity_type = "water-processor"
+region = "industrial-shore"
+[entities.initial_inventory]
+seawater = 100000.0
+power = 500.0
+water = 1400.0
+[entities.production]
+energy_cost = 8.0
+[entities.production.inputs]
+seawater = 12.0
+power = 8.0
+[entities.production.outputs]
+water = 22.0
+
+[[entities]]
+name = "vertical-farms"
+entity_type = "food-producer"
+region = "green-belt"
+[entities.initial_inventory]
+power = 420.0
+water = 900.0
+food = 1000.0
+[entities.production]
+energy_cost = 5.0
+[entities.production.inputs]
+power = 5.0
+water = 7.0
+[entities.production.outputs]
+food = 18.0
+
+[[entities]]
+name = "harbor-chemicals"
+entity_type = "industrial-producer"
+region = "working-harbor"
+[entities.initial_inventory]
+feedstock = 12000.0
+power = 300.0
+chemicals = 900.0
+[entities.production]
+energy_cost = 4.0
+[entities.production.inputs]
+feedstock = 6.0
+power = 4.0
+[entities.production.outputs]
+chemicals = 10.0
+
+[[entities]]
+name = "medical-lab"
+entity_type = "medicine-producer"
+region = "civic-core"
+[entities.initial_inventory]
+power = 240.0
+chemicals = 650.0
+medicine = 700.0
+[entities.production]
+energy_cost = 3.0
+[entities.production.inputs]
+power = 3.0
+chemicals = 4.0
+[entities.production.outputs]
+medicine = 8.0
+
+[[entities]]
+name = "resilience-hub"
+entity_type = "strategic-storage"
+region = "high-ground"
+[entities.initial_inventory]
+power = 900.0
+water = 1300.0
+food = 1000.0
+medicine = 500.0
+
+[[entities]]
+name = "regional-clinic"
+entity_type = "public-service"
+region = "civic-core"
+[entities.initial_inventory]
+power = 260.0
+water = 400.0
+medicine = 350.0
+care = 200.0
+[entities.production]
+energy_cost = 2.0
+[entities.production.inputs]
+power = 2.0
+water = 2.0
+medicine = 1.0
+[entities.production.outputs]
+care = 6.0
+
+[[entities]]
+name = "coastal-community"
+entity_type = "population-center"
+region = "coastal-wards"
+[entities.initial_inventory]
+power = 800.0
+water = 1200.0
+food = 1100.0
+care = 450.0
+wellbeing = 180.0
+[entities.production]
+energy_cost = 3.0
+[entities.production.inputs]
+power = 3.0
+water = 4.0
+food = 3.0
+care = 1.0
+[entities.production.outputs]
+wellbeing = 2.0
+
+# Primary infrastructure flows.
+[[links]]
+from = "offshore-wind"
+to = "desalination-plant"
+resource = "power"
+max_per_tick = 10.0
+
+[[links]]
+from = "offshore-wind"
+to = "vertical-farms"
+resource = "power"
+max_per_tick = 7.0
+
+[[links]]
+from = "offshore-wind"
+to = "harbor-chemicals"
+resource = "power"
+max_per_tick = 5.0
+
+[[links]]
+from = "offshore-wind"
+to = "resilience-hub"
+resource = "power"
+max_per_tick = 5.0
+
+[[links]]
+from = "desalination-plant"
+to = "vertical-farms"
+resource = "water"
+max_per_tick = 8.0
+
+[[links]]
+from = "desalination-plant"
+to = "resilience-hub"
+resource = "water"
+max_per_tick = 6.0
+
+[[links]]
+from = "vertical-farms"
+to = "resilience-hub"
+resource = "food"
+max_per_tick = 8.0
+
+[[links]]
+from = "harbor-chemicals"
+to = "medical-lab"
+resource = "chemicals"
+max_per_tick = 5.0
+
+[[links]]
+from = "medical-lab"
+to = "resilience-hub"
+resource = "medicine"
+max_per_tick = 4.0
+
+# The hub buffers essential services and the population center.
+[[links]]
+from = "resilience-hub"
+to = "regional-clinic"
+resource = "power"
+max_per_tick = 4.0
+
+[[links]]
+from = "resilience-hub"
+to = "regional-clinic"
+resource = "water"
+max_per_tick = 4.0
+
+[[links]]
+from = "resilience-hub"
+to = "regional-clinic"
+resource = "medicine"
+max_per_tick = 3.0
+
+[[links]]
+from = "regional-clinic"
+to = "coastal-community"
+resource = "care"
+max_per_tick = 5.0
+
+[[links]]
+from = "resilience-hub"
+to = "coastal-community"
+resource = "power"
+max_per_tick = 7.0
+
+[[links]]
+from = "resilience-hub"
+to = "coastal-community"
+resource = "water"
+max_per_tick = 8.0
+
+[[links]]
+from = "resilience-hub"
+to = "coastal-community"
+resource = "food"
+max_per_tick = 7.0

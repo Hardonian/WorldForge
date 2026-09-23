@@ -978,11 +978,17 @@ fn play_document(
         "stateFingerprint": progress.state_fingerprint.to_string(),
         "eventCount": progress.event_count,
         "shortageCount": progress.shortage_count,
+        "resourceMetrics": progress.resource_metrics,
         "snapshot": progress.snapshot,
         "entityStates": progress.entity_states,
         "objectives": progress.objective_results.iter().map(|objective| json!({
             "name": objective.name,
             "status": format!("{:?}", objective.status),
+            "kind": objective.kind,
+            "resource": objective.resource,
+            "current": objective.current,
+            "target": objective.target,
+            "progress": objective.progress,
         })).collect::<Vec<_>>(),
         "recentEvents": events,
         "entities": include_topology.then_some(&progress.entities),
@@ -1750,6 +1756,23 @@ mod tests {
             .map(|value| value.as_u64().unwrap())
             .sum::<u64>();
         assert_eq!(counted, document["totalEvents"].as_u64().unwrap());
+        let metrics = document["resourceMetrics"].as_array().unwrap();
+        assert!(!metrics.is_empty());
+        assert!(metrics.iter().all(|metric| metric["minimumTick"].is_u64()));
+        let objective_document = super::super::commands::simulation_export_for_dashboard(
+            &examples_dir().join("supply-chain"),
+            10,
+            42,
+            50,
+        )
+        .unwrap();
+        let objective = objective_document["objectives"]
+            .as_array()
+            .unwrap()
+            .first()
+            .unwrap();
+        assert!(objective["kind"].is_string());
+        assert!(objective["progress"].is_number());
     }
 
     #[test]
@@ -1777,6 +1800,8 @@ mod tests {
         .unwrap();
         let id = created["sessionId"].as_str().unwrap();
         assert_eq!(created["currentTick"], 0);
+        assert!(!created["resourceMetrics"].as_array().unwrap().is_empty());
+        assert!(created["objectives"][0]["progress"].is_number());
 
         let stepped = step_play_session(&state, id, 3).unwrap();
         assert_eq!(stepped["currentTick"], 3);

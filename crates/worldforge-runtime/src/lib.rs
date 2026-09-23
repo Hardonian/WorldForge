@@ -51,6 +51,7 @@ pub struct RunResult {
     pub event_count: usize,
     pub shortage_count: usize,
     pub event_type_counts: RunEventCounts,
+    pub resource_metrics: Vec<ResourceMetric>,
     pub snapshots: Vec<ResourceSnapshot>,
     pub entities: Vec<RunEntity>,
     pub links: Vec<RunLink>,
@@ -87,6 +88,31 @@ pub struct ResourceSnapshot {
     pub levels: BTreeMap<String, f64>,
 }
 
+/// Exact whole-run telemetry for a tracked resource. Unlike chart snapshots,
+/// these extrema are updated every tick and are therefore not affected by
+/// visualization downsampling.
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ResourceMetric {
+    pub resource: String,
+    pub initial: f64,
+    pub final_level: f64,
+    pub minimum: f64,
+    pub minimum_tick: u64,
+    pub maximum: f64,
+    pub maximum_tick: u64,
+    pub net_change: f64,
+}
+
+#[derive(Debug, Clone)]
+struct ResourceExtrema {
+    initial: Fixed64,
+    minimum: Fixed64,
+    minimum_tick: u64,
+    maximum: Fixed64,
+    maximum_tick: u64,
+}
+
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct RunEntity {
     pub name: String,
@@ -121,6 +147,7 @@ pub struct RunProgress {
     pub objective_results: Vec<ObjectiveResult>,
     pub event_count: usize,
     pub shortage_count: usize,
+    pub resource_metrics: Vec<ResourceMetric>,
     pub snapshot: ResourceSnapshot,
     pub entity_states: Vec<EntityState>,
     pub recent_events: Vec<SimulationEvent>,
@@ -133,6 +160,12 @@ pub struct RunProgress {
 pub struct ObjectiveResult {
     pub name: String,
     pub status: ObjectiveStatus,
+    pub kind: String,
+    pub resource: Option<String>,
+    pub current: f64,
+    pub target: f64,
+    /// Normalized completion in the inclusive range 0.0..=1.0.
+    pub progress: f64,
 }
 
 /// The simulation runtime — executes worlds.
@@ -148,6 +181,7 @@ pub struct SimulationRuntime {
     scheduled_events: BTreeMap<u64, Vec<ScheduledEvent>>,
     tracked_resources: Vec<String>,
     resource_totals: BTreeMap<String, Fixed64>,
+    resource_extrema: BTreeMap<String, ResourceExtrema>,
     replay_writer: Option<ReplayWriter>,
     replay: Option<ReplayArtifact>,
     proof: Option<RunProof>,
@@ -160,6 +194,7 @@ pub struct SimulationRuntime {
     initial_state_fingerprint: Fingerprint,
     state_fingerprint: Fingerprint,
     shortage_count: usize,
+    shortage_counts_by_resource: BTreeMap<String, usize>,
     event_count: usize,
     event_type_counts: RunEventCounts,
     production_totals: BTreeMap<String, Fixed64>,
@@ -351,6 +386,22 @@ impl SimulationRuntime {
             }
         }
 
+        let resource_extrema = resource_totals
+            .iter()
+            .map(|(resource, amount)| {
+                (
+                    resource.clone(),
+                    ResourceExtrema {
+                        initial: *amount,
+                        minimum: *amount,
+                        minimum_tick: 0,
+                        maximum: *amount,
+                        maximum_tick: 0,
+                    },
+                )
+            })
+            .collect();
+
         let mut scheduled_events = BTreeMap::new();
         for scheduled in &scenario.events {
             scheduled_events
@@ -392,6 +443,7 @@ impl SimulationRuntime {
             scheduled_events,
             tracked_resources,
             resource_totals,
+            resource_extrema,
             replay_writer: Some(replay_writer),
             replay: None,
             proof: None,
@@ -404,6 +456,7 @@ impl SimulationRuntime {
             initial_state_fingerprint: initial_fp,
             state_fingerprint: initial_fp,
             shortage_count: 0,
+            shortage_counts_by_resource: BTreeMap::new(),
             event_count: 0,
             event_type_counts: RunEventCounts::default(),
             production_totals: BTreeMap::new(),
@@ -477,13 +530,17 @@ impl SimulationRuntime {
                 tick,
                 &mut tick_events,
             );
-            self.refresh_resource_totals();
+            self.refresh_resource_totals(tick_num + 1);
 
             for event in &tick_events {
                 self.event_type_counts.record(event);
                 match &event.event_type {
                     EventType::InventoryShortage { resource, .. } => {
                         self.shortage_count += 1;
+                        *self
+                            .shortage_counts_by_resource
+                            .entry(resource.clone())
+                            .or_default() += 1;
                         for objective in &mut self.objectives {
                             if matches!(
                                 &objective.objective_type,
@@ -653,6 +710,7 @@ impl SimulationRuntime {
             event_count: self.event_count,
             shortage_count: self.shortage_count,
             event_type_counts: self.event_type_counts.clone(),
+            resource_metrics: self.resource_metrics(),
             snapshots: self.snapshots.clone(),
             entities: self.run_entities.clone(),
             links: self.run_links.clone(),
@@ -674,6 +732,7 @@ impl SimulationRuntime {
             objective_results: self.objective_results(),
             event_count: self.event_count,
             shortage_count: self.shortage_count,
+            resource_metrics: self.resource_metrics(),
             snapshot: self.resource_snapshot(self.world.current_tick().value()),
             entity_states: self.entity_states(),
             recent_events,
@@ -685,9 +744,95 @@ impl SimulationRuntime {
     fn objective_results(&self) -> Vec<ObjectiveResult> {
         self.objectives
             .iter()
-            .map(|objective| ObjectiveResult {
-                name: objective.name(),
-                status: objective.status.clone(),
+            .map(|objective| {
+                let (kind, resource, current, target) = match &objective.objective_type {
+                    ObjectiveType::MaintainInventory { resource, minimum } => (
+                        "maintain_inventory",
+                        Some(resource.clone()),
+                        self.resource_extrema
+                            .get(resource)
+                            .map_or(0.0, |metric| metric.minimum.to_f64_lossy()),
+                        *minimum,
+                    ),
+                    ObjectiveType::AvoidShortage { resource } => (
+                        "avoid_shortage",
+                        Some(resource.clone()),
+                        self.shortage_counts_by_resource
+                            .get(resource)
+                            .copied()
+                            .unwrap_or_default() as f64,
+                        0.0,
+                    ),
+                    ObjectiveType::ReachProductionTarget { resource, target } => (
+                        "reach_production_target",
+                        Some(resource.clone()),
+                        self.production_totals
+                            .get(resource)
+                            .copied()
+                            .unwrap_or(Fixed64::ZERO)
+                            .to_f64_lossy(),
+                        *target,
+                    ),
+                    ObjectiveType::ReachInventoryTarget { resource, target } => (
+                        "reach_inventory_target",
+                        Some(resource.clone()),
+                        self.resource_extrema
+                            .get(resource)
+                            .map_or(0.0, |metric| metric.maximum.to_f64_lossy()),
+                        *target,
+                    ),
+                    ObjectiveType::SurviveUntilTick { tick } => (
+                        "survive_until_tick",
+                        None,
+                        self.world.current_tick().value() as f64,
+                        *tick as f64,
+                    ),
+                };
+                let progress = if kind == "avoid_shortage" {
+                    if current == 0.0 {
+                        1.0
+                    } else {
+                        0.0
+                    }
+                } else if target <= 0.0 {
+                    1.0
+                } else {
+                    (current / target).clamp(0.0, 1.0)
+                };
+                ObjectiveResult {
+                    name: objective.name(),
+                    status: objective.status.clone(),
+                    kind: kind.to_string(),
+                    resource,
+                    current,
+                    target,
+                    progress,
+                }
+            })
+            .collect()
+    }
+
+    fn resource_metrics(&self) -> Vec<ResourceMetric> {
+        self.tracked_resources
+            .iter()
+            .map(|resource| {
+                let final_level = self
+                    .resource_totals
+                    .get(resource)
+                    .copied()
+                    .unwrap_or(Fixed64::ZERO);
+                let extrema = self.resource_extrema.get(resource);
+                let initial = extrema.map_or(Fixed64::ZERO, |value| value.initial);
+                ResourceMetric {
+                    resource: resource.clone(),
+                    initial: initial.to_f64_lossy(),
+                    final_level: final_level.to_f64_lossy(),
+                    minimum: extrema.map_or(0.0, |value| value.minimum.to_f64_lossy()),
+                    minimum_tick: extrema.map_or(0, |value| value.minimum_tick),
+                    maximum: extrema.map_or(0.0, |value| value.maximum.to_f64_lossy()),
+                    maximum_tick: extrema.map_or(0, |value| value.maximum_tick),
+                    net_change: (final_level - initial).to_f64_lossy(),
+                }
             })
             .collect()
     }
@@ -770,7 +915,7 @@ impl SimulationRuntime {
         Ok(events)
     }
 
-    fn refresh_resource_totals(&mut self) {
+    fn refresh_resource_totals(&mut self, tick: u64) {
         self.resource_totals.clear();
         for resource in &self.tracked_resources {
             self.resource_totals.insert(resource.clone(), Fixed64::ZERO);
@@ -783,6 +928,26 @@ impl SimulationRuntime {
                         .entry(resource.clone())
                         .or_insert(Fixed64::ZERO) += *amount;
                 }
+            }
+        }
+        for (resource, amount) in &self.resource_totals {
+            let extrema =
+                self.resource_extrema
+                    .entry(resource.clone())
+                    .or_insert(ResourceExtrema {
+                        initial: Fixed64::ZERO,
+                        minimum: *amount,
+                        minimum_tick: tick,
+                        maximum: *amount,
+                        maximum_tick: tick,
+                    });
+            if *amount < extrema.minimum {
+                extrema.minimum = *amount;
+                extrema.minimum_tick = tick;
+            }
+            if *amount > extrema.maximum {
+                extrema.maximum = *amount;
+                extrema.maximum_tick = tick;
             }
         }
     }
@@ -1020,6 +1185,35 @@ goods = 2.0
         assert_eq!(result.objective_results[0].status, ObjectiveStatus::Failed);
         assert_eq!(result.objective_results[1].status, ObjectiveStatus::Passed);
         assert_eq!(result.objective_results[2].status, ObjectiveStatus::Failed);
+        assert_eq!(result.objective_results[0].kind, "maintain_inventory");
+        assert_eq!(result.objective_results[0].current, 5.0);
+        assert_eq!(result.objective_results[0].target, 6.0);
+        assert!((result.objective_results[0].progress - (5.0 / 6.0)).abs() < 0.000_001);
+        assert_eq!(result.objective_results[1].current, 4.0);
+        assert_eq!(result.objective_results[1].progress, 1.0);
+        assert_eq!(result.objective_results[2].current, 1.0);
+        assert_eq!(result.objective_results[2].progress, 0.0);
+
+        let goods = result
+            .resource_metrics
+            .iter()
+            .find(|metric| metric.resource == "goods")
+            .unwrap();
+        assert_eq!(goods.initial, 5.0);
+        assert_eq!(goods.final_level, 9.0);
+        assert_eq!(goods.minimum, 5.0);
+        assert_eq!(goods.minimum_tick, 0);
+        assert_eq!(goods.maximum, 9.0);
+        assert_eq!(goods.maximum_tick, 2);
+        assert_eq!(goods.net_change, 4.0);
+
+        let input = result
+            .resource_metrics
+            .iter()
+            .find(|metric| metric.resource == "input")
+            .unwrap();
+        assert_eq!(input.minimum, 0.0);
+        assert_eq!(input.minimum_tick, 2);
 
         std::fs::remove_dir_all(directory).unwrap();
     }

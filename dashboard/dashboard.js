@@ -11,6 +11,7 @@ const TYPE_COLORS = {
 const WORLD_SYMBOLS = {
     'supply-chain': 'SC', ecosystem: 'EC', 'micro-city': 'MC',
     'freight-network': 'FN', 'stress-test': 'ST', 'minimal-world': 'MW',
+    'coastal-resilience': 'CR',
 };
 const HISTORY_KEY = 'worldforge.recent-runs.v1';
 const MAX_HISTORY = 7;
@@ -384,6 +385,7 @@ function displayResults(data) {
     el('run-banner-copy').textContent = `Run ${data.meta.runId} completed.`;
     el('objective-summary').textContent = `${passed} of ${data.objectives.length} passed`;
     renderObjectives(data.objectives);
+    renderOperationalInsights(data);
     renderProof(data.fingerprints);
     configureEventTypes(data.eventTypeCounts);
     state.eventsVisible = EVENTS_PAGE_SIZE;
@@ -407,6 +409,7 @@ function resetResults() {
     el('run-banner-copy').textContent = 'Every result is calculated by the Rust runtime. Run the selected world to reveal resource flows, objectives, event history, and a tamper-evident proof chain.';
     el('objectives-list').replaceChildren(emptyState('◇', '', 'Objectives will be evaluated across the whole run.', true));
     el('objective-summary').textContent = 'Not evaluated';
+    resetOperationalInsights();
     el('distribution-meta').textContent = 'No run';
     dom.eventFilter.value = '';
     dom.eventType.replaceChildren(new Option('All event types', 'all'));
@@ -460,11 +463,114 @@ function renderObjectives(objectives) {
         const name = document.createElement('strong');
         name.textContent = objective.name;
         const detail = document.createElement('small');
-        detail.textContent = objective.status;
-        copy.append(name, detail);
+        detail.textContent = objectiveDetail(objective);
+        const progress = document.createElement('span');
+        progress.className = 'objective-progress';
+        progress.setAttribute('role', 'progressbar');
+        progress.setAttribute('aria-valuemin', '0');
+        progress.setAttribute('aria-valuemax', '100');
+        const percentage = Math.round(Math.max(0, Math.min(1, Number(objective.progress) || 0)) * 100);
+        progress.setAttribute('aria-valuenow', percentage.toString());
+        progress.setAttribute('aria-label', `${objective.name}: ${percentage}% progress`);
+        const fill = document.createElement('i');
+        fill.style.width = `${percentage}%`;
+        progress.append(fill);
+        copy.append(name, detail, progress);
         card.append(icon, copy);
         container.append(card);
     });
+}
+
+function objectiveDetail(objective) {
+    const current = formatDecimal(objective.current, 1);
+    const target = formatDecimal(objective.target, 1);
+    switch (objective.kind) {
+        case 'maintain_inventory': return `Minimum ${current} · floor ${target}`;
+        case 'avoid_shortage': return `${formatNumber(objective.current)} shortage events · target 0`;
+        case 'reach_production_target': return `Produced ${current} of ${target}`;
+        case 'reach_inventory_target': return `Peak ${current} of ${target}`;
+        case 'survive_until_tick': return `Tick ${formatNumber(objective.current)} of ${formatNumber(objective.target)}`;
+        default: return objective.status;
+    }
+}
+
+function renderOperationalInsights(data) {
+    const objectives = data.objectives || [];
+    const metrics = data.resourceMetrics || [];
+    const objectiveScore = objectives.length
+        ? objectives.reduce((sum, objective) => sum + (objective.status === 'Passed' ? 1 : objective.status === 'Pending' ? .5 : 0), 0) / objectives.length
+        : 1;
+    const shortagePressure = Math.min(1, Number(data.shortageEvents || 0) / Math.max(1, Number(data.ticks || 1)));
+    const score = Math.round((objectiveScore * .6 + (1 - shortagePressure) * .4) * 100);
+    const grade = score >= 90 ? 'Resilient' : score >= 70 ? 'Stable' : score >= 50 ? 'Strained' : 'Critical';
+    const ring = el('resilience-ring');
+    ring.style.setProperty('--score', score);
+    ring.setAttribute('aria-label', `Resilience score ${score} out of 100, ${grade}`);
+    el('resilience-score').textContent = score.toString();
+    el('resilience-grade').textContent = grade;
+    el('resilience-label').textContent = `${objectives.filter(item => item.status === 'Passed').length}/${objectives.length || 0} goals · ${formatDecimal(shortagePressure * 100, 1)}% pressure`;
+
+    const stressed = metrics
+        .filter(metric => Number(metric.initial) > 0)
+        .map(metric => ({ ...metric, drawdown: Math.max(0, (Number(metric.initial) - Number(metric.minimum)) / Number(metric.initial)) }))
+        .sort((a, b) => b.drawdown - a.drawdown)[0];
+    const growth = [...metrics].sort((a, b) => Number(b.netChange) - Number(a.netChange))[0];
+    const recovery = [...metrics]
+        .map(metric => ({ ...metric, recovery: Number(metric.finalLevel) - Number(metric.minimum) }))
+        .sort((a, b) => b.recovery - a.recovery)[0];
+    const activity = Number(data.totalEvents || 0) / Math.max(1, Number(data.ticks || 1));
+
+    const cards = el('insight-cards');
+    cards.replaceChildren(
+        insightMetric('Most stressed', stressed ? prettyName(stressed.resource) : 'No depletion', stressed ? `${formatDecimal(stressed.drawdown * 100, 1)}% drawdown · low at t${formatNumber(stressed.minimumTick)}` : 'Inventories held their floor', 'stress'),
+        insightMetric('Strongest gain', growth ? prettyName(growth.resource) : 'No resources', growth ? `${signedDecimal(growth.netChange)} net units` : 'No resource telemetry', 'growth'),
+        insightMetric('Best recovery', recovery ? prettyName(recovery.resource) : 'No recovery', recovery ? `${signedDecimal(recovery.recovery)} from low to finish` : 'No resource telemetry', 'recovery'),
+        insightMetric('World activity', formatDecimal(activity, 2), `${formatNumber(data.totalEvents)} events across ${formatNumber(data.ticks)} ticks`, 'activity'),
+    );
+
+    const ledger = el('resource-ledger');
+    ledger.replaceChildren();
+    if (!metrics.length) {
+        const empty = document.createElement('div');
+        empty.className = 'ledger-empty';
+        empty.textContent = 'This run did not expose tracked resources.';
+        ledger.append(empty);
+        return;
+    }
+    metrics.forEach(metric => {
+        const row = document.createElement('div'); row.className = 'resource-ledger-row';
+        const resource = document.createElement('strong'); resource.textContent = prettyName(metric.resource);
+        const movement = document.createElement('span'); movement.textContent = `${formatDecimal(metric.initial, 1)} → ${formatDecimal(metric.finalLevel, 1)}`;
+        const range = document.createElement('span'); range.textContent = `${formatDecimal(metric.minimum, 1)}–${formatDecimal(metric.maximum, 1)}`;
+        range.title = `Minimum at tick ${metric.minimumTick}; maximum at tick ${metric.maximumTick}`;
+        const delta = document.createElement('span');
+        const net = Number(metric.netChange || 0);
+        delta.className = `ledger-delta ${net > 0 ? 'positive' : net < 0 ? 'negative' : 'neutral'}`;
+        delta.textContent = signedDecimal(net);
+        row.append(resource, movement, range, delta);
+        ledger.append(row);
+    });
+}
+
+function insightMetric(label, value, detail, tone) {
+    const card = document.createElement('article'); card.className = `insight-metric ${tone}`;
+    const labelNode = document.createElement('span'); labelNode.textContent = label;
+    const valueNode = document.createElement('strong'); valueNode.textContent = value;
+    const detailNode = document.createElement('small'); detailNode.textContent = detail;
+    card.append(labelNode, valueNode, detailNode);
+    return card;
+}
+
+function resetOperationalInsights() {
+    const ring = el('resilience-ring');
+    ring.style.setProperty('--score', 0);
+    ring.setAttribute('aria-label', 'Resilience score not yet calculated');
+    el('resilience-score').textContent = '—';
+    el('resilience-grade').textContent = 'Not evaluated';
+    el('resilience-label').textContent = 'Awaiting run';
+    el('insight-cards').replaceChildren(emptyState('⌁', '', 'Run a world to identify stress, growth, recovery, and activity.', true));
+    const empty = document.createElement('div'); empty.className = 'ledger-empty'; empty.textContent = 'Exact per-tick extrema will appear after a run.';
+    el('resource-ledger').replaceChildren(empty);
 }
 
 function renderProof(fingerprints) {
@@ -891,8 +997,13 @@ function renderLiveObjectives(objectives) {
     objectives.forEach(objective => {
         const row = document.createElement('div'); row.className = `live-objective ${objective.status.toLowerCase()}`;
         const icon = document.createElement('i'); icon.textContent = objective.status === 'Passed' ? '✓' : objective.status === 'Failed' ? '×' : '·';
-        const name = document.createElement('span'); name.textContent = objective.name;
-        row.append(icon, name); container.append(row);
+        const copy = document.createElement('span'); copy.className = 'live-objective-copy';
+        const name = document.createElement('b'); name.textContent = objective.name;
+        const detail = document.createElement('small'); detail.textContent = objectiveDetail(objective);
+        const meter = document.createElement('span'); meter.className = 'live-objective-meter';
+        const fill = document.createElement('span'); fill.style.width = `${Math.round(Math.max(0, Math.min(1, Number(objective.progress) || 0)) * 100)}%`;
+        meter.append(fill); copy.append(name, detail, meter);
+        row.append(icon, copy); container.append(row);
     });
 }
 
@@ -1409,6 +1520,7 @@ function compactNumber(value) { return Intl.NumberFormat(undefined, { notation: 
 function prettyName(value) { return String(value).replace(/([a-z])([A-Z])/g, '$1 $2').replace(/[_-]/g, ' ').replace(/\b\w/g, char => char.toUpperCase()); }
 function shortHash(value, length = 12) { return value ? `${value.slice(0, length)}…${value.slice(-4)}` : '—'; }
 function signedDifference(value) { return `${value > 0 ? '+' : ''}${formatNumber(value)}`; }
+function signedDecimal(value, digits = 1) { return `${Number(value) > 0 ? '+' : ''}${formatDecimal(value, digits)}`; }
 function niceMaximum(value) {
     if (!value) return 100;
     const magnitude = 10 ** Math.floor(Math.log10(value));

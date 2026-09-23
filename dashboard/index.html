@@ -177,6 +177,26 @@
                     </article>
                 </section>
 
+                <section class="panel insight-panel" aria-labelledby="insights-title">
+                    <div class="panel-header">
+                        <div><div class="panel-kicker">Engine-derived analysis</div><h2 id="insights-title">Operational insights</h2></div>
+                        <span class="panel-meta" id="resilience-label">Awaiting run</span>
+                    </div>
+                    <div class="insight-layout">
+                        <article class="resilience-card">
+                            <div class="resilience-ring" id="resilience-ring" style="--score: 0" aria-label="Resilience score not yet calculated"><span><strong id="resilience-score">—</strong><small>/100</small></span></div>
+                            <div><span>Run resilience</span><strong id="resilience-grade">Not evaluated</strong><p>Weighted from objective completion and shortage pressure.</p></div>
+                        </article>
+                        <div class="insight-cards" id="insight-cards">
+                            <div class="empty-state compact"><span class="empty-mark">⌁</span><p>Run a world to identify stress, growth, recovery, and activity.</p></div>
+                        </div>
+                    </div>
+                    <div class="resource-ledger-wrap">
+                        <div class="resource-ledger-head"><span>Resource</span><span>Initial → final</span><span>Observed range</span><span>Net change</span></div>
+                        <div class="resource-ledger" id="resource-ledger"><div class="ledger-empty">Exact per-tick extrema will appear after a run.</div></div>
+                    </div>
+                </section>
+
                 <section class="panel panel-wide" aria-labelledby="resource-title">
                     <div class="panel-header">
                         <div><div class="panel-kicker">Time series</div><h2 id="resource-title">Resource flow</h2></div>
