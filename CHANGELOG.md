@@ -7,6 +7,12 @@
 - Added an operational-insights layer with resilience scoring, stress/growth/recovery signals, exact resource ledgers, and measurable objective progress in completed and live runs.
 - Added the eight-entity Coastal Resilience scenario with coupled energy, water, food, medicine, care, and wellbeing systems plus staged disruption and recovery events.
 - Added a Tactical CG Game Viewport with continuous 60 FPS animations, camera pan/zoom/fit controls, animated flow conduits, traveling resource packet particles, archetype visual silhouettes, floating delta text, production shockwaves, shortage warnings, holographic HUD cards, and dual CG/Schematic view modes.
+- Added 4 high-contrast sci-fi color themes (Cyber Tactical, Solaris Gold, Bio Synthetic, Cryo Vector) with real-time theme engine re-skinning and durable localStorage persistence.
+- Added procedural vector SVG world heraldic flags and crests for all scenario worlds, rendered in the sidebar catalog and hero eyebrow banner.
+- Added an Entity Avatar Command Module with continuous 60 FPS animated archetype silhouettes, dynamic status pips (active, overdrive, warning), and sector telemetry.
+- Added a Tactical Radar Minimap with real-time entity blips, conduits, radar sweep, camera frustum viewport projection, and click-and-drag pan navigation.
+- Added a System Vitality Gauge widget with dynamic progress arc calculation and status labels based on objective progress and shortage frequency.
+- Added Quick Capacity Presets (0%, 50%, 100%, 150%, 200%) in the Decision Console with electric overdrive spark FX.
 - Added persistent Play Mode sessions with pause, step, variable speed, restart, live entity topology, inventory meters, mission status, and world activity feed.
 - Added proof-chained player interventions for production capacity, with deterministic incremental runtime execution.
 - Added an engine-derived world catalog and health metadata API.
