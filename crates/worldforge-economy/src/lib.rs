@@ -35,8 +35,10 @@ pub fn run_production(
             continue;
         }
 
+        let input_requirements = rule.inputs.clone();
+        let output_rules = rule.outputs.clone();
         let mut can_produce = true;
-        for (resource, amount) in &rule.inputs {
+        for (resource, amount) in &input_requirements {
             let needed = *amount * capacity;
             if inventory.get(resource) < needed {
                 can_produce = false;
@@ -56,11 +58,11 @@ pub fn run_production(
             let inventory = world
                 .get_component_mut::<Inventory>(entity_id)
                 .expect("production inventory was validated");
-            for (resource, amount) in &rule.inputs {
+            for (resource, amount) in &input_requirements {
                 let consumed = *amount * capacity;
                 let _ = inventory.try_subtract(resource, consumed);
             }
-            for (resource, amount) in &rule.outputs {
+            for (resource, amount) in &output_rules {
                 let produced = *amount * capacity;
                 inventory.add(resource, produced);
                 events.push(SimulationEvent::new(
@@ -187,8 +189,16 @@ pub fn update_prices(
             None => continue,
         };
 
-        for resource in resources {
-            let stock = inventory.get(resource);
+        let stocks = resources
+            .iter()
+            .map(|resource| (resource.clone(), inventory.get(resource)))
+            .collect::<Vec<_>>();
+        let prices = match world.get_component_mut::<PriceSignal>(entity_id) {
+            Some(prices) => prices,
+            None => continue,
+        };
+
+        for (resource, stock) in stocks {
             let price = if stock.is_zero() {
                 base_price * Fixed64::from_int(10)
             } else if stock < Fixed64::from_int(50) {
@@ -197,7 +207,7 @@ pub fn update_prices(
                 base_price
             };
 
-            let old_price = prices.get(resource);
+            let old_price = prices.get(&resource);
             if old_price != price {
                 events.push(SimulationEvent::new(
                     tick,
@@ -208,7 +218,7 @@ pub fn update_prices(
                     },
                 ));
             }
-            prices.set(resource, price);
+            prices.set(&resource, price);
         }
     }
 }

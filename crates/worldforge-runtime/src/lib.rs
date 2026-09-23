@@ -242,7 +242,7 @@ impl SimulationRuntime {
                     },
                 );
                 for resource in prod.inputs.keys().chain(prod.outputs.keys()) {
-                    if !tracked_resources.contains(resource) {
+                    if tracked_resource_set.insert(resource.clone()) {
                         tracked_resources.push(resource.clone());
                     }
                 }
