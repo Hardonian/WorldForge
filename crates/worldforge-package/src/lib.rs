@@ -8,7 +8,7 @@ use std::path::Path;
 
 use worldforge_core::error::{ErrorCode, WorldForgeError};
 use worldforge_core::hash::{Fingerprint, FingerprintBuilder};
-use worldforge_world::WorldManifest;
+use worldforge_world::{EntitiesConfig, Scenario, WorldManifest};
 
 /// Metadata about a built package.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -34,7 +34,8 @@ pub struct PackageFileEntry {
 /// The archive is deterministic: same files → same output bytes.
 /// Files are sorted alphabetically, timestamps are zeroed.
 pub fn build_package(world_dir: &Path, output: &Path) -> Result<PackageInfo, WorldForgeError> {
-    // Load and validate manifest
+    validate_world(world_dir)?;
+    // Load manifest metadata after full validation.
     let manifest_path = world_dir.join("world.toml");
     let manifest = WorldManifest::from_file(&manifest_path)?;
     manifest.validate()?;
@@ -120,10 +121,13 @@ pub fn validate_world(world_dir: &Path) -> Result<(), WorldForgeError> {
     manifest.validate()?;
 
     let scenario_path = world_dir.join("scenario.toml");
-    if scenario_path.exists() {
-        let scenario = worldforge_world::Scenario::from_file(&scenario_path)?;
-        scenario.validate()?;
+    if !scenario_path.exists() {
+        return Err(WorldForgeError::new(
+            ErrorCode::ScenarioMissing,
+            format!("no scenario.toml found in {}", world_dir.display()),
+        ));
     }
+    let scenario = Scenario::from_file(&scenario_path)?;
 
     let entities_path = world_dir.join("entities.toml");
     if !entities_path.exists() {
@@ -132,18 +136,9 @@ pub fn validate_world(world_dir: &Path) -> Result<(), WorldForgeError> {
             format!("no entities.toml found in {}", world_dir.display()),
         ));
     }
-    let entities = std::fs::read_to_string(&entities_path).map_err(|e| {
-        WorldForgeError::new(
-            ErrorCode::WorldNotFound,
-            format!("cannot read entities.toml: {e}"),
-        )
-    })?;
-    toml::from_str::<toml::Value>(&entities).map_err(|e| {
-        WorldForgeError::new(
-            ErrorCode::WorldSchemaViolation,
-            format!("invalid entities.toml: {e}"),
-        )
-    })?;
+    let entities = EntitiesConfig::from_file(&entities_path)?;
+    entities.validate()?;
+    scenario.validate_against(&manifest, &entities)?;
 
     Ok(())
 }
@@ -164,6 +159,8 @@ pub fn inspect_package(package_path: &Path) -> Result<PackageInfo, WorldForgeErr
     let mut name = String::from("unknown");
     let mut version = String::from("0.0.0");
 
+    let mut previous_path: Option<String> = None;
+    let mut manifest_seen = false;
     for entry_result in archive.entries().map_err(|e| {
         WorldForgeError::new(
             ErrorCode::PackageInvalid,
@@ -183,6 +180,23 @@ pub fn inspect_package(package_path: &Path) -> Result<PackageInfo, WorldForgeErr
             .to_string_lossy()
             .to_string();
 
+        if path.starts_with('/')
+            || path.split('/').any(|component| component == "..")
+            || path.contains('\\')
+        {
+            return Err(WorldForgeError::new(
+                ErrorCode::PackageInvalid,
+                format!("unsafe package path '{path}'"),
+            ));
+        }
+        if previous_path.as_ref().is_some_and(|previous| previous >= &path) {
+            return Err(WorldForgeError::new(
+                ErrorCode::PackageInvalid,
+                format!("package entries are duplicated or not sorted at '{path}'"),
+            ));
+        }
+        previous_path = Some(path.clone());
+
         let mut data = Vec::new();
         std::io::Read::read_to_end(&mut entry, &mut data).map_err(|e| {
             WorldForgeError::new(
@@ -193,12 +207,14 @@ pub fn inspect_package(package_path: &Path) -> Result<PackageInfo, WorldForgeErr
 
         // Parse manifest if found
         if path == "world.toml" || path.ends_with("/world.toml") {
-            if let Ok(content) = String::from_utf8(data.clone()) {
-                if let Ok(manifest) = WorldManifest::from_toml(&content) {
-                    name = manifest.name;
-                    version = manifest.version;
-                }
-            }
+            let content = String::from_utf8(data.clone()).map_err(|error| {
+                WorldForgeError::new(ErrorCode::PackageInvalid, error.to_string())
+            })?;
+            let manifest = WorldManifest::from_toml(&content)?;
+            manifest.validate()?;
+            name = manifest.name;
+            version = manifest.version;
+            manifest_seen = true;
         }
 
         let file_fp = Fingerprint::hash(&data);
@@ -211,6 +227,13 @@ pub fn inspect_package(package_path: &Path) -> Result<PackageInfo, WorldForgeErr
             fingerprint: file_fp,
         });
         total_bytes += data.len() as u64;
+    }
+
+    if !manifest_seen {
+        return Err(WorldForgeError::new(
+            ErrorCode::PackageInvalid,
+            "package does not contain world.toml",
+        ));
     }
 
     Ok(PackageInfo {

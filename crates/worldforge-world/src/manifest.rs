@@ -45,7 +45,7 @@ impl WorldManifest {
 
     /// Validate the manifest.
     pub fn validate(&self) -> Result<(), WorldForgeError> {
-        if self.name.is_empty() {
+        if self.name.trim().is_empty() {
             return Err(WorldForgeError::new(
                 ErrorCode::WorldManifestInvalid,
                 "world name cannot be empty",
@@ -55,6 +55,20 @@ impl WorldManifest {
             return Err(WorldForgeError::new(
                 ErrorCode::WorldManifestInvalid,
                 "world name exceeds 128 characters",
+            ));
+        }
+        semver::Version::parse(&self.version).map_err(|error| {
+            WorldForgeError::new(
+                ErrorCode::WorldManifestInvalid,
+                format!("world version '{}' is not valid SemVer: {error}", self.version),
+            )
+        })?;
+        if self.extends.iter().any(|dependency| dependency.trim().is_empty())
+            || self.mods.iter().any(|dependency| dependency.trim().is_empty())
+        {
+            return Err(WorldForgeError::new(
+                ErrorCode::WorldManifestInvalid,
+                "extends and mods entries must be non-empty",
             ));
         }
         Ok(())

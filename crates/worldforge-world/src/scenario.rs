@@ -4,7 +4,8 @@ use serde::{Deserialize, Serialize};
 use worldforge_core::error::{ErrorCode, WorldForgeError};
 
 use crate::event::ScheduledEvent;
-use crate::objective::Objective;
+use crate::objective::{Objective, ObjectiveType};
+use crate::{EntitiesConfig, ScheduledEventType, WorldManifest};
 
 /// A scenario defines how to run a world: seed, duration, events, objectives.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -66,18 +67,94 @@ impl Scenario {
         }
         // Validate events are within duration
         for event in &self.events {
-            if event.tick > self.duration_ticks {
+            if event.tick >= self.duration_ticks {
                 return Err(WorldForgeError::new(
                     ErrorCode::ScenarioInvalid,
                     format!(
-                        "scheduled event at tick {} exceeds duration {}",
+                        "scheduled event at tick {} is outside duration {}",
                         event.tick, self.duration_ticks
                     ),
                 ));
             }
         }
+        for objective in &self.objectives {
+            match &objective.objective_type {
+                ObjectiveType::MaintainInventory { resource, minimum } => {
+                    validate_resource(resource)?;
+                    validate_non_negative(*minimum, "objective minimum")?;
+                }
+                ObjectiveType::AvoidShortage { resource } => validate_resource(resource)?,
+                ObjectiveType::ReachProductionTarget { resource, target } => {
+                    validate_resource(resource)?;
+                    validate_non_negative(*target, "objective target")?;
+                }
+                ObjectiveType::SurviveUntilTick { tick } => {
+                    if *tick >= self.duration_ticks {
+                        return Err(WorldForgeError::new(
+                            ErrorCode::ScenarioInvalid,
+                            format!(
+                                "survive_until_tick {} is outside duration {}",
+                                tick, self.duration_ticks
+                            ),
+                        ));
+                    }
+                }
+            }
+        }
         Ok(())
     }
+
+    /// Validate references that span the manifest and entity configuration.
+    pub fn validate_against(
+        &self,
+        manifest: &WorldManifest,
+        entities: &EntitiesConfig,
+    ) -> Result<(), WorldForgeError> {
+        self.validate()?;
+        if self.world != manifest.name {
+            return Err(WorldForgeError::new(
+                ErrorCode::ScenarioInvalid,
+                format!(
+                    "scenario world '{}' does not match manifest name '{}'",
+                    self.world, manifest.name
+                ),
+            ));
+        }
+        for event in &self.events {
+            match &event.event_type {
+                ScheduledEventType::CapacityChange { target, value } => {
+                    if !entities.entities.iter().any(|entity| entity.name == *target) {
+                        return Err(WorldForgeError::new(
+                            ErrorCode::ScenarioInvalid,
+                            format!("capacity_change target '{target}' does not exist"),
+                        ));
+                    }
+                    validate_non_negative(*value, "capacity_change value")?;
+                }
+            }
+        }
+        Ok(())
+    }
+}
+
+fn validate_resource(resource: &str) -> Result<(), WorldForgeError> {
+    if resource.trim().is_empty() {
+        return Err(WorldForgeError::new(
+            ErrorCode::ScenarioInvalid,
+            "objective resource must be non-empty",
+        ));
+    }
+    Ok(())
+}
+
+fn validate_non_negative(value: f64, field: &str) -> Result<(), WorldForgeError> {
+    if !value.is_finite() || value < 0.0 {
+        return Err(WorldForgeError::new(
+            ErrorCode::ScenarioInvalid,
+            format!("{field} must be a finite non-negative number"),
+        ));
+    }
+    Ok(())
 }
 
 #[cfg(test)]
