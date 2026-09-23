@@ -3,13 +3,15 @@
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
+use std::collections::BTreeMap;
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use serde::Deserialize;
 use serde_json::{json, Value};
 use worldforge_core::{EngineVersion, ErrorCode, WorldForgeError};
-use worldforge_world::{EntitiesConfig, Scenario, WorldManifest};
+use worldforge_runtime::{RunProgress, SimulationRuntime};
+use worldforge_world::{EntitiesConfig, EventType, Scenario, SimulationEvent, WorldManifest};
 
 const INDEX: &str = include_str!("../../../dashboard/index.html");
 const SCRIPT: &str = include_str!("../../../dashboard/dashboard.js");
@@ -18,6 +20,20 @@ const WORLD_ATLAS: &[u8] = include_bytes!("../../../dashboard/assets/world-atlas
 const MAX_REQUEST_BYTES: usize = 64 * 1024;
 const MAX_TICKS: u64 = 1_000_000;
 const MAX_BENCHMARK_REPS: u32 = 20;
+const MAX_PLAY_SESSIONS: usize = 32;
+const MAX_STEP_TICKS: u64 = 5_000;
+const SESSION_TTL: Duration = Duration::from_secs(4 * 60 * 60);
+
+struct ServerState {
+    worlds_dir: PathBuf,
+    sessions: Mutex<BTreeMap<String, Arc<Mutex<PlaySession>>>>,
+}
+
+struct PlaySession {
+    world: String,
+    runtime: SimulationRuntime,
+    last_access: Instant,
+}
 
 #[derive(Deserialize)]
 struct RunRequest {
@@ -32,6 +48,22 @@ struct BenchmarkRequest {
     ticks: u64,
     #[serde(default = "default_benchmark_reps")]
     reps: u32,
+}
+
+#[derive(Deserialize)]
+struct StepRequest {
+    #[serde(default = "default_step_ticks")]
+    ticks: u64,
+}
+
+#[derive(Deserialize)]
+struct InterventionRequest {
+    entity: String,
+    capacity: f64,
+}
+
+fn default_step_ticks() -> u64 {
+    1
 }
 
 fn default_benchmark_reps() -> u32 {
@@ -56,13 +88,16 @@ pub fn serve(bind: &str, worlds_dir: &Path) -> Result<(), WorldForgeError> {
     println!("World catalog: {}", worlds_dir.display());
     println!("Press Ctrl+C to stop.");
 
-    let worlds_dir = Arc::new(worlds_dir);
+    let state = Arc::new(ServerState {
+        worlds_dir,
+        sessions: Mutex::new(BTreeMap::new()),
+    });
     for connection in listener.incoming() {
         match connection {
             Ok(mut stream) => {
-                let worlds_dir = Arc::clone(&worlds_dir);
+                let state = Arc::clone(&state);
                 std::thread::spawn(move || {
-                    if let Err(error) = handle_connection(&mut stream, &worlds_dir) {
+                    if let Err(error) = handle_connection(&mut stream, &state) {
                         let _ = respond_error(&mut stream, status_for_error(&error), &error);
                     }
                 });
@@ -73,7 +108,7 @@ pub fn serve(bind: &str, worlds_dir: &Path) -> Result<(), WorldForgeError> {
     Ok(())
 }
 
-fn handle_connection(stream: &mut TcpStream, worlds_dir: &Path) -> Result<(), WorldForgeError> {
+fn handle_connection(stream: &mut TcpStream, state: &ServerState) -> Result<(), WorldForgeError> {
     stream
         .set_read_timeout(Some(Duration::from_secs(10)))
         .map_err(io_error)?;
@@ -116,7 +151,8 @@ fn handle_connection(stream: &mut TcpStream, worlds_dir: &Path) -> Result<(), Wo
             true,
         ),
         ("GET", "/api/health") => {
-            let world_count = catalog(worlds_dir)?.as_array().map_or(0, Vec::len);
+            let world_count = catalog(&state.worlds_dir)?.as_array().map_or(0, Vec::len);
+            let active_sessions = lock_sessions(state)?.len();
             respond_json(
                 stream,
                 "200 OK",
@@ -124,18 +160,19 @@ fn handle_connection(stream: &mut TcpStream, worlds_dir: &Path) -> Result<(), Wo
                     "status": "healthy",
                     "engineVersion": EngineVersion::current().to_string(),
                     "worlds": world_count,
+                    "activeSessions": active_sessions,
                 }),
             )
         }
         ("GET", "/api/worlds") => {
-            let worlds = catalog(worlds_dir)?;
+            let worlds = catalog(&state.worlds_dir)?;
             respond_json(stream, "200 OK", &json!({ "worlds": worlds }))
         }
         ("POST", "/api/run") => {
             require_json_content_type(&header)?;
             let run: RunRequest = parse_json(body)?;
             validate_ticks(run.ticks)?;
-            let world_path = resolve_world(worlds_dir, &run.world)?;
+            let world_path = resolve_world(&state.worlds_dir, &run.world)?;
             let document = super::commands::simulation_export(&world_path, run.ticks, run.seed)?;
             respond_json(stream, "200 OK", &document)
         }
@@ -148,9 +185,47 @@ fn handle_connection(stream: &mut TcpStream, worlds_dir: &Path) -> Result<(), Wo
                     "reps must be between 1 and {MAX_BENCHMARK_REPS}"
                 )));
             }
-            let world_path = resolve_world(worlds_dir, &request.world)?;
+            let world_path = resolve_world(&state.worlds_dir, &request.world)?;
             let report = benchmark_report(&world_path, &request)?;
             respond_json(stream, "200 OK", &report)
+        }
+        ("POST", "/api/play/sessions") => {
+            require_json_content_type(&header)?;
+            let request: RunRequest = parse_json(body)?;
+            validate_ticks(request.ticks)?;
+            let response = create_play_session(state, request)?;
+            respond_json(stream, "201 Created", &response)
+        }
+        ("GET", route) if play_session_id(route).is_some() => {
+            let id = play_session_id(route).unwrap_or_default();
+            let response = inspect_play_session(state, id)?;
+            respond_json(stream, "200 OK", &response)
+        }
+        ("POST", route) if route.ends_with("/step") && play_action_id(route, "step").is_some() => {
+            require_json_content_type(&header)?;
+            let request: StepRequest = parse_json(body)?;
+            if request.ticks == 0 || request.ticks > MAX_STEP_TICKS {
+                return Err(invalid_request(format!(
+                    "step ticks must be between 1 and {MAX_STEP_TICKS}"
+                )));
+            }
+            let id = play_action_id(route, "step").unwrap_or_default();
+            let response = step_play_session(state, id, request.ticks)?;
+            respond_json(stream, "200 OK", &response)
+        }
+        ("POST", route)
+            if route.ends_with("/intervene") && play_action_id(route, "intervene").is_some() =>
+        {
+            require_json_content_type(&header)?;
+            let request: InterventionRequest = parse_json(body)?;
+            let id = play_action_id(route, "intervene").unwrap_or_default();
+            let response = intervene_play_session(state, id, request)?;
+            respond_json(stream, "200 OK", &response)
+        }
+        ("DELETE", route) if play_session_id(route).is_some() => {
+            let id = play_session_id(route).unwrap_or_default();
+            delete_play_session(state, id)?;
+            respond(stream, "204 No Content", "text/plain", &[], false)
         }
         ("OPTIONS", route) if route.starts_with("/api/") => {
             respond(stream, "204 No Content", "text/plain", &[], false)

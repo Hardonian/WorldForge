@@ -2053,6 +2053,7 @@ dependencies = [
  "serde_json",
  "tracing",
  "tracing-subscriber",
+ "uuid",
  "worldforge-agent",
  "worldforge-core",
  "worldforge-economy",

@@ -71,6 +71,32 @@ pub struct RunLink {
     pub max_per_tick: f64,
 }
 
+/// Current entity state exposed to interactive simulation clients.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct EntityState {
+    pub name: String,
+    pub inventory: BTreeMap<String, f64>,
+    pub capacity: Option<f64>,
+}
+
+/// Incremental state returned while a simulation is being played.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct RunProgress {
+    pub state: RunState,
+    pub seed: u64,
+    pub current_tick: u64,
+    pub total_ticks: u64,
+    pub state_fingerprint: Fingerprint,
+    pub objective_results: Vec<ObjectiveResult>,
+    pub event_count: usize,
+    pub shortage_count: usize,
+    pub snapshot: ResourceSnapshot,
+    pub entity_states: Vec<EntityState>,
+    pub recent_events: Vec<SimulationEvent>,
+    pub entities: Vec<RunEntity>,
+    pub links: Vec<RunLink>,
+}
+
 /// Result of an objective evaluation.
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct ObjectiveResult {
@@ -96,6 +122,11 @@ pub struct SimulationRuntime {
     scenario_fingerprint: Fingerprint,
     run_entities: Vec<RunEntity>,
     run_links: Vec<RunLink>,
+    initial_state_fingerprint: Fingerprint,
+    shortage_count: usize,
+    production_totals: BTreeMap<String, Fixed64>,
+    objectives: Vec<Objective>,
+    snapshots: Vec<ResourceSnapshot>,
 }
 
 impl SimulationRuntime {
@@ -262,6 +293,7 @@ impl SimulationRuntime {
             seed,
             initial_fp,
         );
+        let objectives = scenario.objectives.clone();
 
         Ok(Self {
             world_path: world_path.to_path_buf(),
@@ -280,6 +312,11 @@ impl SimulationRuntime {
             scenario_fingerprint,
             run_entities,
             run_links,
+            initial_state_fingerprint: initial_fp,
+            shortage_count: 0,
+            production_totals: BTreeMap::new(),
+            objectives,
+            snapshots: Vec::new(),
         })
     }
 
@@ -291,17 +328,41 @@ impl SimulationRuntime {
                 "a simulation runtime can only be run once",
             ));
         }
-        self.state = RunState::Running;
-        let initial_fp = self.world.fingerprint();
         let duration = self.scenario.duration_ticks;
+        self.step(duration)?;
+        self.completed_result()
+    }
 
-        let mut shortage_count = 0usize;
-        let mut production_totals: BTreeMap<String, Fixed64> = BTreeMap::new();
-        let mut objectives = self.scenario.objectives.clone();
-        let mut snapshots = vec![self.resource_snapshot(0)];
-        self.evaluate_continuous_objectives(&mut objectives, &production_totals, 0, false);
+    /// Advance an interactive run by up to `tick_count` ticks.
+    pub fn step(&mut self, tick_count: u64) -> Result<RunProgress, WorldForgeError> {
+        if tick_count == 0 {
+            return Err(WorldForgeError::new(
+                ErrorCode::ScenarioInvalid,
+                "tick_count must be greater than zero",
+            ));
+        }
+        if self.state == RunState::Completed {
+            return Ok(self.current_progress());
+        }
+        if matches!(self.state, RunState::Failed { .. }) {
+            return Err(WorldForgeError::new(
+                ErrorCode::RuntimeStateMismatch,
+                "a failed simulation cannot be advanced",
+            ));
+        }
+        if self.state != RunState::Running {
+            self.state = RunState::Running;
+            self.snapshots.push(self.resource_snapshot(0));
+            self.evaluate_objectives(0, false);
+        }
 
-        for tick_num in 0..duration {
+        let first_event = self.events.len();
+        let duration = self.scenario.duration_ticks;
+        let remaining = duration.saturating_sub(self.world.current_tick().value());
+        let steps = tick_count.min(remaining);
+
+        for _ in 0..steps {
+            let tick_num = self.world.current_tick().value();
             let tick = Tick::new(tick_num);
             self.world.set_tick(tick);
 
@@ -333,8 +394,8 @@ impl SimulationRuntime {
             for event in &tick_events {
                 match &event.event_type {
                     EventType::InventoryShortage { resource, .. } => {
-                        shortage_count += 1;
-                        for objective in &mut objectives {
+                        self.shortage_count += 1;
+                        for objective in &mut self.objectives {
                             if matches!(
                                 &objective.objective_type,
                                 ObjectiveType::AvoidShortage { resource: expected }
@@ -348,7 +409,8 @@ impl SimulationRuntime {
                     EventType::ProductionCompleted {
                         resource, amount, ..
                     } => {
-                        let total = production_totals
+                        let total = self
+                            .production_totals
                             .entry(resource.clone())
                             .or_insert(Fixed64::ZERO);
                         *total += *amount;
@@ -357,12 +419,7 @@ impl SimulationRuntime {
                 }
             }
 
-            self.evaluate_continuous_objectives(
-                &mut objectives,
-                &production_totals,
-                tick_num + 1,
-                false,
-            );
+            self.evaluate_objectives(tick_num + 1, false);
 
             // Record to replay
             if let Some(ref mut writer) = self.replay_writer {
@@ -371,20 +428,71 @@ impl SimulationRuntime {
 
             self.events.extend(tick_events);
             self.world.advance_tick();
-            snapshots.push(self.resource_snapshot(tick_num + 1));
+            self.snapshots.push(self.resource_snapshot(tick_num + 1));
         }
 
+        if self.world.current_tick().value() >= duration {
+            self.finalize()?;
+        }
+
+        Ok(self.progress_with_events(self.events[first_event..].to_vec()))
+    }
+
+    /// Change a producer's capacity during an interactive run.
+    pub fn set_capacity(
+        &mut self,
+        entity: &str,
+        capacity: f64,
+    ) -> Result<RunProgress, WorldForgeError> {
+        if !capacity.is_finite() || !(0.0..=2.0).contains(&capacity) {
+            return Err(WorldForgeError::new(
+                ErrorCode::ScenarioInvalid,
+                "capacity must be a finite number between 0 and 2",
+            ));
+        }
+        if self.state == RunState::Completed || matches!(self.state, RunState::Failed { .. }) {
+            return Err(WorldForgeError::new(
+                ErrorCode::RuntimeStateMismatch,
+                "a completed simulation cannot be changed",
+            ));
+        }
+        let entity_id = self.entity_id_map.get(entity).copied().ok_or_else(|| {
+            WorldForgeError::new(
+                ErrorCode::ScenarioInvalid,
+                format!("entity '{entity}' does not exist"),
+            )
+        })?;
+        let rule = self
+            .world
+            .get_component_mut::<ProductionRule>(&entity_id)
+            .ok_or_else(|| {
+                WorldForgeError::new(
+                    ErrorCode::ScenarioInvalid,
+                    format!("entity '{entity}' has no production capacity"),
+                )
+            })?;
+        let old_capacity = rule.capacity;
+        let new_capacity = Fixed64::from_f64_lossy(capacity);
+        rule.capacity = new_capacity;
+        let event = SimulationEvent::new(
+            self.world.current_tick(),
+            EventType::CapacityChanged {
+                entity: entity.to_string(),
+                old_capacity,
+                new_capacity,
+            },
+        );
+        if let Some(writer) = &mut self.replay_writer {
+            writer.record_event(event.clone());
+        }
+        self.events.push(event.clone());
+        Ok(self.progress_with_events(vec![event]))
+    }
+
+    fn finalize(&mut self) -> Result<(), WorldForgeError> {
+        let duration = self.scenario.duration_ticks;
+        self.evaluate_objectives(duration, true);
         let final_fp = self.world.fingerprint();
-
-        // Evaluate objectives
-        self.evaluate_continuous_objectives(&mut objectives, &production_totals, duration, true);
-        let mut objective_results = Vec::new();
-        for obj in &objectives {
-            objective_results.push(ObjectiveResult {
-                name: obj.name(),
-                status: obj.status.clone(),
-            });
-        }
 
         // Build proof
         let mut replay = self
@@ -396,27 +504,105 @@ impl SimulationRuntime {
             .finalize(final_fp, duration);
         replay.world_path = self.world_path.to_string_lossy().into_owned();
         replay.seal();
-        let proof = replay.to_proof();
         self.replay = Some(replay);
 
         self.state = RunState::Completed;
 
+        Ok(())
+    }
+
+    fn completed_result(&self) -> Result<RunResult, WorldForgeError> {
+        if self.state != RunState::Completed {
+            return Err(WorldForgeError::new(
+                ErrorCode::RuntimeStateMismatch,
+                "simulation has not completed",
+            ));
+        }
+        let proof = self
+            .replay
+            .as_ref()
+            .ok_or_else(|| {
+                WorldForgeError::new(ErrorCode::RuntimeStateMismatch, "replay unavailable")
+            })?
+            .to_proof();
+
         Ok(RunResult {
             state: RunState::Completed,
             seed: self.scenario.seed,
-            total_ticks: duration,
-            initial_state_fingerprint: initial_fp,
-            final_state_fingerprint: final_fp,
+            total_ticks: self.scenario.duration_ticks,
+            initial_state_fingerprint: self.initial_state_fingerprint,
+            final_state_fingerprint: self.world.fingerprint(),
             world_fingerprint: self.world_fingerprint,
             scenario_fingerprint: self.scenario_fingerprint,
             proof,
-            objective_results,
+            objective_results: self.objective_results(),
             event_count: self.events.len(),
-            shortage_count,
-            snapshots,
+            shortage_count: self.shortage_count,
+            snapshots: self.snapshots.clone(),
             entities: self.run_entities.clone(),
             links: self.run_links.clone(),
         })
+    }
+
+    /// Inspect the current state without advancing the simulation.
+    pub fn current_progress(&self) -> RunProgress {
+        self.progress_with_events(Vec::new())
+    }
+
+    fn progress_with_events(&self, recent_events: Vec<SimulationEvent>) -> RunProgress {
+        RunProgress {
+            state: self.state.clone(),
+            seed: self.scenario.seed,
+            current_tick: self.world.current_tick().value(),
+            total_ticks: self.scenario.duration_ticks,
+            state_fingerprint: self.world.fingerprint(),
+            objective_results: self.objective_results(),
+            event_count: self.events.len(),
+            shortage_count: self.shortage_count,
+            snapshot: self.resource_snapshot(self.world.current_tick().value()),
+            entity_states: self.entity_states(),
+            recent_events,
+            entities: self.run_entities.clone(),
+            links: self.run_links.clone(),
+        }
+    }
+
+    fn objective_results(&self) -> Vec<ObjectiveResult> {
+        self.objectives
+            .iter()
+            .map(|objective| ObjectiveResult {
+                name: objective.name(),
+                status: objective.status.clone(),
+            })
+            .collect()
+    }
+
+    fn entity_states(&self) -> Vec<EntityState> {
+        self.entity_ids
+            .iter()
+            .map(|(entity_id, name)| {
+                let inventory = self
+                    .world
+                    .get_component::<Inventory>(entity_id)
+                    .map(|value| {
+                        value
+                            .resources
+                            .iter()
+                            .map(|(resource, amount)| (resource.clone(), amount.to_f64_lossy()))
+                            .collect()
+                    })
+                    .unwrap_or_default();
+                let capacity = self
+                    .world
+                    .get_component::<ProductionRule>(entity_id)
+                    .map(|rule| rule.capacity.to_f64_lossy());
+                EntityState {
+                    name: name.clone(),
+                    inventory,
+                    capacity,
+                }
+            })
+            .collect()
     }
 
     /// Get the replay artifact (must call after run()).
@@ -549,6 +735,17 @@ impl SimulationRuntime {
         }
     }
 
+    fn evaluate_objectives(&mut self, elapsed_ticks: u64, final_evaluation: bool) {
+        let mut objectives = std::mem::take(&mut self.objectives);
+        self.evaluate_continuous_objectives(
+            &mut objectives,
+            &self.production_totals,
+            elapsed_ticks,
+            final_evaluation,
+        );
+        self.objectives = objectives;
+    }
+
     /// Get current state.
     pub fn state(&self) -> &RunState {
         &self.state
@@ -649,5 +846,47 @@ goods = 2.0
         assert_eq!(result.objective_results[2].status, ObjectiveStatus::Failed);
 
         std::fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[test]
+    fn incremental_steps_match_a_continuous_run() {
+        let path = example("supply-chain");
+        let mut continuous = SimulationRuntime::load(&path, 42, Some(25)).unwrap();
+        let expected = continuous.run().unwrap();
+
+        let mut incremental = SimulationRuntime::load(&path, 42, Some(25)).unwrap();
+        let first = incremental.step(7).unwrap();
+        assert_eq!(first.current_tick, 7);
+        assert_eq!(first.state, RunState::Running);
+        let second = incremental.step(9).unwrap();
+        assert_eq!(second.current_tick, 16);
+        let final_progress = incremental.step(100).unwrap();
+        assert_eq!(final_progress.current_tick, 25);
+        assert_eq!(final_progress.state, RunState::Completed);
+        let actual = incremental.completed_result().unwrap();
+
+        assert_eq!(actual.final_state_fingerprint, expected.final_state_fingerprint);
+        assert_eq!(actual.proof.event_chain_root, expected.proof.event_chain_root);
+        assert_eq!(actual.event_count, expected.event_count);
+        assert_eq!(actual.shortage_count, expected.shortage_count);
+    }
+
+    #[test]
+    fn interactive_capacity_changes_are_recorded_and_deterministic() {
+        let path = example("supply-chain");
+        let run_intervention = || {
+            let mut runtime = SimulationRuntime::load(&path, 11, Some(12)).unwrap();
+            runtime.step(3).unwrap();
+            let progress = runtime.set_capacity("factory", 0.25).unwrap();
+            assert_eq!(progress.recent_events.len(), 1);
+            assert_eq!(progress.entity_states[2].capacity, Some(0.25));
+            runtime.step(20).unwrap();
+            runtime.completed_result().unwrap()
+        };
+
+        let first = run_intervention();
+        let second = run_intervention();
+        assert_eq!(first.final_state_fingerprint, second.final_state_fingerprint);
+        assert_eq!(first.proof.event_chain_root, second.proof.event_chain_root);
     }
 }
