@@ -68,7 +68,8 @@ async function initialize() {
         state.worlds = catalog.worlds || [];
         renderWorldNavigation();
         if (!state.worlds.length) throw new Error('No packaged worlds were found.');
-        selectWorld(state.worlds[0].id, { useDefaults: true });
+        const defaultWorld = state.worlds.find(world => world.id === 'supply-chain') || state.worlds[0];
+        selectWorld(defaultWorld.id, { useDefaults: true });
     } catch (error) {
         setEngineStatus(false, 'Engine offline', 'Dashboard API unavailable');
         renderCatalogError(error.message);

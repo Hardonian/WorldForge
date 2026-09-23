@@ -6,6 +6,8 @@ World Forge is a simulation operating system for building games, simulations, wo
 
 ## Status
 
+**Beta release candidate.** The deterministic runtime, packaging toolchain, replay verification, mod sandbox, CLI, and local Simulation Studio are implemented and covered by the workspace verification suite. The beta is local-first: the dashboard binds to localhost by default and runs simulations on the same machine.
+
 | Feature | Status | Notes |
 |---------|--------|-------|
 | Fixed-point math (Q32.32) | ✅ Implemented | `Fixed64` for all simulation-critical values |
@@ -21,7 +23,7 @@ World Forge is a simulation operating system for building games, simulations, wo
 | Agent framework | ✅ Implemented | Rule-based and utility-based policies |
 | Capability-based mod API | ✅ Implemented | Deny-by-default capability system |
 | WASM mod runtime | ✅ Implemented | Wasmtime core-Wasm sandbox, fuel/memory limits, capability-gated host ABI |
-| Dashboard | ✅ Implemented | Local engine-backed API, resource charts, events, objectives, proofs |
+| Simulation Studio | ✅ Implemented | Engine-backed catalog, charts, events, objectives, proofs, comparisons, benchmarks, export, run history |
 | CLI | ✅ Implemented | doctor, validate, run, export, benchmark, dashboard, package, replay |
 | CI pipeline | ✅ Implemented | Cross-platform tests + determinism verification |
 
@@ -45,7 +47,7 @@ cargo run -p worldforge-cli -- replay verify examples/supply-chain/last.replay
 # Check runtime health
 cargo run -p worldforge-cli -- doctor
 
-# Open the engine-backed dashboard at http://127.0.0.1:8787
+# Open the engine-backed Simulation Studio at http://127.0.0.1:8787
 cargo run -p worldforge-cli -- dashboard
 ```
 
@@ -154,9 +156,24 @@ assert!(!policy.check(&Capability::EntityWrite));
 
 WIT interfaces for the Component Model are defined in `wit/worldforge/`. The executable v0 runtime loads core WebAssembly modules without WASI, enforces fuel and memory limits, and exposes only capability-checked `read_resource` and `emit_event` host calls. See `examples/mods/read-emit.wat` and `docs/architecture/mod-security.md`.
 
-## Dashboard and exports
+## Simulation Studio and exports
 
-`worldforge dashboard` serves the bundled UI and a localhost-only simulation API. Every chart, event, objective, and fingerprint comes from the Rust runtime. For other tools, export the same canonical document directly:
+`worldforge dashboard` serves the bundled UI and a localhost-only simulation API. Every chart, event, objective, benchmark, and fingerprint comes from the Rust runtime. The studio includes:
+
+- A world catalog derived from the packaged examples instead of hardcoded UI data
+- Responsive resource, topology, and event visualizations
+- Filterable event audit trails and objective status
+- Same-seed determinism checks and cross-seed run comparison
+- Server-side performance benchmarks
+- Canonical JSON export, copyable proof fingerprints, and local recent-run history
+
+Use a different catalog or local bind address when needed:
+
+```bash
+cargo run -p worldforge-cli -- dashboard --bind 127.0.0.1:9000 --worlds-dir ./examples
+```
+
+For other tools, export the same canonical document directly:
 
 ```bash
 cargo run -p worldforge-cli -- export examples/ecosystem --ticks 1000 --seed 42 --output ecosystem.json

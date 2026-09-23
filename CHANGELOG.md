@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.1.0-beta
+
+### Simulation Studio
+
+- Added an engine-derived world catalog and health metadata API.
+- Added complete run comparison, server-side benchmark, JSON export, recent-run, event filtering, and proof-copy workflows.
+- Added responsive navigation, keyboard operation, accessible live states, reduced-motion support, polished charts, animation, and original ambient atlas artwork.
+- Added structured API errors, request bounds, traversal protection, concurrent request handling, immutable asset caching, and browser security headers.
+- Added dashboard catalog and path-validation regression tests plus a configurable `--worlds-dir` option.
+
+### Release readiness
+
+- Documented beta scope, verification commands, security posture, and known limitations in `docs/beta-release.md`.
+
 All notable changes to World Forge will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
