@@ -7,6 +7,7 @@
 //! seed, initial and final state fingerprints, and all tick events.
 
 use serde::{Deserialize, Serialize};
+use std::collections::VecDeque;
 use worldforge_core::hash::Fingerprint;
 use worldforge_core::version::EngineVersion;
 use worldforge_proof::{EventChain, RunProof};
@@ -184,7 +185,8 @@ impl ReplayArtifact {
 
 /// Builder for creating replay artifacts during simulation.
 pub struct ReplayWriter {
-    events: Vec<SimulationEvent>,
+    events: VecDeque<SimulationEvent>,
+    event_limit: Option<usize>,
     event_chain: EventChain,
     world_fingerprint: Fingerprint,
     scenario_fingerprint: Fingerprint,
@@ -203,7 +205,8 @@ impl ReplayWriter {
         initial_state_fingerprint: Fingerprint,
     ) -> Self {
         Self {
-            events: Vec::new(),
+            events: VecDeque::new(),
+            event_limit: None,
             event_chain: EventChain::new(),
             world_fingerprint,
             scenario_fingerprint,
@@ -214,10 +217,27 @@ impl ReplayWriter {
         }
     }
 
+    /// Retain only the newest `limit` events while still hashing every event.
+    /// This is intended for dashboards and benchmarks that need a complete
+    /// proof but do not need to emit a replay artifact.
+    pub fn with_event_limit(mut self, limit: usize) -> Self {
+        self.event_limit = Some(limit);
+        self
+    }
+
     /// Record an event.
     pub fn record_event(&mut self, event: SimulationEvent) {
         self.event_chain.add_event_cbor(&event);
-        self.events.push(event);
+        match self.event_limit {
+            Some(0) => {}
+            Some(limit) => {
+                if self.events.len() == limit {
+                    self.events.pop_front();
+                }
+                self.events.push_back(event);
+            }
+            None => self.events.push_back(event),
+        }
     }
 
     /// Record multiple events.
@@ -247,7 +267,7 @@ impl ReplayWriter {
             final_state_fingerprint,
             event_chain_root: self.event_chain.root(),
             total_ticks,
-            events: self.events,
+            events: self.events.into(),
             run_id: self.run_id,
             timestamp: chrono::Utc::now().to_rfc3339(),
             world_path: String::new(),
@@ -255,6 +275,27 @@ impl ReplayWriter {
         };
         artifact.seal();
         artifact
+    }
+
+    /// Finalize a proof-only run and return its bounded event window.
+    pub fn finalize_proof(
+        self,
+        final_state_fingerprint: Fingerprint,
+        total_ticks: u64,
+    ) -> (RunProof, Vec<SimulationEvent>) {
+        let proof = RunProof {
+            run_id: self.run_id,
+            engine_version: EngineVersion::current().version.to_string(),
+            world_hash: self.world_fingerprint,
+            scenario_hash: self.scenario_fingerprint,
+            seed: self.seed,
+            mod_hashes: self.mod_fingerprints,
+            initial_state_hash: self.initial_state_fingerprint,
+            final_state_hash: final_state_fingerprint,
+            event_chain_root: self.event_chain.root(),
+            total_ticks,
+        };
+        (proof, self.events.into())
     }
 }
 

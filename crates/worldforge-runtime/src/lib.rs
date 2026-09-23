@@ -19,6 +19,10 @@ use worldforge_replay::{ReplayArtifact, ReplayWriter};
 use worldforge_world::*;
 
 const MAX_RECENT_EVENTS: usize = 256;
+/// Charts cannot display millions of distinct samples, and retaining one map
+/// per tick makes long simulations memory-bound. Keep enough points for a
+/// high-resolution plot while always preserving the initial and final state.
+const MAX_RETAINED_SNAPSHOTS: u64 = 2_048;
 
 /// State of a simulation run.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
@@ -46,9 +50,34 @@ pub struct RunResult {
     pub objective_results: Vec<ObjectiveResult>,
     pub event_count: usize,
     pub shortage_count: usize,
+    pub event_type_counts: RunEventCounts,
     pub snapshots: Vec<ResourceSnapshot>,
     pub entities: Vec<RunEntity>,
     pub links: Vec<RunLink>,
+}
+
+/// Aggregate event telemetry retained independently of replay capture.
+#[derive(Debug, Clone, Default, serde::Serialize)]
+pub struct RunEventCounts {
+    pub production: usize,
+    pub transfer: usize,
+    pub shortage: usize,
+    pub price: usize,
+    pub system: usize,
+}
+
+impl RunEventCounts {
+    fn record(&mut self, event: &SimulationEvent) {
+        match &event.event_type {
+            EventType::ProductionCompleted { .. } => self.production += 1,
+            EventType::ResourceTransferred { .. } => self.transfer += 1,
+            EventType::InventoryShortage { .. } => self.shortage += 1,
+            EventType::PriceChanged { .. } => self.price += 1,
+            EventType::CapacityChanged { .. }
+            | EventType::ObjectiveUpdated { .. }
+            | EventType::SimulationDegraded { .. } => self.system += 1,
+        }
+    }
 }
 
 /// Aggregate resource levels after a simulation tick.
@@ -121,6 +150,9 @@ pub struct SimulationRuntime {
     resource_totals: BTreeMap<String, Fixed64>,
     replay_writer: Option<ReplayWriter>,
     replay: Option<ReplayArtifact>,
+    proof: Option<RunProof>,
+    retained_events: Vec<SimulationEvent>,
+    bounded_event_limit: Option<usize>,
     world_fingerprint: Fingerprint,
     scenario_fingerprint: Fingerprint,
     run_entities: Vec<RunEntity>,
@@ -129,6 +161,7 @@ pub struct SimulationRuntime {
     state_fingerprint: Fingerprint,
     shortage_count: usize,
     event_count: usize,
+    event_type_counts: RunEventCounts,
     production_totals: BTreeMap<String, Fixed64>,
     objectives: Vec<Objective>,
     snapshots: Vec<ResourceSnapshot>,
@@ -140,6 +173,26 @@ impl SimulationRuntime {
         world_path: &Path,
         seed: u64,
         duration_ticks: Option<u64>,
+    ) -> Result<Self, WorldForgeError> {
+        Self::load_internal(world_path, seed, duration_ticks, None)
+    }
+
+    /// Load a proof-only runtime that retains only the newest event window.
+    /// Every event still contributes to aggregate counters and the hash chain.
+    pub fn load_bounded(
+        world_path: &Path,
+        seed: u64,
+        duration_ticks: Option<u64>,
+        event_limit: usize,
+    ) -> Result<Self, WorldForgeError> {
+        Self::load_internal(world_path, seed, duration_ticks, Some(event_limit))
+    }
+
+    fn load_internal(
+        world_path: &Path,
+        seed: u64,
+        duration_ticks: Option<u64>,
+        bounded_event_limit: Option<usize>,
     ) -> Result<Self, WorldForgeError> {
         // Load manifest
         let manifest_path = world_path.join("world.toml");
@@ -291,7 +344,9 @@ impl SimulationRuntime {
         for (entity_id, _) in &entity_ids {
             if let Some(inventory) = ecs_world.get_component::<Inventory>(entity_id) {
                 for (resource, amount) in &inventory.resources {
-                    *resource_totals.entry(resource.clone()).or_insert(Fixed64::ZERO) += *amount;
+                    *resource_totals
+                        .entry(resource.clone())
+                        .or_insert(Fixed64::ZERO) += *amount;
                 }
             }
         }
@@ -319,6 +374,10 @@ impl SimulationRuntime {
             seed,
             initial_fp,
         );
+        let replay_writer = match bounded_event_limit {
+            Some(limit) => replay_writer.with_event_limit(limit),
+            None => replay_writer,
+        };
         let objectives = scenario.objectives.clone();
 
         Ok(Self {
@@ -335,6 +394,9 @@ impl SimulationRuntime {
             resource_totals,
             replay_writer: Some(replay_writer),
             replay: None,
+            proof: None,
+            retained_events: Vec::new(),
+            bounded_event_limit,
             world_fingerprint,
             scenario_fingerprint,
             run_entities,
@@ -343,6 +405,7 @@ impl SimulationRuntime {
             state_fingerprint: initial_fp,
             shortage_count: 0,
             event_count: 0,
+            event_type_counts: RunEventCounts::default(),
             production_totals: BTreeMap::new(),
             objectives,
             snapshots: Vec::new(),
@@ -417,6 +480,7 @@ impl SimulationRuntime {
             self.refresh_resource_totals();
 
             for event in &tick_events {
+                self.event_type_counts.record(event);
                 match &event.event_type {
                     EventType::InventoryShortage { resource, .. } => {
                         self.shortage_count += 1;
@@ -446,23 +510,35 @@ impl SimulationRuntime {
 
             self.evaluate_objectives(tick_num + 1, false);
 
-            recent_events = tick_events
-                .iter()
-                .rev()
-                .take(MAX_RECENT_EVENTS)
-                .rev()
-                .cloned()
-                .collect::<Vec<_>>();
+            if !tick_events.is_empty() {
+                if tick_events.len() >= MAX_RECENT_EVENTS {
+                    recent_events = tick_events[tick_events.len() - MAX_RECENT_EVENTS..].to_vec();
+                } else {
+                    let overflow = recent_events
+                        .len()
+                        .saturating_add(tick_events.len())
+                        .saturating_sub(MAX_RECENT_EVENTS);
+                    if overflow > 0 {
+                        recent_events.drain(..overflow);
+                    }
+                    recent_events.extend(tick_events.iter().cloned());
+                }
+            }
             let event_count = tick_events.len();
             if let Some(ref mut writer) = self.replay_writer {
                 writer.record_events(tick_events);
             }
             self.event_count += event_count;
             self.world.advance_tick();
-            self.state_fingerprint = self.world.fingerprint();
-            self.snapshots.push(self.resource_snapshot(tick_num + 1));
+            let completed_tick = tick_num + 1;
+            if self.should_retain_snapshot(completed_tick) {
+                self.snapshots.push(self.resource_snapshot(completed_tick));
+            }
         }
 
+        // Fingerprinting serializes every component. Do it once per requested
+        // batch, not once per internal tick; callers observe the same state.
+        self.state_fingerprint = self.world.fingerprint();
         if self.world.current_tick().value() >= duration {
             self.finalize()?;
         }
@@ -518,6 +594,7 @@ impl SimulationRuntime {
             writer.record_event(event.clone());
         }
         self.event_count += 1;
+        self.event_type_counts.record(&event);
         self.state_fingerprint = self.world.fingerprint();
         Ok(self.progress_with_events(vec![event]))
     }
@@ -528,16 +605,20 @@ impl SimulationRuntime {
         let final_fp = self.state_fingerprint;
 
         // Build proof
-        let mut replay = self
-            .replay_writer
-            .take()
-            .ok_or_else(|| {
-                WorldForgeError::new(ErrorCode::RuntimeStateMismatch, "replay writer unavailable")
-            })?
-            .finalize(final_fp, duration);
-        replay.world_path = self.world_path.to_string_lossy().into_owned();
-        replay.seal();
-        self.replay = Some(replay);
+        let writer = self.replay_writer.take().ok_or_else(|| {
+            WorldForgeError::new(ErrorCode::RuntimeStateMismatch, "replay writer unavailable")
+        })?;
+        if self.bounded_event_limit.is_some() {
+            let (proof, retained_events) = writer.finalize_proof(final_fp, duration);
+            self.proof = Some(proof);
+            self.retained_events = retained_events;
+        } else {
+            let mut replay = writer.finalize(final_fp, duration);
+            replay.world_path = self.world_path.to_string_lossy().into_owned();
+            replay.seal();
+            self.proof = Some(replay.to_proof());
+            self.replay = Some(replay);
+        }
 
         self.state = RunState::Completed;
 
@@ -552,12 +633,12 @@ impl SimulationRuntime {
             ));
         }
         let proof = self
-            .replay
+            .proof
             .as_ref()
             .ok_or_else(|| {
-                WorldForgeError::new(ErrorCode::RuntimeStateMismatch, "replay unavailable")
+                WorldForgeError::new(ErrorCode::RuntimeStateMismatch, "run proof unavailable")
             })?
-            .to_proof();
+            .clone();
 
         Ok(RunResult {
             state: RunState::Completed,
@@ -571,6 +652,7 @@ impl SimulationRuntime {
             objective_results: self.objective_results(),
             event_count: self.event_count,
             shortage_count: self.shortage_count,
+            event_type_counts: self.event_type_counts.clone(),
             snapshots: self.snapshots.clone(),
             entities: self.run_entities.clone(),
             links: self.run_links.clone(),
@@ -648,48 +730,44 @@ impl SimulationRuntime {
         self.replay.as_ref()
     }
 
-    fn apply_scheduled_events(&mut self, tick: u64) -> Result<Vec<SimulationEvent>, WorldForgeError> {
+    /// Events retained by the configured capture policy after completion.
+    pub fn retained_events(&self) -> &[SimulationEvent] {
+        self.replay
+            .as_ref()
+            .map(|replay| replay.events.as_slice())
+            .unwrap_or(&self.retained_events)
+    }
+
+    fn apply_scheduled_events(
+        &mut self,
+        tick: u64,
+    ) -> Result<Vec<SimulationEvent>, WorldForgeError> {
         let mut events = Vec::new();
         if let Some(scheduled_events) = self.scheduled_events.get(&tick) {
             for scheduled in scheduled_events {
                 let ScheduledEventType::CapacityChange { target, value } = &scheduled.event_type;
-                    if let Some(&entity_id) = self.entity_id_map.get(target) {
-                        if let Some(rule) =
-                            self.world.get_component_mut::<ProductionRule>(&entity_id)
-                        {
-                            let old = rule.capacity;
-                            rule.capacity = Fixed64::from_f64_lossy(*value);
-                            events.push(SimulationEvent::new(
-                                Tick::new(tick),
-                                EventType::CapacityChanged {
-                                    entity: target.clone(),
-                                    old_capacity: old,
-                                    new_capacity: rule.capacity,
-                                },
-                            ));
-                        } else {
-                            return Err(WorldForgeError::new(
-                                ErrorCode::ScenarioInvalid,
-                                format!(
-                                    "capacity_change target '{target}' has no production rule"
-                                ),
-                            ));
-                        }
+                if let Some(&entity_id) = self.entity_id_map.get(target) {
+                    if let Some(rule) = self.world.get_component_mut::<ProductionRule>(&entity_id) {
+                        let old = rule.capacity;
+                        rule.capacity = Fixed64::from_f64_lossy(*value);
+                        events.push(SimulationEvent::new(
+                            Tick::new(tick),
+                            EventType::CapacityChanged {
+                                entity: target.clone(),
+                                old_capacity: old,
+                                new_capacity: rule.capacity,
+                            },
+                        ));
+                    } else {
+                        return Err(WorldForgeError::new(
+                            ErrorCode::ScenarioInvalid,
+                            format!("capacity_change target '{target}' has no production rule"),
+                        ));
                     }
                 }
             }
         }
-        if !events.is_empty() {
-            self.state_fingerprint = self.world.fingerprint();
-        }
         Ok(events)
-    }
-
-    fn total_inventory(&self, resource: &str) -> Fixed64 {
-        self.resource_totals
-            .get(resource)
-            .copied()
-            .unwrap_or(Fixed64::ZERO)
     }
 
     fn refresh_resource_totals(&mut self) {
@@ -697,7 +775,7 @@ impl SimulationRuntime {
         for resource in &self.tracked_resources {
             self.resource_totals.insert(resource.clone(), Fixed64::ZERO);
         }
-        for (_, entity_id) in &self.entity_ids {
+        for (entity_id, _) in &self.entity_ids {
             if let Some(inventory) = self.world.get_component::<Inventory>(entity_id) {
                 for (resource, amount) in &inventory.resources {
                     *self
@@ -718,8 +796,18 @@ impl SimulationRuntime {
         ResourceSnapshot { tick, levels }
     }
 
+    fn should_retain_snapshot(&self, tick: u64) -> bool {
+        let duration = self.scenario.duration_ticks;
+        if tick == duration {
+            return true;
+        }
+        let intervals = MAX_RETAINED_SNAPSHOTS.saturating_sub(1).max(1);
+        let stride = duration.saturating_add(intervals - 1) / intervals;
+        tick.checked_rem(stride.max(1)) == Some(0)
+    }
+
     fn evaluate_continuous_objectives(
-        &self,
+        resource_totals: &BTreeMap<String, Fixed64>,
         objectives: &mut [Objective],
         production_totals: &BTreeMap<String, Fixed64>,
         elapsed_ticks: u64,
@@ -728,7 +816,11 @@ impl SimulationRuntime {
         for objective in objectives {
             match &objective.objective_type {
                 ObjectiveType::MaintainInventory { resource, minimum } => {
-                    if self.total_inventory(resource) < Fixed64::from_f64_lossy(*minimum) {
+                    let inventory = resource_totals
+                        .get(resource)
+                        .copied()
+                        .unwrap_or(Fixed64::ZERO);
+                    if inventory < Fixed64::from_f64_lossy(*minimum) {
                         objective.status = ObjectiveStatus::Failed;
                         objective.ever_failed = true;
                     } else if !objective.ever_failed {
@@ -753,7 +845,11 @@ impl SimulationRuntime {
                 }
                 ObjectiveType::ReachInventoryTarget { resource, target } => {
                     if objective.status != ObjectiveStatus::Passed {
-                        if self.total_inventory(resource) >= Fixed64::from_f64_lossy(*target) {
+                        let inventory = resource_totals
+                            .get(resource)
+                            .copied()
+                            .unwrap_or(Fixed64::ZERO);
+                        if inventory >= Fixed64::from_f64_lossy(*target) {
                             objective.status = ObjectiveStatus::Passed;
                         } else if final_evaluation {
                             objective.status = ObjectiveStatus::Failed;
@@ -772,9 +868,11 @@ impl SimulationRuntime {
     }
 
     fn evaluate_objectives(&mut self, elapsed_ticks: u64, final_evaluation: bool) {
+        let resource_totals = &self.resource_totals;
         let production_totals = &self.production_totals;
         let objectives = &mut self.objectives;
-        self.evaluate_continuous_objectives(
+        Self::evaluate_continuous_objectives(
+            resource_totals,
             objectives,
             production_totals,
             elapsed_ticks,
@@ -808,6 +906,23 @@ mod tests {
     }
 
     #[test]
+    fn long_runs_bound_chart_history_and_preserve_endpoints() {
+        let ticks = 5_000;
+        let mut runtime =
+            SimulationRuntime::load(&example("minimal-world"), 42, Some(ticks)).unwrap();
+        let result = runtime.run().unwrap();
+        assert!(result.snapshots.len() <= MAX_RETAINED_SNAPSHOTS as usize);
+        assert_eq!(
+            result.snapshots.first().map(|snapshot| snapshot.tick),
+            Some(0)
+        );
+        assert_eq!(
+            result.snapshots.last().map(|snapshot| snapshot.tick),
+            Some(ticks)
+        );
+    }
+
+    #[test]
     fn finalized_replay_is_available_exactly_once() {
         let mut runtime = SimulationRuntime::load(&example("minimal-world"), 7, Some(2)).unwrap();
         let result = runtime.run().unwrap();
@@ -821,6 +936,31 @@ mod tests {
         assert_eq!(
             runtime.run().unwrap_err().code,
             ErrorCode::RuntimeStateMismatch
+        );
+    }
+
+    #[test]
+    fn bounded_capture_preserves_proof_and_aggregate_counts() {
+        let path = example("stress-test");
+        let mut full = SimulationRuntime::load(&path, 42, Some(50)).unwrap();
+        let full_result = full.run().unwrap();
+
+        let mut bounded = SimulationRuntime::load_bounded(&path, 42, Some(50), 32).unwrap();
+        let bounded_result = bounded.run().unwrap();
+        assert_eq!(bounded.retained_events().len(), 32);
+        assert!(bounded.replay().is_none());
+        assert_eq!(
+            bounded_result.proof.event_chain_root,
+            full_result.proof.event_chain_root
+        );
+        assert_eq!(
+            bounded_result.final_state_fingerprint,
+            full_result.final_state_fingerprint
+        );
+        let counts = &bounded_result.event_type_counts;
+        assert_eq!(
+            counts.production + counts.transfer + counts.shortage + counts.price + counts.system,
+            bounded_result.event_count
         );
     }
 

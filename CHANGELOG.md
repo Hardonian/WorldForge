@@ -15,6 +15,10 @@
 ### Release readiness
 
 - Documented beta scope, verification commands, security posture, and known limitations in `docs/beta-release.md`.
+- Added bounded proof capture with full event-chain parity, 2,048-point snapshot retention, 5,000-event dashboard windows, and accurate full-run aggregates.
+- Replaced unbounded request threads with a CPU-sized worker pool and bounded overload queue.
+- Added high-density visualization budgets, linear topology lookup, dense-network effect reduction, and explicit performance documentation.
+- Fixed Criterion world discovery and added 40-entity stress benchmarks plus bounded-capture regression coverage.
 
 All notable changes to World Forge will be documented in this file.
 

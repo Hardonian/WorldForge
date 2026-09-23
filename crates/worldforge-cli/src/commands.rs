@@ -464,25 +464,44 @@ pub fn simulation_export(
     ticks: u64,
     seed: u64,
 ) -> Result<serde_json::Value, WorldForgeError> {
-    let manifest = WorldManifest::from_file(&path.join("world.toml"))?;
-    let mut runtime = worldforge_runtime::SimulationRuntime::load(path, seed, Some(ticks))?;
-    let result = runtime.run()?;
-    let replay = runtime.replay().ok_or_else(|| {
-        WorldForgeError::new(
-            worldforge_core::ErrorCode::RuntimeStateMismatch,
-            "runtime completed without a replay artifact",
-        )
-    })?;
+    simulation_export_with_event_limit(path, ticks, seed, None)
+}
 
-    let mut event_type_counts = std::collections::BTreeMap::from([
-        ("production", 0usize),
-        ("transfer", 0usize),
-        ("shortage", 0usize),
-        ("price", 0usize),
-        ("system", 0usize),
+/// Produce a dashboard document with a bounded event window. Aggregate counts,
+/// proofs, and the simulation result still cover the complete run.
+pub fn simulation_export_for_dashboard(
+    path: &Path,
+    ticks: u64,
+    seed: u64,
+    max_events: usize,
+) -> Result<serde_json::Value, WorldForgeError> {
+    simulation_export_with_event_limit(path, ticks, seed, Some(max_events))
+}
+
+fn simulation_export_with_event_limit(
+    path: &Path,
+    ticks: u64,
+    seed: u64,
+    max_events: Option<usize>,
+) -> Result<serde_json::Value, WorldForgeError> {
+    let manifest = WorldManifest::from_file(&path.join("world.toml"))?;
+    let mut runtime = match max_events {
+        Some(limit) => {
+            worldforge_runtime::SimulationRuntime::load_bounded(path, seed, Some(ticks), limit)?
+        }
+        None => worldforge_runtime::SimulationRuntime::load(path, seed, Some(ticks))?,
+    };
+    let result = runtime.run()?;
+    let event_type_counts = std::collections::BTreeMap::from([
+        ("production", result.event_type_counts.production),
+        ("transfer", result.event_type_counts.transfer),
+        ("shortage", result.event_type_counts.shortage),
+        ("price", result.event_type_counts.price),
+        ("system", result.event_type_counts.system),
     ]);
-    let events = replay
-        .events
+    let retained_events = runtime.retained_events();
+    let event_start = result.event_count.saturating_sub(retained_events.len());
+    let events = retained_events
         .iter()
         .map(|event| {
             let (event_type, entity, resource, amount) = match &event.event_type {
@@ -545,7 +564,6 @@ pub fn simulation_export(
                     ("system", "runtime".to_string(), reason.clone(), 0.0)
                 }
             };
-            *event_type_counts.entry(event_type).or_default() += 1;
             serde_json::json!({
                 "tick": event.tick.value(),
                 "type": event_type,
@@ -586,6 +604,8 @@ pub fn simulation_export(
         "links": result.links,
         "snapshots": result.snapshots,
         "events": events,
+        "eventsTruncated": event_start > 0,
+        "eventWindowStart": event_start,
         "eventTypeCounts": event_type_counts,
         "objectives": result.objective_results.iter().map(|objective| {
             serde_json::json!({
@@ -626,7 +646,8 @@ pub fn benchmark(path: &Path, ticks: u64, reps: u32) -> Result<(), WorldForgeErr
 
     for i in 0..reps {
         let start = std::time::Instant::now();
-        let mut runtime = worldforge_runtime::SimulationRuntime::load(path, 42, Some(ticks))?;
+        let mut runtime =
+            worldforge_runtime::SimulationRuntime::load_bounded(path, 42, Some(ticks), 0)?;
         let result = runtime.run()?;
         let elapsed = start.elapsed();
 

@@ -202,7 +202,8 @@ fn bench_full_simulation(c: &mut Criterion) {
     let mut group = c.benchmark_group("simulation");
     group.sample_size(10); // Full runs are expensive
 
-    let world_path = std::path::Path::new("examples/supply-chain");
+    let repository_root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let world_path = repository_root.join("examples/supply-chain");
     if world_path.exists() {
         for ticks in [100, 500, 1000] {
             group.bench_with_input(
@@ -210,11 +211,37 @@ fn bench_full_simulation(c: &mut Criterion) {
                 &ticks,
                 |bencher, &t| {
                     bencher.iter(|| {
-                        let mut runtime =
-                            worldforge_runtime::SimulationRuntime::load(world_path, 42, Some(t))
-                                .unwrap();
+                        let mut runtime = worldforge_runtime::SimulationRuntime::load_bounded(
+                            &world_path,
+                            42,
+                            Some(t),
+                            0,
+                        )
+                        .unwrap();
                         let result = runtime.run().unwrap();
                         black_box(result);
+                    })
+                },
+            );
+        }
+    }
+
+    let stress_path = repository_root.join("examples/stress-test");
+    if stress_path.exists() {
+        for ticks in [100, 1_000] {
+            group.bench_with_input(
+                BenchmarkId::new("stress_40_entities", ticks),
+                &ticks,
+                |bencher, &t| {
+                    bencher.iter(|| {
+                        let mut runtime = worldforge_runtime::SimulationRuntime::load_bounded(
+                            &stress_path,
+                            42,
+                            Some(t),
+                            0,
+                        )
+                        .unwrap();
+                        black_box(runtime.run().unwrap());
                     })
                 },
             );

@@ -4,6 +4,7 @@ use std::collections::BTreeMap;
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::path::{Path, PathBuf};
+use std::sync::mpsc::{sync_channel, TrySendError};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
@@ -11,11 +12,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use worldforge_core::{EngineVersion, ErrorCode, WorldForgeError};
 use worldforge_runtime::{RunProgress, SimulationRuntime};
-use worldforge_world::{
-    EntitiesConfig, EntityConfig, EventType, LinkConfig, Objective, ObjectiveStatus,
-    ObjectiveType, ProductionConfig, Scenario, ScheduledEvent, ScheduledEventType,
-    SimulationEvent, WorldManifest,
-};
+use worldforge_world::{EntitiesConfig, EventType, Scenario, SimulationEvent, WorldManifest};
 
 const INDEX: &str = include_str!("../../../dashboard/index.html");
 const SCRIPT: &str = include_str!("../../../dashboard/dashboard.js");
@@ -26,7 +23,10 @@ const MAX_TICKS: u64 = 1_000_000;
 const MAX_BENCHMARK_REPS: u32 = 20;
 const MAX_PLAY_SESSIONS: usize = 32;
 const MAX_STEP_TICKS: u64 = 5_000;
+const MAX_DASHBOARD_EVENTS: usize = 5_000;
 const SESSION_TTL: Duration = Duration::from_secs(4 * 60 * 60);
+const MAX_SERVER_WORKERS: usize = 16;
+const REQUEST_QUEUE_CAPACITY: usize = 128;
 
 type SharedPlaySession = Arc<Mutex<PlaySession>>;
 type SessionRegistry = BTreeMap<String, SharedPlaySession>;
@@ -106,18 +106,6 @@ struct SaveRequest {
     save_id: Option<String>,
 }
 
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct WorldBuildRequest {
-    id: String,
-    title: String,
-    description: String,
-    template: String,
-    difficulty: String,
-    seed: u64,
-    ticks: u64,
-}
-
 fn default_step_ticks() -> u64 {
     1
 }
@@ -152,16 +140,47 @@ pub fn serve(bind: &str, worlds_dir: &Path, saves_dir: &Path) -> Result<(), Worl
         saves_dir,
         sessions: Mutex::new(BTreeMap::new()),
     });
+    let worker_count = std::thread::available_parallelism()
+        .map(usize::from)
+        .unwrap_or(4)
+        .clamp(2, MAX_SERVER_WORKERS);
+    let (sender, receiver) = sync_channel::<TcpStream>(REQUEST_QUEUE_CAPACITY);
+    let receiver = Arc::new(Mutex::new(receiver));
+    for _ in 0..worker_count {
+        let state = Arc::clone(&state);
+        let receiver = Arc::clone(&receiver);
+        std::thread::spawn(move || loop {
+            let stream = match receiver.lock() {
+                Ok(receiver) => receiver.recv(),
+                Err(_) => return,
+            };
+            let Ok(mut stream) = stream else { return };
+            if let Err(error) = handle_connection(&mut stream, &state) {
+                let _ = respond_error(&mut stream, status_for_error(&error), &error);
+            }
+        });
+    }
     for connection in listener.incoming() {
         match connection {
-            Ok(mut stream) => {
-                let state = Arc::clone(&state);
-                std::thread::spawn(move || {
-                    if let Err(error) = handle_connection(&mut stream, &state) {
-                        let _ = respond_error(&mut stream, status_for_error(&error), &error);
-                    }
-                });
-            }
+            Ok(stream) => match sender.try_send(stream) {
+                Ok(()) => {}
+                Err(TrySendError::Full(mut stream)) => {
+                    let _ = respond_json(
+                        &mut stream,
+                        "503 Service Unavailable",
+                        &json!({
+                            "error": "server is at capacity; retry shortly",
+                            "code": "SERVER_BUSY"
+                        }),
+                    );
+                }
+                Err(TrySendError::Disconnected(_)) => {
+                    return Err(WorldForgeError::new(
+                        ErrorCode::InternalError,
+                        "dashboard worker pool stopped unexpectedly",
+                    ));
+                }
+            },
             Err(error) => eprintln!("dashboard connection failed: {error}"),
         }
     }
@@ -233,7 +252,12 @@ fn handle_connection(stream: &mut TcpStream, state: &ServerState) -> Result<(), 
             let run: RunRequest = parse_json(body)?;
             validate_ticks(run.ticks)?;
             let world_path = resolve_world(&state.worlds_dir, &run.world)?;
-            let document = super::commands::simulation_export(&world_path, run.ticks, run.seed)?;
+            let document = super::commands::simulation_export_for_dashboard(
+                &world_path,
+                run.ticks,
+                run.seed,
+                MAX_DASHBOARD_EVENTS,
+            )?;
             respond_json(stream, "200 OK", &document)
         }
         ("POST", "/api/benchmark") => {
@@ -383,7 +407,7 @@ fn create_play_session(state: &ServerState, request: RunRequest) -> Result<Value
         last_access: Instant::now(),
     };
     let id = register_session(state, session)?;
-    Ok(play_document(&id, &request.world, &progress, None))
+    Ok(play_document(&id, &request.world, &progress, None, true))
 }
 
 fn register_session(state: &ServerState, session: PlaySession) -> Result<String, WorldForgeError> {
@@ -412,6 +436,7 @@ fn inspect_play_session(state: &ServerState, id: &str) -> Result<Value, WorldFor
             &session.world,
             &progress,
             session.runtime.replay(),
+            true,
         ))
     })
 }
@@ -424,6 +449,7 @@ fn step_play_session(state: &ServerState, id: &str, ticks: u64) -> Result<Value,
             &session.world,
             &progress,
             session.runtime.replay(),
+            false,
         ))
     })
 }
@@ -448,6 +474,7 @@ fn intervene_play_session(
             &session.world,
             &progress,
             session.runtime.replay(),
+            false,
         ))
     })
 }
@@ -569,7 +596,7 @@ fn list_saves(state: &ServerState) -> Result<Vec<SaveGame>, WorldForgeError> {
         .filter_map(|entry| std::fs::read(entry.path()).ok())
         .filter_map(|bytes| serde_json::from_slice::<SaveGame>(&bytes).ok())
         .collect::<Vec<_>>();
-    saves.sort_by(|left, right| right.updated_at.cmp(&left.updated_at));
+    saves.sort_by_key(|save| std::cmp::Reverse(save.updated_at));
     Ok(saves)
 }
 
@@ -637,6 +664,7 @@ fn load_save(state: &ServerState, id: &str) -> Result<Value, WorldForgeError> {
         &world,
         &progress,
         session.runtime.replay(),
+        true,
     ))
 }
 
@@ -685,6 +713,7 @@ fn play_document(
     world: &str,
     progress: &RunProgress,
     replay: Option<&worldforge_replay::ReplayArtifact>,
+    include_topology: bool,
 ) -> Value {
     let events = progress
         .recent_events
@@ -718,8 +747,8 @@ fn play_document(
             "status": format!("{:?}", objective.status),
         })).collect::<Vec<_>>(),
         "recentEvents": events,
-        "entities": progress.entities,
-        "links": progress.links,
+        "entities": include_topology.then_some(&progress.entities),
+        "links": include_topology.then_some(&progress.links),
         "proof": proof,
         "completed": replay.is_some(),
     })
@@ -857,9 +886,10 @@ fn benchmark_report(path: &Path, request: &BenchmarkRequest) -> Result<Value, Wo
     let mut event_count = 0usize;
     for _ in 0..request.reps {
         let started = Instant::now();
-        let result = super::commands::simulation_export(path, request.ticks, 42)?;
+        let mut runtime = SimulationRuntime::load_bounded(path, 42, Some(request.ticks), 0)?;
+        let result = runtime.run()?;
         samples_ms.push(started.elapsed().as_secs_f64() * 1000.0);
-        event_count = result["totalEvents"].as_u64().unwrap_or_default() as usize;
+        event_count = result.event_count;
     }
     let total_ms = samples_ms.iter().sum::<f64>();
     let average_ms = total_ms / f64::from(request.reps);
@@ -1147,6 +1177,27 @@ mod tests {
         assert!(validate_ticks(0).is_err());
         assert!(validate_ticks(MAX_TICKS + 1).is_err());
         assert!(validate_ticks(1000).is_ok());
+    }
+
+    #[test]
+    fn dashboard_run_bounds_event_payload_without_losing_aggregates() {
+        let document = super::super::commands::simulation_export_for_dashboard(
+            &examples_dir().join("stress-test"),
+            100,
+            42,
+            50,
+        )
+        .unwrap();
+        assert_eq!(document["events"].as_array().unwrap().len(), 50);
+        assert_eq!(document["eventsTruncated"], true);
+        assert!(document["totalEvents"].as_u64().unwrap() > 50);
+        let counted = document["eventTypeCounts"]
+            .as_object()
+            .unwrap()
+            .values()
+            .map(|value| value.as_u64().unwrap())
+            .sum::<u64>();
+        assert_eq!(counted, document["totalEvents"].as_u64().unwrap());
     }
 
     #[test]

@@ -15,6 +15,8 @@ const WORLD_SYMBOLS = {
 const HISTORY_KEY = 'worldforge.recent-runs.v1';
 const MAX_HISTORY = 7;
 const EVENTS_PAGE_SIZE = 100;
+const MAX_NETWORK_NODES = 256;
+const MAX_NETWORK_LINKS = 768;
 
 const state = {
     worlds: [],
@@ -446,7 +448,12 @@ function renderEvents() {
         dom.eventLog.append(row);
     });
     dom.eventFooter.classList.remove('hidden');
-    dom.eventCountLabel.textContent = `Showing ${Math.min(events.length, state.eventsVisible).toLocaleString()} of ${events.length.toLocaleString()} matching events`;
+    const shown = Math.min(events.length, state.eventsVisible).toLocaleString();
+    const retained = events.length.toLocaleString();
+    const windowNote = state.data.eventsTruncated
+        ? ` in the latest ${state.data.events.length.toLocaleString()} of ${state.data.totalEvents.toLocaleString()} total`
+        : '';
+    dom.eventCountLabel.textContent = `Showing ${shown} of ${retained} matching events${windowNote}`;
     dom.loadMore.classList.toggle('hidden', state.eventsVisible >= events.length);
 }
 
@@ -678,7 +685,13 @@ async function advancePlaySession(ticks) {
 }
 
 function consumePlayUpdate(data) {
-    state.play.data = data;
+    const previous = state.play.data;
+    state.play.data = {
+        ...previous,
+        ...data,
+        entities: data.entities || previous?.entities || [],
+        links: data.links || previous?.links || [],
+    };
     if (data.recentEvents?.length) {
         state.play.events.push(...data.recentEvents);
         state.play.events = state.play.events.slice(-120);
@@ -830,9 +843,12 @@ function renderProducerOptions(entityStates) {
 function renderPlayNetwork(data) {
     const svg = el('play-network');
     svg.replaceChildren();
-    const entities = data.entities.map(entity => entity.name);
+    const visibleStates = data.entityStates.slice(0, MAX_NETWORK_NODES);
+    const entities = visibleStates.map(entity => entity.name);
     const count = entities.length;
     if (!count) return;
+    svg.dataset.density = count > 80 ? 'dense' : 'normal';
+    const fragment = document.createDocumentFragment();
     const cx = 400, cy = 208;
     const radiusX = count > 14 ? 310 : 270, radiusY = count > 14 ? 155 : 140;
     const positions = new Map(entities.map((name, index) => [name, {
@@ -840,13 +856,13 @@ function renderPlayNetwork(data) {
         y: cy + radiusY * Math.sin(index / count * Math.PI * 2 - Math.PI / 2),
     }]));
     const recentShortages = new Set(state.play.events.filter(event => event.type === 'shortage').slice(-20).map(event => event.entity));
-    data.links.forEach(link => {
+    data.links.slice(0, MAX_NETWORK_LINKS).forEach(link => {
         const from = positions.get(link.from), to = positions.get(link.to);
         if (!from || !to) return;
         const line = svgNode('path', { d: `M${from.x},${from.y} L${to.x},${to.y}`, class: 'network-link network-link-hot' });
-        svg.append(line);
+        fragment.append(line);
     });
-    data.entityStates.forEach((entity, index) => {
+    visibleStates.forEach((entity, index) => {
         const position = positions.get(entity.name); if (!position) return;
         const group = svgNode('g', { transform: `translate(${position.x} ${position.y})` });
         group.append(svgNode('circle', { r: count > 20 ? 17 : 25, class: 'network-node-glow' }));
@@ -857,8 +873,9 @@ function renderPlayNetwork(data) {
             const detail = svgNode('text', { y: 40, class: 'network-node-detail' }); detail.textContent = compactNumber(total);
             group.append(label, detail);
         }
-        svg.append(group);
+        fragment.append(group);
     });
+    svg.append(fragment);
 }
 
 function svgNode(name, attributes) {
@@ -1216,7 +1233,8 @@ function drawResourceChart(data) {
 function drawEntityNetwork(world) {
     if (!world) return;
     const { ctx, width: w, height: h } = prepareCanvas('network-chart', 260);
-    const entities = world.entities || [], links = world.links || [];
+    const entities = (world.entities || []).slice(0, MAX_NETWORK_NODES);
+    const links = (world.links || []).slice(0, MAX_NETWORK_LINKS);
     if (!entities.length) return;
     const cx = w / 2, cy = h / 2;
     const radius = Math.max(58, Math.min(w * .34, h * .34));
@@ -1224,9 +1242,10 @@ function drawEntityNetwork(world) {
         x: cx + radius * Math.cos(index / entities.length * Math.PI * 2 - Math.PI / 2),
         y: cy + radius * Math.sin(index / entities.length * Math.PI * 2 - Math.PI / 2),
     }));
+    const entityIndexes = new Map(entities.map((name, index) => [name, index]));
     links.forEach(link => {
-        const fromIndex = entities.indexOf(link.from), toIndex = entities.indexOf(link.to);
-        if (fromIndex < 0 || toIndex < 0) return;
+        const fromIndex = entityIndexes.get(link.from), toIndex = entityIndexes.get(link.to);
+        if (fromIndex === undefined || toIndex === undefined) return;
         const from = positions[fromIndex], to = positions[toIndex];
         const gradient = ctx.createLinearGradient(from.x, from.y, to.x, to.y);
         gradient.addColorStop(0, 'rgba(103,169,255,.18)'); gradient.addColorStop(1, 'rgba(66,211,234,.48)');

@@ -2051,7 +2051,6 @@ dependencies = [
  "clap",
  "serde",
  "serde_json",
- "toml",
  "tracing",
  "tracing-subscriber",
  "uuid",

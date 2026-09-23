@@ -82,6 +82,8 @@ worldforge-cli         Command-line interface
 
 5. **Mods cannot escape the sandbox.** The capability-based API denies filesystem, network, shell, environment, process, and secrets access. Always.
 
+6. **Observability is bounded by default.** Dashboard runs retain screen-useful history and a recent event window while hashing and counting the complete run. Full replay capture remains opt-in where a lossless artifact is required. See [performance and scalability](docs/performance.md).
+
 ## Vertical Slice: Supply Chain
 
 The `examples/supply-chain` directory demonstrates a complete simulation:
@@ -168,6 +170,7 @@ WIT interfaces for the Component Model are defined in `wit/worldforge/`. The exe
 - Same-seed determinism checks and cross-seed run comparison
 - Server-side performance benchmarks
 - Canonical JSON export, copyable proof fingerprints, and local recent-run history
+- Bounded high-DPI rendering, bounded dashboard payloads, and proof-only capture for long analytical runs
 
 Use a different catalog or local bind address when needed:
 
