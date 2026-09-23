@@ -11,7 +11,11 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use worldforge_core::{EngineVersion, ErrorCode, WorldForgeError};
 use worldforge_runtime::{RunProgress, SimulationRuntime};
-use worldforge_world::{EntitiesConfig, EventType, Scenario, SimulationEvent, WorldManifest};
+use worldforge_world::{
+    EntitiesConfig, EntityConfig, EventType, LinkConfig, Objective, ObjectiveStatus,
+    ObjectiveType, ProductionConfig, Scenario, ScheduledEvent, ScheduledEventType,
+    SimulationEvent, WorldManifest,
+};
 
 const INDEX: &str = include_str!("../../../dashboard/index.html");
 const SCRIPT: &str = include_str!("../../../dashboard/dashboard.js");
@@ -100,6 +104,18 @@ struct SaveRequest {
     name: String,
     #[serde(default)]
     save_id: Option<String>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct WorldBuildRequest {
+    id: String,
+    title: String,
+    description: String,
+    template: String,
+    difficulty: String,
+    seed: u64,
+    ticks: u64,
 }
 
 fn default_step_ticks() -> u64 {

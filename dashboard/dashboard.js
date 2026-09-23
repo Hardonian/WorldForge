@@ -27,6 +27,7 @@ const state = {
         sessionId: null, worldId: null, data: null, events: [], maxima: {},
         running: false, requestInFlight: false, timer: null,
     },
+    saves: [],
 };
 
 const el = id => document.getElementById(id);
@@ -41,6 +42,7 @@ const dom = {
     eventFooter: el('event-footer'), eventCountLabel: el('event-count-label'), loadMore: el('load-more-events'),
     compareDialog: el('compare-dialog'), benchmarkDialog: el('benchmark-dialog'),
     playDialog: el('play-dialog'),
+    saveDialog: el('save-dialog'),
 };
 
 function currentWorld() {
@@ -106,12 +108,18 @@ function bindInteractions() {
     el('play-toggle').addEventListener('click', () => setPlayRunning(!state.play.running));
     el('play-step').addEventListener('click', () => advancePlaySession(1));
     el('play-reset').addEventListener('click', startPlaySession);
+    el('play-save').addEventListener('click', () => openSaveManager(true));
+    el('play-saves').addEventListener('click', () => openSaveManager(false));
+    el('play-replay').addEventListener('click', downloadPlayReplay);
     el('play-close').addEventListener('click', closePlayMode);
     dom.playDialog.addEventListener('close', () => setPlayRunning(false));
     el('play-speed').addEventListener('change', () => state.play.running && schedulePlayStep());
     el('capacity-slider').addEventListener('input', updateCapacityLabel);
     el('play-entity-select').addEventListener('change', syncCapacityControl);
     el('apply-capacity').addEventListener('click', applyCapacityDecision);
+    el('save-close').addEventListener('click', () => dom.saveDialog.close());
+    el('save-form').addEventListener('submit', saveCurrentSession);
+    el('refresh-saves').addEventListener('click', refreshSaves);
     el('menu-button').addEventListener('click', () => toggleSidebar(true));
     el('sidebar-close').addEventListener('click', () => toggleSidebar(false));
     el('mobile-backdrop').addEventListener('click', () => toggleSidebar(false));
@@ -555,6 +563,16 @@ function showPlayIntro() {
     el('play-grid').setAttribute('aria-hidden', 'true');
     el('play-status').className = 'play-status';
     el('play-status').lastChild.textContent = 'Ready';
+    resetPlayControls();
+}
+
+function resetPlayControls() {
+    el('play-toggle').disabled = true;
+    el('play-step').disabled = true;
+    el('play-reset').disabled = true;
+    el('play-save').disabled = true;
+    el('apply-capacity').disabled = true;
+    el('play-replay').classList.add('hidden');
 }
 
 async function startPlaySession() {
@@ -592,7 +610,9 @@ async function startPlaySession() {
         el('play-toggle').disabled = false;
         el('play-step').disabled = false;
         el('play-reset').disabled = false;
+        el('play-save').disabled = false;
         el('apply-capacity').disabled = false;
+        el('play-replay').classList.add('hidden');
         renderPlayState();
         setPlayRunning(true);
         showToast('World started', 'The deterministic session is live. Pause at any time to make decisions.');
@@ -674,6 +694,8 @@ function completePlaySession(data) {
     el('play-toggle').disabled = true;
     el('play-step').disabled = true;
     el('apply-capacity').disabled = true;
+    el('play-save').disabled = false;
+    el('play-replay').classList.remove('hidden');
     el('play-new').textContent = 'Play again';
     const passed = data.objectives.filter(objective => objective.status === 'Passed').length;
     const allPassed = passed === data.objectives.length;
@@ -849,7 +871,135 @@ async function endPlaySession() {
     const id = state.play.sessionId;
     clearTimeout(state.play.timer);
     state.play = { sessionId: null, worldId: null, data: null, events: [], maxima: {}, running: false, requestInFlight: false, timer: null };
+    resetPlayControls();
     if (id) await api(`/api/play/sessions/${id}`, { method: 'DELETE' }).catch(() => {});
+}
+
+async function openSaveManager(focusName) {
+    setPlayRunning(false);
+    const hasSession = Boolean(state.play.sessionId);
+    el('save-name').disabled = !hasSession;
+    el('save-submit').disabled = !hasSession;
+    if (hasSession && !el('save-name').value) {
+        el('save-name').value = `${currentWorld()?.title || 'World'} · tick ${state.play.data.currentTick}`;
+    }
+    if (!dom.saveDialog.open) dom.saveDialog.showModal();
+    await refreshSaves();
+    if (focusName && hasSession) el('save-name').focus();
+}
+
+async function refreshSaves() {
+    const list = el('save-list');
+    list.replaceChildren(emptyState('◌', 'Loading saves', 'Reading durable slots from disk.'));
+    try {
+        const payload = await api('/api/saves');
+        state.saves = payload.saves || [];
+        renderSaves();
+    } catch (error) {
+        list.replaceChildren(emptyState('!', 'Could not load saves', error.message));
+    }
+}
+
+async function saveCurrentSession(event) {
+    event.preventDefault();
+    if (!state.play.sessionId) return;
+    const name = el('save-name').value.trim();
+    if (!name) { el('save-name').focus(); return; }
+    const button = el('save-submit');
+    setButtonBusy(button, true, 'Saving…');
+    try {
+        await api('/api/saves', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ sessionId: state.play.sessionId, name }),
+        });
+        el('save-name').value = '';
+        await refreshSaves();
+        showToast('World saved', 'This session can now be resumed after restarting the dashboard.');
+    } catch (error) {
+        showToast('Save failed', error.message, 'error');
+    } finally {
+        setButtonBusy(button, false, 'Save current world');
+    }
+}
+
+function renderSaves() {
+    const list = el('save-list'); list.replaceChildren();
+    el('save-count').textContent = `${state.saves.length} save${state.saves.length === 1 ? '' : 's'}`;
+    if (!state.saves.length) {
+        list.append(emptyState('□', 'No saves yet', 'Start a world and create your first durable save.'));
+        return;
+    }
+    state.saves.forEach(save => {
+        const slot = document.createElement('article'); slot.className = 'save-slot';
+        const icon = document.createElement('span'); icon.className = 'save-slot-icon'; icon.textContent = `${Math.round(save.currentTick / Math.max(1, save.totalTicks) * 100)}%`;
+        const copy = document.createElement('div'); copy.className = 'save-slot-copy';
+        const title = document.createElement('strong'); title.textContent = save.name;
+        const meta = document.createElement('span'); meta.textContent = `${prettyName(save.world)} · tick ${formatNumber(save.currentTick)} / ${formatNumber(save.totalTicks)} · seed ${save.seed}`;
+        copy.append(title, meta);
+        const actions = document.createElement('div'); actions.className = 'save-slot-actions';
+        const resume = document.createElement('button'); resume.type = 'button'; resume.className = 'button button-secondary'; resume.textContent = 'Resume'; resume.addEventListener('click', () => resumeSave(save.id));
+        const remove = document.createElement('button'); remove.type = 'button'; remove.className = 'button button-quiet save-delete'; remove.textContent = 'Delete'; remove.addEventListener('click', () => removeSave(save));
+        actions.append(resume, remove); slot.append(icon, copy, actions); list.append(slot);
+    });
+}
+
+async function resumeSave(saveId) {
+    const save = state.saves.find(item => item.id === saveId);
+    if (!save) return;
+    setPlayRunning(false);
+    if (state.play.sessionId) await endPlaySession();
+    try {
+        const data = await api(`/api/saves/${saveId}/load`, { method: 'POST' });
+        state.play = {
+            sessionId: data.sessionId, worldId: data.world, data, events: [],
+            maxima: { ...data.snapshot.levels }, running: false, requestInFlight: false, timer: null,
+        };
+        if (state.worldId !== data.world) selectWorld(data.world);
+        state.play.sessionId = data.sessionId;
+        state.play.worldId = data.world;
+        state.play.data = data;
+        el('play-title').textContent = `Play ${currentWorld()?.title || prettyName(data.world)}`;
+        el('play-intro').classList.add('hidden');
+        el('play-grid').setAttribute('aria-hidden', 'false');
+        el('play-toggle').disabled = data.completed;
+        el('play-step').disabled = data.completed;
+        el('play-reset').disabled = false;
+        el('play-save').disabled = false;
+        el('apply-capacity').disabled = data.completed;
+        el('play-replay').classList.toggle('hidden', !data.completed);
+        renderPlayState();
+        dom.saveDialog.close();
+        showToast('Save resumed', `${save.name} restored at tick ${formatNumber(data.currentTick)}.`);
+    } catch (error) {
+        showToast('Resume failed', error.message, 'error');
+        showPlayIntro();
+    }
+}
+
+async function removeSave(save) {
+    if (!window.confirm(`Delete “${save.name}”? This cannot be undone.`)) return;
+    try {
+        await api(`/api/saves/${save.id}`, { method: 'DELETE' });
+        await refreshSaves();
+        showToast('Save deleted', 'The local save slot was removed.');
+    } catch (error) {
+        showToast('Delete failed', error.message, 'error');
+    }
+}
+
+async function downloadPlayReplay() {
+    if (!state.play.sessionId || !state.play.data?.completed) return;
+    try {
+        const response = await fetch(`/api/play/sessions/${state.play.sessionId}/replay`);
+        if (!response.ok) throw new Error('Replay is unavailable.');
+        const disposition = response.headers.get('Content-Disposition') || '';
+        const filename = disposition.match(/filename="([^"]+)"/)?.[1] || `${state.play.worldId}.replay`;
+        const url = URL.createObjectURL(await response.blob());
+        const anchor = document.createElement('a'); anchor.href = url; anchor.download = filename; document.body.append(anchor); anchor.click(); anchor.remove(); URL.revokeObjectURL(url);
+        showToast('Replay downloaded', 'The tamper-evident replay artifact is ready to archive.');
+    } catch (error) {
+        showToast('Replay download failed', error.message, 'error');
+    }
 }
 
 function openComparison() {
