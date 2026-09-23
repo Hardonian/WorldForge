@@ -773,14 +773,12 @@ impl SimulationRuntime {
     }
 
     fn evaluate_objectives(&mut self, elapsed_ticks: u64, final_evaluation: bool) {
-        let mut objectives = std::mem::take(&mut self.objectives);
         self.evaluate_continuous_objectives(
-            &mut objectives,
+            &mut self.objectives,
             &self.production_totals,
             elapsed_ticks,
             final_evaluation,
         );
-        self.objectives = objectives;
     }
 
     /// Get current state.
