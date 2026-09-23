@@ -10,6 +10,9 @@ use worldforge_core::error::{ErrorCode, WorldForgeError};
 use worldforge_core::hash::{Fingerprint, FingerprintBuilder};
 use worldforge_world::{EntitiesConfig, Scenario, WorldManifest};
 
+mod resolver;
+pub use resolver::{resolve_world, ResolvedDependency, ResolvedWorld};
+
 /// Metadata about a built package.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct PackageInfo {
@@ -34,15 +37,18 @@ pub struct PackageFileEntry {
 /// The archive is deterministic: same files → same output bytes.
 /// Files are sorted alphabetically, timestamps are zeroed.
 pub fn build_package(world_dir: &Path, output: &Path) -> Result<PackageInfo, WorldForgeError> {
-    validate_world(world_dir)?;
-    // Load manifest metadata after full validation.
-    let manifest_path = world_dir.join("world.toml");
-    let manifest = WorldManifest::from_file(&manifest_path)?;
-    manifest.validate()?;
+    let resolved = resolve_world(world_dir)?;
+    let manifest = &resolved.manifest;
 
     // Collect all files in sorted order
     let mut files: Vec<(String, Vec<u8>)> = Vec::new();
     collect_files(world_dir, world_dir, &mut files)?;
+    if !resolved.dependencies.is_empty() {
+        files.push((
+            resolver::LOCK_FILE.to_string(),
+            resolver::dependency_lock_bytes(&resolved.dependencies)?,
+        ));
+    }
     files.sort_by(|a, b| a.0.cmp(&b.0)); // Deterministic ordering
 
     // Build tar archive
@@ -98,8 +104,8 @@ pub fn build_package(world_dir: &Path, output: &Path) -> Result<PackageInfo, Wor
     let fingerprint = content_builder.finalize();
 
     Ok(PackageInfo {
-        name: manifest.name,
-        version: manifest.version,
+        name: manifest.name.clone(),
+        version: manifest.version.clone(),
         fingerprint,
         file_count: entries.len(),
         total_bytes,
@@ -109,37 +115,7 @@ pub fn build_package(world_dir: &Path, output: &Path) -> Result<PackageInfo, Wor
 
 /// Validate a world directory without building.
 pub fn validate_world(world_dir: &Path) -> Result<(), WorldForgeError> {
-    let manifest_path = world_dir.join("world.toml");
-    if !manifest_path.exists() {
-        return Err(WorldForgeError::new(
-            ErrorCode::WorldManifestMissing,
-            format!("no world.toml found in {}", world_dir.display()),
-        ));
-    }
-
-    let manifest = WorldManifest::from_file(&manifest_path)?;
-    manifest.validate()?;
-
-    let scenario_path = world_dir.join("scenario.toml");
-    if !scenario_path.exists() {
-        return Err(WorldForgeError::new(
-            ErrorCode::ScenarioMissing,
-            format!("no scenario.toml found in {}", world_dir.display()),
-        ));
-    }
-    let scenario = Scenario::from_file(&scenario_path)?;
-
-    let entities_path = world_dir.join("entities.toml");
-    if !entities_path.exists() {
-        return Err(WorldForgeError::new(
-            ErrorCode::WorldNotFound,
-            format!("no entities.toml found in {}", world_dir.display()),
-        ));
-    }
-    let entities = EntitiesConfig::from_file(&entities_path)?;
-    entities.validate()?;
-    scenario.validate_against(&manifest, &entities)?;
-
+    resolve_world(world_dir)?;
     Ok(())
 }
 
@@ -255,12 +231,23 @@ pub fn fingerprint_world(world_dir: &Path) -> Result<Fingerprint, WorldForgeErro
     collect_files(world_dir, world_dir, &mut files)?;
     files.sort_by(|a, b| a.0.cmp(&b.0));
 
+    Ok(fingerprint_files(&files))
+}
+
+/// Compute the effective fingerprint used by simulations and replays. For an
+/// inherited world this includes a deterministic lock of direct dependency
+/// fingerprints, which recursively commits to the full base-world graph.
+pub fn fingerprint_resolved_world(world_dir: &Path) -> Result<Fingerprint, WorldForgeError> {
+    Ok(resolve_world(world_dir)?.fingerprint)
+}
+
+fn fingerprint_files(files: &[(String, Vec<u8>)]) -> Fingerprint {
     let mut builder = FingerprintBuilder::new();
-    for (path, data) in &files {
+    for (path, data) in files {
         builder.update(path.as_bytes());
         builder.update_fingerprint(&Fingerprint::hash(data));
     }
-    Ok(builder.finalize())
+    builder.finalize()
 }
 
 fn collect_files(
@@ -319,6 +306,31 @@ mod tests {
     use super::*;
     use std::fs;
 
+    fn temp_catalog(name: &str) -> std::path::PathBuf {
+        let path = std::env::temp_dir().join(format!(
+            "worldforge-package-{name}-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        fs::create_dir_all(&path).unwrap();
+        path
+    }
+
+    fn write_world(
+        directory: &Path,
+        manifest: &str,
+        scenario: &str,
+        entities: &str,
+    ) {
+        fs::create_dir_all(directory).unwrap();
+        fs::write(directory.join("world.toml"), manifest).unwrap();
+        fs::write(directory.join("scenario.toml"), scenario).unwrap();
+        fs::write(directory.join("entities.toml"), entities).unwrap();
+    }
+
     #[test]
     fn fingerprint_is_reproducible() {
         let dir = std::env::temp_dir().join("wf_test_pkg");
@@ -333,5 +345,91 @@ mod tests {
         assert_eq!(fp1, fp2);
 
         let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn local_inheritance_merges_content_and_locks_package_fingerprint() {
+        let catalog = temp_catalog("inheritance");
+        let base = catalog.join("base-world");
+        let derived = catalog.join("derived-world");
+        write_world(
+            &base,
+            "name = \"base-world\"\nversion = \"1.0.0\"\n",
+            "world = \"base-world\"\nduration_ticks = 10\n",
+            r#"[[entities]]
+name = "source"
+entity_type = "producer"
+region = "base"
+[entities.initial_inventory]
+ore = 10.0
+"#,
+        );
+        write_world(
+            &derived,
+            "name = \"derived-world\"\nextends = [\"base-world\"]\n",
+            "world = \"derived-world\"\nduration_ticks = 10\n",
+            r#"[[entities]]
+name = "sink"
+entity_type = "storage"
+region = "derived"
+
+[[links]]
+from = "source"
+to = "sink"
+resource = "ore"
+max_per_tick = 1.0
+"#,
+        );
+
+        let resolved = resolve_world(&derived).unwrap();
+        assert_eq!(resolved.entities.entities.len(), 2);
+        assert_eq!(resolved.entities.links.len(), 1);
+        assert_eq!(resolved.dependencies.len(), 1);
+        let first_fingerprint = resolved.fingerprint;
+
+        let archive = catalog.join("derived-world.world");
+        let built = build_package(&derived, &archive).unwrap();
+        assert_eq!(built.fingerprint, first_fingerprint);
+        assert!(built.files.iter().any(|file| file.path == "worldforge.lock"));
+        assert_eq!(inspect_package(&archive).unwrap().fingerprint, built.fingerprint);
+
+        let updated = fs::read_to_string(base.join("entities.toml"))
+            .unwrap()
+            .replace("ore = 10.0", "ore = 20.0");
+        fs::write(base.join("entities.toml"), updated).unwrap();
+        assert_ne!(
+            fingerprint_resolved_world(&derived).unwrap(),
+            first_fingerprint
+        );
+        fs::remove_dir_all(catalog).unwrap();
+    }
+
+    #[test]
+    fn inheritance_rejects_cycles_and_non_local_references() {
+        let catalog = temp_catalog("cycles");
+        let a = catalog.join("a");
+        let b = catalog.join("b");
+        write_world(
+            &a,
+            "name = \"a\"\nextends = [\"b\"]\n",
+            "world = \"a\"\nduration_ticks = 10\n",
+            "",
+        );
+        write_world(
+            &b,
+            "name = \"b\"\nextends = [\"a\"]\n",
+            "world = \"b\"\nduration_ticks = 10\n",
+            "",
+        );
+        let cycle = resolve_world(&a).unwrap_err();
+        assert_eq!(cycle.code, ErrorCode::PackageDependencyMissing);
+        assert!(cycle.message.contains("cycle"));
+
+        fs::write(a.join("world.toml"), "name = \"a\"\nextends = [\"../b\"]\n")
+            .unwrap();
+        let traversal = resolve_world(&a).unwrap_err();
+        assert_eq!(traversal.code, ErrorCode::PackageDependencyMissing);
+        assert!(traversal.message.contains("local world id"));
+        fs::remove_dir_all(catalog).unwrap();
     }
 }

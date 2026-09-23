@@ -229,30 +229,18 @@ impl SimulationRuntime {
         duration_ticks: Option<u64>,
         bounded_event_limit: Option<usize>,
     ) -> Result<Self, WorldForgeError> {
-        // Load manifest
-        let manifest_path = world_path.join("world.toml");
-        let manifest = WorldManifest::from_file(&manifest_path)?;
-        manifest.validate()?;
-        if !manifest.extends.is_empty() {
-            return Err(WorldForgeError::new(
-                ErrorCode::PackageDependencyMissing,
-                "world inheritance requires a resolved local package; remote dependency resolution is not available",
-            ));
-        }
-        if !manifest.mods.is_empty() {
+        // Resolve the complete local inheritance graph before initializing ECS.
+        let resolved = worldforge_package::resolve_world(world_path)?;
+        if !resolved.effective_mods.is_empty() {
             return Err(WorldForgeError::new(
                 ErrorCode::ModLoadFailed,
                 "manifest-driven mod resolution is not available; load local modules through worldforge-mod-runtime",
             ));
         }
 
-        // Load scenario
         let scenario_path = world_path.join("scenario.toml");
-        let mut scenario = Scenario::from_file(&scenario_path)?;
-        let entities_path = world_path.join("entities.toml");
-        let entities_config = EntitiesConfig::from_file(&entities_path)?;
-        entities_config.validate()?;
-        scenario.validate_against(&manifest, &entities_config)?;
+        let mut scenario = resolved.scenario;
+        let entities_config = resolved.entities;
         scenario.seed = seed;
         if let Some(ticks) = duration_ticks {
             if ticks == 0 {
@@ -265,7 +253,7 @@ impl SimulationRuntime {
         }
 
         // Compute fingerprints
-        let world_fingerprint = worldforge_package::fingerprint_world(world_path)?;
+        let world_fingerprint = resolved.fingerprint;
 
         let scenario_content = std::fs::read_to_string(&scenario_path)
             .map_err(|e| WorldForgeError::new(ErrorCode::ScenarioMissing, e.to_string()))?;

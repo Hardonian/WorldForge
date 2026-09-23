@@ -13,6 +13,28 @@ const WORLD_SYMBOLS = {
     'freight-network': 'FN', 'stress-test': 'ST', 'minimal-world': 'MW',
     'coastal-resilience': 'CR',
 };
+
+const THEME_LABELS = {
+    'cyber-tactical': 'Cyber Tactical',
+    'solaris-gold': 'Solaris Gold',
+    'bio-synthetic': 'Bio Synthetic',
+    'cryo-vector': 'Cryo Vector',
+};
+
+function getWorldFlagSvg(worldId, size = 20) {
+    const s = size;
+    const flags = {
+        'supply-chain': `<svg viewBox="0 0 24 24" width="${s}" height="${s}" class="world-flag-svg" aria-hidden="true"><rect width="24" height="24" rx="4" fill="#0b1322"/><path d="M4 4 L20 4 L20 16 L12 21 L4 16 Z" fill="none" stroke="#67a9ff" stroke-width="1.2"/><circle cx="12" cy="11" r="4.5" fill="none" stroke="#46d29a" stroke-width="1.4" stroke-dasharray="3 1.5"/><circle cx="12" cy="11" r="1.5" fill="#42d3ea"/><path d="M8.5 16.5 L12 19 L15.5 16.5" fill="none" stroke="#f1b96b" stroke-width="1.5" stroke-linecap="round"/></svg>`,
+        'coastal-resilience': `<svg viewBox="0 0 24 24" width="${s}" height="${s}" class="world-flag-svg" aria-hidden="true"><rect width="24" height="24" rx="4" fill="#04121d"/><path d="M12 3 L19 7 L19 14 C19 18 12 21 12 21 C12 21 5 18 5 14 L5 7 Z" fill="none" stroke="#0ea5e9" stroke-width="1.2"/><path d="M7 13 Q9.5 10 12 12.5 Q14.5 15 17 12" fill="none" stroke="#38bdf8" stroke-width="1.6" stroke-linecap="round"/><circle cx="12" cy="7.5" r="1.6" fill="#e0f2fe"/></svg>`,
+        'ecosystem': `<svg viewBox="0 0 24 24" width="${s}" height="${s}" class="world-flag-svg" aria-hidden="true"><rect width="24" height="24" rx="4" fill="#04160c"/><circle cx="12" cy="12" r="8" fill="none" stroke="#10b981" stroke-width="1.2"/><path d="M12 17 C12 12.5 8 10.5 8 7.5 C11 7.5 12 10.5 12 10.5 C12 10.5 13 7.5 16 7.5 C16 10.5 12 12.5 12 17 Z" fill="#46d29a"/><circle cx="12" cy="5.5" r="1.5" fill="#facc15"/></svg>`,
+        'micro-city': `<svg viewBox="0 0 24 24" width="${s}" height="${s}" class="world-flag-svg" aria-hidden="true"><rect width="24" height="24" rx="4" fill="#140c06"/><path d="M5 19 L5 12 L9 9 L15 9 L19 13 L19 19 Z" fill="none" stroke="#f59e0b" stroke-width="1.2"/><rect x="6.5" y="11" width="3" height="8" fill="#fbbf24" fill-opacity="0.6"/><rect x="10.5" y="6" width="3" height="13" fill="#fbbf24"/><rect x="14.5" y="10" width="3" height="9" fill="#fbbf24" fill-opacity="0.6"/><circle cx="12" cy="4.5" r="1.2" fill="#fef08a"/></svg>`,
+        'freight-network': `<svg viewBox="0 0 24 24" width="${s}" height="${s}" class="world-flag-svg" aria-hidden="true"><rect width="24" height="24" rx="4" fill="#081120"/><circle cx="12" cy="12" r="8" fill="none" stroke="#3b82f6" stroke-width="1.2"/><polygon points="12,5 14,10 19,12 14,14 12,19 10,14 5,12 10,10" fill="#f97316"/><circle cx="12" cy="12" r="2" fill="#ffffff"/></svg>`,
+        'stress-test': `<svg viewBox="0 0 24 24" width="${s}" height="${s}" class="world-flag-svg" aria-hidden="true"><rect width="24" height="24" rx="4" fill="#1c0707"/><polygon points="12,3 21,8.5 21,15.5 12,21 3,15.5 3,8.5" fill="none" stroke="#ef4444" stroke-width="1.2"/><path d="M13 5.5 L8 12.5 L12 12.5 L11 18.5 L16 11.5 L12 11.5 Z" fill="#fbbf24"/></svg>`,
+        'minimal-world': `<svg viewBox="0 0 24 24" width="${s}" height="${s}" class="world-flag-svg" aria-hidden="true"><rect width="24" height="24" rx="4" fill="#0f0a1c"/><polygon points="12,4 19,18 5,18" fill="none" stroke="#c084fc" stroke-width="1.3"/><circle cx="12" cy="13" r="2.5" fill="#38bdf8"/></svg>`,
+    };
+    return flags[worldId] || `<svg viewBox="0 0 24 24" width="${s}" height="${s}" class="world-flag-svg" aria-hidden="true"><rect width="24" height="24" rx="4" fill="#090e17"/><circle cx="12" cy="12" r="5" fill="none" stroke="#38bdf8" stroke-width="1.3"/><ellipse cx="12" cy="12" rx="9" ry="3.5" transform="rotate(-28 12 12)" fill="none" stroke="#67a9ff" stroke-width="1.1" stroke-dasharray="2 2"/><circle cx="12" cy="12" r="2" fill="#42d3ea"/></svg>`;
+}
+
 const HISTORY_KEY = 'worldforge.recent-runs.v1';
 const MAX_HISTORY = 7;
 const EVENTS_PAGE_SIZE = 100;
@@ -123,6 +145,15 @@ function bindInteractions() {
     el('capacity-slider').addEventListener('input', updateCapacityLabel);
     el('play-entity-select').addEventListener('change', syncCapacityControl);
     el('apply-capacity').addEventListener('click', applyCapacityDecision);
+    document.querySelectorAll('.preset-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const val = Number(btn.dataset.capacity);
+            el('capacity-slider').value = val;
+            updateCapacityLabel();
+            syncPresetHighlight(val);
+        });
+    });
+    initThemeManager();
     WorldForgeCG.bindControls();
     el('save-close').addEventListener('click', () => dom.saveDialog.close());
     el('save-form').addEventListener('submit', saveCurrentSession);
@@ -157,6 +188,57 @@ function bindInteractions() {
     });
 }
 
+function syncPresetHighlight(val) {
+    const num = Number(val);
+    document.querySelectorAll('.preset-btn').forEach(btn => {
+        btn.classList.toggle('active', Number(btn.dataset.capacity) === num);
+    });
+}
+
+function initThemeManager() {
+    const selector = el('theme-selector');
+    const menuBtn = el('theme-menu-btn');
+    const dropdown = el('theme-dropdown');
+    const label = el('current-theme-label');
+    if (!selector || !menuBtn || !dropdown) return;
+
+    function setTheme(theme) {
+        const validTheme = THEME_LABELS[theme] ? theme : 'cyber-tactical';
+        document.documentElement.setAttribute('data-theme', validTheme);
+        try { localStorage.setItem('worldforge.theme', validTheme); } catch (_) {}
+        if (label) label.textContent = THEME_LABELS[validTheme];
+        document.querySelectorAll('.theme-option').forEach(opt => {
+            opt.classList.toggle('active', opt.dataset.theme === validTheme);
+        });
+    }
+
+    menuBtn.addEventListener('click', e => {
+        e.stopPropagation();
+        const isOpen = !dropdown.classList.contains('hidden');
+        dropdown.classList.toggle('hidden', isOpen);
+        menuBtn.setAttribute('aria-expanded', String(!isOpen));
+    });
+
+    document.querySelectorAll('.theme-option').forEach(opt => {
+        opt.addEventListener('click', () => {
+            setTheme(opt.dataset.theme);
+            dropdown.classList.add('hidden');
+            menuBtn.setAttribute('aria-expanded', 'false');
+        });
+    });
+
+    window.addEventListener('click', e => {
+        if (!selector.contains(e.target)) {
+            dropdown.classList.add('hidden');
+            menuBtn.setAttribute('aria-expanded', 'false');
+        }
+    });
+
+    let savedTheme = 'cyber-tactical';
+    try { savedTheme = localStorage.getItem('worldforge.theme') || 'cyber-tactical'; } catch (_) {}
+    setTheme(savedTheme);
+}
+
 function setEngineStatus(online, label, detail) {
     el('engine-dot').className = `status-dot ${online ? 'online' : 'offline'}`;
     el('engine-label').textContent = label;
@@ -182,7 +264,7 @@ function renderWorldNavigation() {
         button.dataset.world = world.id;
         const icon = document.createElement('span');
         icon.className = 'nav-icon world-symbol';
-        icon.textContent = WORLD_SYMBOLS[world.id] || String(index + 1).padStart(2, '0');
+        icon.innerHTML = getWorldFlagSvg(world.id, 20);
         const copy = document.createElement('span');
         copy.className = 'nav-copy';
         const title = document.createElement('strong');
@@ -294,6 +376,8 @@ function selectWorld(worldId, options = {}) {
     dom.worldTitle.textContent = world.title;
     dom.worldDesc.textContent = world.description || 'A packaged deterministic simulation world.';
     dom.worldMeta.textContent = `v${world.version} · ${world.entityCount} entities · ${world.resourceCount} resources`;
+    const flagBadge = el('world-flag-badge');
+    if (flagBadge) flagBadge.innerHTML = getWorldFlagSvg(worldId, 18);
     if (options.useDefaults) {
         dom.seed.value = world.defaultSeed;
         dom.ticks.value = world.defaultTicks;
@@ -393,6 +477,7 @@ function displayResults(data) {
     renderEvents();
     drawResourceChart(data);
     drawEventDistribution(data);
+    updateVitalityGauge(data);
 }
 
 function resetResults() {
@@ -425,6 +510,57 @@ function resetResults() {
     el('event-empty').classList.remove('hidden');
     clearCanvas('resource-chart');
     clearCanvas('event-chart');
+    updateVitalityGauge(null);
+}
+
+function updateVitalityGauge(data) {
+    const circle = el('vitality-circle');
+    const scoreEl = el('vitality-score');
+    const statusEl = el('vitality-status');
+    if (!circle || !scoreEl || !statusEl) return;
+
+    if (!data) {
+        circle.setAttribute('stroke-dasharray', '100, 100');
+        circle.className = 'vitality-val';
+        scoreEl.textContent = '100%';
+        statusEl.textContent = 'Optimal';
+        return;
+    }
+
+    let score = 100;
+    const objectives = data.objectives || [];
+    if (objectives.length > 0) {
+        let totalProg = 0;
+        let failedCount = 0;
+        objectives.forEach(obj => {
+            const st = (obj.status || '').toLowerCase();
+            if (st === 'passed') totalProg += 1.0;
+            else if (st === 'failed') failedCount++;
+            else totalProg += Math.max(0, Math.min(1, Number(obj.progress) || 0));
+        });
+        const avgProg = totalProg / objectives.length;
+        score = Math.round(avgProg * 100) - (failedCount * 20);
+    }
+
+    // Shortage penalty
+    const events = data.events || state.play.events || [];
+    const recentShortages = events.slice(-25).filter(e => e.type === 'shortage').length;
+    score -= recentShortages * 5;
+
+    score = Math.max(5, Math.min(100, score));
+
+    circle.setAttribute('stroke-dasharray', `${score}, 100`);
+    circle.className = 'vitality-val';
+    if (score < 50) {
+        circle.classList.add('critical');
+        statusEl.textContent = 'Critical';
+    } else if (score < 80) {
+        circle.classList.add('warning');
+        statusEl.textContent = 'Strained';
+    } else {
+        statusEl.textContent = 'Optimal';
+    }
+    scoreEl.textContent = `${score}%`;
 }
 
 function emptyState(mark, title, copy, compact = false) {
@@ -939,13 +1075,16 @@ async function applyCapacityDecision() {
 }
 
 function updateCapacityLabel() {
-    el('capacity-value').textContent = `${el('capacity-slider').value}%`;
+    const val = el('capacity-slider').value;
+    el('capacity-value').textContent = `${val}%`;
+    syncPresetHighlight(val);
 }
 
 function syncCapacityControl() {
     const entity = state.play.data?.entityStates.find(item => item.name === el('play-entity-select').value);
     if (!entity || entity.capacity == null) return;
-    el('capacity-slider').value = Math.round(entity.capacity * 100);
+    const val = Math.round(entity.capacity * 100);
+    el('capacity-slider').value = val;
     updateCapacityLabel();
     WorldForgeCG.setSelectedEntity(el('play-entity-select').value);
 }
@@ -965,6 +1104,7 @@ function renderPlayState() {
     WorldForgeCG.setData(data);
     renderProducerOptions(data.entityStates);
     updatePlayStatus();
+    updateVitalityGauge(data);
 }
 
 function updatePlayStatus() {
@@ -1040,6 +1180,7 @@ function renderProducerOptions(entityStates) {
     }
     if (names.includes(current)) select.value = current;
     if (rebuilt || document.activeElement !== el('capacity-slider')) syncCapacityControl();
+    WorldForgeCG.updateAvatarHero(select.value);
 }
 
 function renderPlayNetwork(data) {
@@ -1625,6 +1766,10 @@ const WorldForgeCG = {
         if (!this.canvas) return;
         this.ctx = this.canvas.getContext('2d');
         this.hud = el('cg-hud-card');
+        this.minimapCanvas = el('cg-minimap');
+        if (this.minimapCanvas) this.minimapCtx = this.minimapCanvas.getContext('2d');
+        this.avatarCanvas = el('entity-avatar-canvas');
+        if (this.avatarCanvas) this.avatarCtx = this.avatarCanvas.getContext('2d');
 
         // Initialize ambient cyber dust particles
         this.ambientDust = Array.from({ length: 45 }, () => ({
@@ -1653,6 +1798,34 @@ const WorldForgeCG = {
     bindEvents() {
         const c = this.canvas;
         if (!c) return;
+
+        // Minimap drag pan
+        if (this.minimapCanvas) {
+            let isMinimapDragging = false;
+            const panFromMinimap = (e) => {
+                const rect = this.minimapCanvas.getBoundingClientRect();
+                const mx = e.clientX - rect.left;
+                const my = e.clientY - rect.top;
+                this.panToMinimapCoord(mx, my);
+            };
+            this.minimapCanvas.addEventListener('pointerdown', e => {
+                if (e.button !== 0) return;
+                isMinimapDragging = true;
+                this.minimapCanvas.setPointerCapture(e.pointerId);
+                panFromMinimap(e);
+            });
+            this.minimapCanvas.addEventListener('pointermove', e => {
+                if (isMinimapDragging) panFromMinimap(e);
+            });
+            const stopMinimapDrag = e => {
+                if (isMinimapDragging) {
+                    isMinimapDragging = false;
+                    try { this.minimapCanvas.releasePointerCapture(e.pointerId); } catch (_) {}
+                }
+            };
+            this.minimapCanvas.addEventListener('pointerup', stopMinimapDrag);
+            this.minimapCanvas.addEventListener('pointercancel', stopMinimapDrag);
+        }
 
         // Pointer / mouse drag
         c.addEventListener('pointerdown', e => {
@@ -1925,6 +2098,12 @@ const WorldForgeCG = {
         if (needsLayout) {
             this.fitView(true);
         }
+
+        if (!this.selectedNodeName && entities.length > 0) {
+            this.setSelectedEntity(entities[0].name);
+        } else if (this.selectedNodeName) {
+            this.updateAvatarHero(this.selectedNodeName);
+        }
     },
 
     computeLayout(entities, links) {
@@ -2053,6 +2232,32 @@ const WorldForgeCG = {
 
     setSelectedEntity(name) {
         this.selectedNodeName = name;
+        this.updateAvatarHero(name);
+    },
+
+    updateAvatarHero(name) {
+        const node = this.nodes.get(name) || (this.nodes.size > 0 ? this.nodes.values().next().value : null);
+        if (!node) return;
+        const nameEl = el('avatar-entity-name');
+        if (nameEl) nameEl.textContent = prettyName(node.name);
+        const archEl = el('avatar-entity-archetype');
+        if (archEl) {
+            archEl.textContent = node.theme.label;
+            archEl.style.color = node.theme.color;
+        }
+        const regEl = el('avatar-entity-region');
+        if (regEl) regEl.textContent = `Sector: ${prettyName(node.region)} · ${node.archetype.toUpperCase()}`;
+        const pipEl = el('avatar-status-pip');
+        if (pipEl) {
+            pipEl.className = 'avatar-status-pip';
+            if (node.capacity > 1.0) {
+                pipEl.classList.add('overdrive');
+            } else if (node.warningPulse > 0.05 || node.capacity === 0) {
+                pipEl.classList.add('warning');
+            } else {
+                pipEl.classList.add('active');
+            }
+        }
     },
 
     getNodeAt(px, py) {
@@ -2213,6 +2418,12 @@ const WorldForgeCG = {
 
         ctx.restore();
         ctx.restore();
+
+        // 7. Tactical Minimap Radar
+        this.renderMinimap(now);
+
+        // 8. Entity Avatar Hero Command Module
+        this.renderAvatar(now);
     },
 
     drawBackground(w, h, now) {
@@ -2729,6 +2940,200 @@ const WorldForgeCG = {
         ctx.beginPath();
         ctx.arc(0, 0, r + 5, 0, Math.PI * 2);
         ctx.stroke();
+        ctx.restore();
+    },
+
+    panToMinimapCoord(mx, my) {
+        if (!this.minimapBounds) return;
+        const { s, midX, midY } = this.minimapBounds;
+        const wx = (mx - 65) / s + midX;
+        const wy = (my - 37.5) / s + midY;
+        this.camera.targetX = -wx * this.camera.zoom;
+        this.camera.targetY = -wy * this.camera.zoom;
+        this.camera.hasInteracted = true;
+    },
+
+    renderMinimap(now) {
+        if (!this.minimapCanvas || !this.minimapCtx) return;
+        const ctx = this.minimapCtx;
+        const w = 130, h = 75;
+        ctx.clearRect(0, 0, w, h);
+
+        const count = this.nodes.size;
+        if (!count) return;
+
+        let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+        this.nodes.forEach(node => {
+            minX = Math.min(minX, node.x);
+            maxX = Math.max(maxX, node.x);
+            minY = Math.min(minY, node.y);
+            maxY = Math.max(maxY, node.y);
+        });
+
+        const pad = 70;
+        minX -= pad; maxX += pad; minY -= pad; maxY += pad;
+        const boxW = Math.max(160, maxX - minX);
+        const boxH = Math.max(90, maxY - minY);
+        const s = Math.min((w - 14) / boxW, (h - 14) / boxH);
+        const midX = (minX + maxX) / 2;
+        const midY = (minY + maxY) / 2;
+
+        this.minimapBounds = { s, midX, midY };
+
+        const toMx = wx => w / 2 + (wx - midX) * s;
+        const toMy = wy => h / 2 + (wy - midY) * s;
+
+        // Draw radar sweep line
+        const sweepLen = 50;
+        const cx = w / 2, cy = h / 2;
+        const sweepGrad = ctx.createLinearGradient(cx, cy, cx + Math.cos(this.radarAngle) * sweepLen, cy + Math.sin(this.radarAngle) * sweepLen);
+        sweepGrad.addColorStop(0, 'rgba(66,211,234,0.18)');
+        sweepGrad.addColorStop(1, 'transparent');
+        ctx.beginPath();
+        ctx.moveTo(cx, cy);
+        ctx.arc(cx, cy, sweepLen, this.radarAngle - 0.45, this.radarAngle);
+        ctx.closePath();
+        ctx.fillStyle = sweepGrad;
+        ctx.fill();
+
+        // Subtle radar range circles
+        ctx.strokeStyle = 'rgba(66,211,234,0.12)';
+        ctx.lineWidth = 1;
+        [16, 32, 48].forEach(r => {
+            ctx.beginPath();
+            ctx.arc(cx, cy, r, 0, Math.PI * 2);
+            ctx.stroke();
+        });
+
+        // Draw links
+        ctx.strokeStyle = 'rgba(103,169,255,0.24)';
+        ctx.lineWidth = 1;
+        this.links.forEach(link => {
+            const from = this.nodes.get(link.from);
+            const to = this.nodes.get(link.to);
+            if (!from || !to) return;
+            ctx.beginPath();
+            ctx.moveTo(toMx(from.x), toMy(from.y));
+            ctx.lineTo(toMx(to.x), toMy(to.y));
+            ctx.stroke();
+        });
+
+        // Draw nodes
+        this.nodes.forEach(node => {
+            const mx = toMx(node.x);
+            const my = toMy(node.y);
+            const isSelected = this.selectedNodeName === node.name;
+
+            if (isSelected) {
+                ctx.beginPath();
+                ctx.arc(mx, my, 4.5, 0, Math.PI * 2);
+                ctx.fillStyle = 'rgba(241,185,107,0.3)';
+                ctx.fill();
+                ctx.strokeStyle = '#f1b96b';
+                ctx.lineWidth = 1.2;
+                ctx.stroke();
+            }
+
+            ctx.beginPath();
+            ctx.arc(mx, my, isSelected ? 2.5 : 1.8, 0, Math.PI * 2);
+            ctx.fillStyle = isSelected ? '#ffffff' : node.theme.color;
+            ctx.fill();
+        });
+
+        // Camera Frustum Box
+        if (this.canvas) {
+            const cw = this.canvas.clientWidth || 800;
+            const ch = this.canvas.clientHeight || 420;
+            const camWx1 = (-cw / 2 - this.camera.x) / this.camera.zoom;
+            const camWy1 = (-ch / 2 - this.camera.y) / this.camera.zoom;
+            const camWx2 = (cw / 2 - this.camera.x) / this.camera.zoom;
+            const camWy2 = (ch / 2 - this.camera.y) / this.camera.zoom;
+
+            const rx1 = Math.max(1, toMx(camWx1));
+            const ry1 = Math.max(1, toMy(camWy1));
+            const rx2 = Math.min(w - 1, toMx(camWx2));
+            const ry2 = Math.min(h - 1, toMy(camWy2));
+
+            const rw = Math.max(6, rx2 - rx1);
+            const rh = Math.max(4, ry2 - ry1);
+
+            ctx.fillStyle = 'rgba(66,211,234,0.12)';
+            ctx.fillRect(rx1, ry1, rw, rh);
+            ctx.strokeStyle = 'rgba(66,211,234,0.85)';
+            ctx.lineWidth = 1.2;
+            ctx.strokeRect(rx1, ry1, rw, rh);
+        }
+    },
+
+    renderAvatar(now) {
+        if (!this.avatarCanvas || !this.avatarCtx) return;
+        const ctx = this.avatarCtx;
+        const w = 56, h = 56;
+        ctx.clearRect(0, 0, w, h);
+
+        const node = this.nodes.get(this.selectedNodeName) || (this.nodes.size > 0 ? this.nodes.values().next().value : null);
+        if (!node) {
+            ctx.fillStyle = '#64748b';
+            ctx.font = '8px monospace';
+            ctx.textAlign = 'center';
+            ctx.fillText('SELECT ENTITY', w / 2, h / 2 + 3);
+            return;
+        }
+
+        const cx = w / 2, cy = h / 2;
+        const themeColor = node.theme.color;
+
+        ctx.save();
+        ctx.translate(cx, cy);
+
+        // Subtle background radial glow
+        const bgGlow = ctx.createRadialGradient(0, 0, 4, 0, 0, 26);
+        bgGlow.addColorStop(0, `${themeColor}33`);
+        bgGlow.addColorStop(1, 'transparent');
+        ctx.beginPath();
+        ctx.arc(0, 0, 26, 0, Math.PI * 2);
+        ctx.fillStyle = bgGlow;
+        ctx.fill();
+
+        // Outer rotating scanner ring with tick marks
+        const rot = (now * 0.001) % (Math.PI * 2);
+        ctx.save();
+        ctx.rotate(rot);
+        ctx.strokeStyle = `${themeColor}66`;
+        ctx.lineWidth = 1.2;
+        ctx.setLineDash([4, 6]);
+        ctx.beginPath();
+        ctx.arc(0, 0, 24, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+
+        // Inner reticle frame
+        ctx.strokeStyle = `${themeColor}aa`;
+        ctx.lineWidth = 1.2;
+        ctx.beginPath();
+        ctx.arc(0, 0, 19, 0, Math.PI * 2);
+        ctx.stroke();
+
+        // 4 Corner HUD brackets
+        const bSize = 4, bDist = 21;
+        ctx.strokeStyle = 'rgba(255,255,255,0.7)';
+        ctx.lineWidth = 1;
+        [[-bDist, -bDist, 1, 1], [bDist, -bDist, -1, 1], [-bDist, bDist, 1, -1], [bDist, bDist, -1, -1]].forEach(([bx, by, dx, dy]) => {
+            ctx.beginPath();
+            ctx.moveTo(bx + dx * bSize, by);
+            ctx.lineTo(bx, by);
+            ctx.lineTo(bx, by + dy * bSize);
+            ctx.stroke();
+        });
+
+        // Procedural animated archetype icon in center
+        this.drawArchetypeGraphic(ctx, node.archetype, themeColor, now, node.capacity);
+
+        // Overdrive sparks if capacity > 1.0
+        if (node.capacity > 1.0) {
+            this.drawOverdriveSparks(ctx, 15, now);
+        }
+
         ctx.restore();
     },
 };
