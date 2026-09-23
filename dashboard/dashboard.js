@@ -1,580 +1,829 @@
-/**
- * World Forge Dashboard — Interactive Simulation Visualizer
- *
- * Loads exported JSON data from `worldforge export` and renders:
- * - Resource flow charts (line chart on canvas)
- * - Entity network graph
- * - Event distribution histogram
- * - Objective status cards
- * - Filterable event log
- * - Verification proof display
- *
- * Works offline — no external charting library required.
- */
+/** World Forge Simulation Studio — dependency-free dashboard client. */
 
-// === World Configurations ===
-const WORLDS = {
-    'supply-chain': {
-        title: 'Supply Chain',
-        desc: 'Three-region supply chain with production, transfer, shortage, and price dynamics',
-        icon: '🏭',
-        entities: ['mine', 'steel-mill', 'factory', 'warehouse', 'city-market'],
-        resources: ['ore', 'steel', 'goods', 'energy', 'money'],
-        links: [
-            { from: 'mine', to: 'steel-mill', resource: 'ore' },
-            { from: 'steel-mill', to: 'factory', resource: 'steel' },
-            { from: 'factory', to: 'warehouse', resource: 'goods' },
-            { from: 'warehouse', to: 'city-market', resource: 'goods' },
-        ],
-    },
-    'ecosystem': {
-        title: 'Ecosystem',
-        desc: 'Predator-prey ecosystem with food web dynamics and environmental carrying capacity',
-        icon: '🌿',
-        entities: ['grassland', 'forest', 'deer-herd', 'wolf-pack', 'river'],
-        resources: ['grass', 'berries', 'deer', 'wolves', 'water', 'sunlight'],
-        links: [
-            { from: 'grassland', to: 'deer-herd', resource: 'grass' },
-            { from: 'forest', to: 'deer-herd', resource: 'berries' },
-            { from: 'deer-herd', to: 'wolf-pack', resource: 'deer' },
-            { from: 'river', to: 'grassland', resource: 'water' },
-            { from: 'river', to: 'forest', resource: 'water' },
-        ],
-    },
-    'micro-city': {
-        title: 'Micro City',
-        desc: 'City-builder with power grid, water systems, and economic growth',
-        icon: '🏙️',
-        entities: ['coal-plant', 'solar-farm', 'water-plant', 'residential-zone', 'commercial-zone', 'farm', 'warehouse'],
-        resources: ['power', 'clean_water', 'food', 'population', 'happiness', 'goods', 'money'],
-        links: [
-            { from: 'coal-plant', to: 'residential-zone', resource: 'power' },
-            { from: 'solar-farm', to: 'residential-zone', resource: 'power' },
-            { from: 'water-plant', to: 'residential-zone', resource: 'clean_water' },
-            { from: 'farm', to: 'residential-zone', resource: 'food' },
-            { from: 'warehouse', to: 'commercial-zone', resource: 'goods' },
-        ],
-    },
-    'freight-network': {
-        title: 'Freight Network',
-        desc: 'Continental freight logistics with warehouses, routes, and delivery deadlines',
-        icon: '🚛',
-        entities: ['port-of-entry', 'coastal-depot', 'midwest-hub', 'mountain-depot', 'east-depot', 'fuel-refinery'],
-        resources: ['containers', 'parcels', 'sorted_parcels', 'delivered', 'fuel', 'crude'],
-        links: [
-            { from: 'port-of-entry', to: 'coastal-depot', resource: 'containers' },
-            { from: 'coastal-depot', to: 'midwest-hub', resource: 'parcels' },
-            { from: 'midwest-hub', to: 'mountain-depot', resource: 'sorted_parcels' },
-            { from: 'midwest-hub', to: 'east-depot', resource: 'sorted_parcels' },
-            { from: 'fuel-refinery', to: 'coastal-depot', resource: 'fuel' },
-        ],
-    },
-    'stress-test': {
-        title: 'Stress Test',
-        desc: '40-entity scale test with dense interconnections',
-        icon: '⚡',
-        entities: ['mine-01', 'smelter-01', 'factory-01', 'warehouse-01', 'city-01'],
-        resources: ['ore', 'steel', 'goods', 'energy', 'food', 'meals'],
-        links: [
-            { from: 'mine-01', to: 'smelter-01', resource: 'ore' },
-            { from: 'smelter-01', to: 'factory-01', resource: 'steel' },
-            { from: 'factory-01', to: 'warehouse-01', resource: 'goods' },
-            { from: 'warehouse-01', to: 'city-01', resource: 'goods' },
-        ],
-    },
+const COLORS = ['#67a9ff', '#42d3ea', '#9b8cff', '#46d29a', '#f1b96b', '#ff6f7c', '#d578ef'];
+const TYPE_COLORS = {
+    production: '#46d29a',
+    transfer: '#67a9ff',
+    shortage: '#ff6f7c',
+    price: '#f1b96b',
+    system: '#9b8cff',
+};
+const WORLD_SYMBOLS = {
+    'supply-chain': 'SC', ecosystem: 'EC', 'micro-city': 'MC',
+    'freight-network': 'FN', 'stress-test': 'ST', 'minimal-world': 'MW',
+};
+const HISTORY_KEY = 'worldforge.recent-runs.v1';
+const MAX_HISTORY = 7;
+const EVENTS_PAGE_SIZE = 100;
+
+const state = {
+    worlds: [],
+    worldId: null,
+    data: null,
+    eventsVisible: EVENTS_PAGE_SIZE,
+    history: loadHistory(),
+    busy: false,
 };
 
-// === Color Palette ===
-const CHART_COLORS = [
-    '#6366f1', '#8b5cf6', '#a78bfa', '#3b82f6', '#06b6d4',
-    '#22c55e', '#eab308', '#f59e0b', '#ef4444', '#ec4899',
-    '#14b8a6', '#f97316', '#84cc16', '#0ea5e9', '#d946ef',
-];
+const el = id => document.getElementById(id);
+const dom = {
+    body: document.body,
+    worldNav: el('world-nav'), worldCount: el('world-count'),
+    worldTitle: el('world-title'), worldDesc: el('world-desc'), worldMeta: el('world-meta'),
+    seed: el('seed-input'), ticks: el('ticks-input'), runForm: el('run-form'), runButton: el('run-btn'), runLabel: el('run-label'),
+    exportButton: el('export-btn'), resourceSelect: el('resource-select'),
+    loading: el('loading-overlay'), loadingTitle: el('loading-title'), loadingCopy: el('loading-copy'),
+    eventLog: el('event-log'), eventFilter: el('log-filter'), eventType: el('log-type-filter'),
+    eventFooter: el('event-footer'), eventCountLabel: el('event-count-label'), loadMore: el('load-more-events'),
+    compareDialog: el('compare-dialog'), benchmarkDialog: el('benchmark-dialog'),
+};
 
-// === State ===
-let currentWorld = 'supply-chain';
-let simulationData = null;
+function currentWorld() {
+    return state.worlds.find(world => world.id === state.worldId) || null;
+}
 
-// === DOM Elements ===
-const runBtn = document.getElementById('run-btn');
-const seedInput = document.getElementById('seed-input');
-const ticksInput = document.getElementById('ticks-input');
-const loadingOverlay = document.getElementById('loading-overlay');
+async function api(path, options = {}) {
+    const response = await fetch(path, options);
+    let payload;
+    try {
+        payload = await response.json();
+    } catch {
+        payload = {};
+    }
+    if (!response.ok) {
+        const error = new Error(payload.error || `Request failed with status ${response.status}`);
+        error.code = payload.errorId || payload.code;
+        throw error;
+    }
+    return payload;
+}
 
-// === Navigation ===
-document.querySelectorAll('.nav-item[data-world]').forEach(btn => {
-    btn.addEventListener('click', () => {
-        document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
-        btn.classList.add('active');
-        currentWorld = btn.dataset.world;
-        switchWorld(currentWorld);
-    });
-});
-
-function switchWorld(worldId) {
-    const world = WORLDS[worldId];
-    if (!world) return;
-
-    document.getElementById('world-title').textContent = world.title;
-    document.getElementById('world-desc').textContent = world.desc;
-
-    // Update resource select
-    const select = document.getElementById('resource-select');
-    select.innerHTML = '<option value="all">All Resources</option>';
-    world.resources.forEach(r => {
-        const opt = document.createElement('option');
-        opt.value = r;
-        opt.textContent = r;
-        select.appendChild(opt);
-    });
-
-    // Draw network
-    drawEntityNetwork(world);
-
-    // Reset stats if no data
-    if (!simulationData || simulationData.world !== worldId) {
-        resetStats();
+async function initialize() {
+    bindInteractions();
+    renderHistory();
+    try {
+        const [health, catalog] = await Promise.all([api('/api/health'), api('/api/worlds')]);
+        setEngineStatus(true, `Engine v${health.engineVersion}`, `${health.worlds} worlds available`);
+        el('footer-version').textContent = `v${health.engineVersion}`;
+        state.worlds = catalog.worlds || [];
+        renderWorldNavigation();
+        if (!state.worlds.length) throw new Error('No packaged worlds were found.');
+        selectWorld(state.worlds[0].id, { useDefaults: true });
+    } catch (error) {
+        setEngineStatus(false, 'Engine offline', 'Dashboard API unavailable');
+        renderCatalogError(error.message);
+        showToast('Could not connect', `${error.message} Start the dashboard through the World Forge CLI.`, 'error');
     }
 }
 
-// === Run Simulation ===
-runBtn.addEventListener('click', () => {
-    runSimulation();
-});
+function bindInteractions() {
+    dom.runForm.addEventListener('submit', event => {
+        event.preventDefault();
+        runSimulation();
+    });
+    dom.exportButton.addEventListener('click', exportCurrentRun);
+    dom.resourceSelect.addEventListener('change', () => state.data && drawResourceChart(state.data));
+    dom.eventFilter.addEventListener('input', resetAndRenderEvents);
+    dom.eventType.addEventListener('change', resetAndRenderEvents);
+    dom.loadMore.addEventListener('click', () => {
+        state.eventsVisible += EVENTS_PAGE_SIZE;
+        renderEvents();
+    });
+    el('nav-compare').addEventListener('click', openComparison);
+    el('nav-benchmark').addEventListener('click', openBenchmark);
+    el('compare-run').addEventListener('click', runComparison);
+    el('benchmark-run').addEventListener('click', runBenchmark);
+    el('clear-history').addEventListener('click', clearHistory);
+    el('menu-button').addEventListener('click', () => toggleSidebar(true));
+    el('sidebar-close').addEventListener('click', () => toggleSidebar(false));
+    el('mobile-backdrop').addEventListener('click', () => toggleSidebar(false));
+    el('val-fingerprint').addEventListener('click', () => copyProof('final'));
+    document.querySelectorAll('[data-proof]').forEach(button => {
+        button.addEventListener('click', () => copyProof(button.dataset.proof));
+    });
+    document.querySelectorAll('.tool-dialog').forEach(dialog => {
+        dialog.addEventListener('click', event => {
+            if (event.target === dialog) dialog.close();
+        });
+    });
+    document.addEventListener('keydown', event => {
+        if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') {
+            event.preventDefault();
+            runSimulation();
+        }
+    });
+    let resizeTimer;
+    window.addEventListener('resize', () => {
+        clearTimeout(resizeTimer);
+        resizeTimer = setTimeout(redrawCharts, 120);
+    });
+}
+
+function setEngineStatus(online, label, detail) {
+    el('engine-dot').className = `status-dot ${online ? 'online' : 'offline'}`;
+    el('engine-label').textContent = label;
+    el('engine-version').textContent = detail;
+}
+
+function renderCatalogError(message) {
+    dom.worldNav.replaceChildren();
+    const empty = document.createElement('p');
+    empty.className = 'sidebar-empty';
+    empty.textContent = message;
+    dom.worldNav.append(empty);
+    dom.worldCount.textContent = '0';
+}
+
+function renderWorldNavigation() {
+    dom.worldNav.replaceChildren();
+    dom.worldCount.textContent = state.worlds.length.toString();
+    state.worlds.forEach((world, index) => {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'nav-item';
+        button.dataset.world = world.id;
+        const icon = document.createElement('span');
+        icon.className = 'nav-icon world-symbol';
+        icon.textContent = WORLD_SYMBOLS[world.id] || String(index + 1).padStart(2, '0');
+        const copy = document.createElement('span');
+        copy.className = 'nav-copy';
+        const title = document.createElement('strong');
+        title.textContent = world.title;
+        const details = document.createElement('small');
+        details.textContent = `${world.entityCount} entities · ${world.resourceCount} resources`;
+        copy.append(title, details);
+        const arrow = document.createElement('span');
+        arrow.className = 'nav-arrow';
+        arrow.setAttribute('aria-hidden', 'true');
+        arrow.textContent = '→';
+        button.append(icon, copy, arrow);
+        button.addEventListener('click', () => {
+            selectWorld(world.id, { useDefaults: true });
+            toggleSidebar(false);
+        });
+        dom.worldNav.append(button);
+    });
+}
+
+function selectWorld(worldId, options = {}) {
+    const world = state.worlds.find(item => item.id === worldId);
+    if (!world) return;
+    state.worldId = worldId;
+    state.data = null;
+    document.querySelectorAll('[data-world]').forEach(button => {
+        const active = button.dataset.world === worldId;
+        button.classList.toggle('active', active);
+        button.setAttribute('aria-current', active ? 'page' : 'false');
+    });
+    dom.worldTitle.textContent = world.title;
+    dom.worldDesc.textContent = world.description || 'A packaged deterministic simulation world.';
+    dom.worldMeta.textContent = `v${world.version} · ${world.entityCount} entities · ${world.resourceCount} resources`;
+    if (options.useDefaults) {
+        dom.seed.value = world.defaultSeed;
+        dom.ticks.value = world.defaultTicks;
+    }
+    fillResourceSelect(world.resources);
+    el('network-meta').textContent = `${world.links.length} link${world.links.length === 1 ? '' : 's'}`;
+    resetResults();
+    drawEntityNetwork(world);
+}
+
+function fillResourceSelect(resources) {
+    dom.resourceSelect.replaceChildren(new Option('All resources', 'all'));
+    resources.forEach(resource => dom.resourceSelect.add(new Option(prettyName(resource), resource)));
+}
+
+function numericInput(input, { min, max, name }) {
+    const value = Number(input.value);
+    if (!Number.isFinite(value) || !Number.isInteger(value) || value < min || value > max) {
+        input.focus();
+        throw new Error(`${name} must be a whole number between ${min.toLocaleString()} and ${max.toLocaleString()}.`);
+    }
+    return value;
+}
 
 async function runSimulation() {
-    const world = WORLDS[currentWorld];
-    if (!world) return;
-
-    const seed = parseInt(seedInput.value) || 42;
-    const ticks = parseInt(ticksInput.value) || 1000;
-
-    // Show loading
-    loadingOverlay.classList.remove('hidden');
-    runBtn.classList.add('running');
-    runBtn.innerHTML = '<span class="spinner-ring" style="width:16px;height:16px;border-width:2px;display:inline-block"></span> Running...';
-
+    if (state.busy || !currentWorld()) return;
+    let seed, ticks;
     try {
-        const response = await fetch('/api/run', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ world: currentWorld, seed, ticks }),
-        });
-        const payload = await response.json();
-        if (!response.ok) throw new Error(payload.error || `Simulation failed (${response.status})`);
-
-        simulationData = payload;
-        WORLDS[currentWorld] = {
-            ...world,
-            title: payload.title || world.title,
-            desc: payload.description || world.desc,
-            entities: payload.entities || world.entities,
-            resources: payload.resources || world.resources,
-            links: payload.links || world.links,
-        };
-        switchWorld(currentWorld);
-        displayResults(simulationData);
-
+        seed = numericInput(dom.seed, { min: 0, max: Number.MAX_SAFE_INTEGER, name: 'Seed' });
+        ticks = numericInput(dom.ticks, { min: 1, max: 1_000_000, name: 'Ticks' });
     } catch (error) {
-        console.error(error);
-        document.getElementById('event-log').innerHTML = '';
-        const message = document.createElement('div');
-        message.className = 'log-empty';
-        message.textContent = `Unable to run: ${error.message}. Start this page with “worldforge dashboard”.`;
-        document.getElementById('event-log').appendChild(message);
+        showToast('Check the run settings', error.message, 'error');
+        return;
+    }
+
+    setMainBusy(true, 'Forging simulation', `Advancing ${ticks.toLocaleString()} deterministic ticks…`);
+    const started = performance.now();
+    try {
+        const data = await api('/api/run', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ world: state.worldId, seed, ticks }),
+        });
+        state.data = data;
+        displayResults(data);
+        addHistory(data, performance.now() - started);
+        showToast('Simulation complete', `${formatNumber(data.totalEvents)} events forged across ${formatNumber(data.ticks)} ticks.`);
+    } catch (error) {
+        showToast('Simulation failed', `${error.code ? `${error.code}: ` : ''}${error.message}`, 'error');
     } finally {
-        loadingOverlay.classList.add('hidden');
-        runBtn.classList.remove('running');
-        runBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M4 2.5v11l9-5.5z"/></svg> Run Simulation';
+        setMainBusy(false);
     }
 }
 
-// === Display Results ===
+function setMainBusy(busy, title = '', copy = '') {
+    state.busy = busy;
+    dom.runButton.disabled = busy;
+    dom.runButton.classList.toggle('running', busy);
+    dom.runLabel.textContent = busy ? 'Running…' : 'Run simulation';
+    dom.loadingTitle.textContent = title;
+    dom.loadingCopy.textContent = copy;
+    dom.loading.classList.toggle('hidden', !busy);
+}
+
 function displayResults(data) {
-    // Stats
-    document.getElementById('val-events').textContent = data.totalEvents.toLocaleString();
-    document.getElementById('val-shortages').textContent = data.shortageEvents.toLocaleString();
-    document.getElementById('val-fingerprint').textContent = data.fingerprints.final;
-    document.getElementById('val-chain').textContent = data.fingerprints.eventChain;
+    const world = currentWorld();
+    if (world) {
+        world.entities = data.entities || world.entities;
+        world.resources = data.resources || world.resources;
+        world.links = data.links || world.links;
+        fillResourceSelect(world.resources);
+        drawEntityNetwork(world);
+    }
+    el('val-events').textContent = formatNumber(data.totalEvents);
+    el('val-shortages').textContent = formatNumber(data.shortageEvents);
+    el('trend-events').textContent = `${formatNumber(data.ticks)} ticks · seed ${data.seed}`;
+    const shortageRate = data.totalEvents ? data.shortageEvents / data.totalEvents * 100 : 0;
+    el('trend-shortages').textContent = `${shortageRate.toFixed(shortageRate < 1 ? 2 : 1)}% of all events`;
+    const fingerprintButton = el('val-fingerprint');
+    fingerprintButton.textContent = shortHash(data.fingerprints.final);
+    fingerprintButton.disabled = false;
+    fingerprintButton.title = `Copy ${data.fingerprints.final}`;
+    el('val-chain').textContent = 'Verified';
+    el('val-chain').classList.add('verified');
+    el('proof-summary').textContent = `${data.meta.runId.slice(0, 8)} · chain intact`;
+    dom.exportButton.disabled = false;
 
-    document.getElementById('trend-events').textContent = `${data.ticks} ticks, seed ${data.seed}`;
-    const shortageRate = data.totalEvents === 0 ? 0 : (data.shortageEvents / data.totalEvents) * 100;
-    document.getElementById('trend-shortages').textContent = `${shortageRate.toFixed(1)}% of events`;
-
-    // Proof
-    document.getElementById('proof-world').textContent = data.fingerprints.world;
-    document.getElementById('proof-initial').textContent = data.fingerprints.initial;
-    document.getElementById('proof-final').textContent = data.fingerprints.final;
-    document.getElementById('proof-chain').textContent = data.fingerprints.eventChain;
-
-    // Charts
+    const passed = data.objectives.filter(objective => objective.status.toLowerCase() === 'passed').length;
+    el('run-banner').classList.add('complete');
+    el('run-banner-title').textContent = `${data.title} completed with a verified proof.`;
+    el('run-banner-copy').textContent = `Run ${data.meta.runId} completed.`;
+    el('objective-summary').textContent = `${passed} of ${data.objectives.length} passed`;
+    renderObjectives(data.objectives);
+    renderProof(data.fingerprints);
+    configureEventTypes(data.eventTypeCounts);
+    state.eventsVisible = EVENTS_PAGE_SIZE;
+    renderEvents();
     drawResourceChart(data);
     drawEventDistribution(data);
-
-    // Objectives
-    displayObjectives(data.objectives);
-
-    // Events
-    displayEventLog(data.events);
 }
 
-// === Resource Flow Chart ===
-function drawResourceChart(data) {
-    const canvas = document.getElementById('resource-chart');
-    const ctx = canvas.getContext('2d');
-    const dpr = window.devicePixelRatio || 1;
+function resetResults() {
+    state.eventsVisible = EVENTS_PAGE_SIZE;
+    ['val-events', 'val-shortages'].forEach(id => el(id).textContent = '—');
+    el('trend-events').textContent = 'Awaiting run';
+    el('trend-shortages').textContent = 'Awaiting run';
+    el('val-fingerprint').textContent = '—';
+    el('val-fingerprint').disabled = true;
+    el('val-chain').textContent = 'Not run';
+    el('val-chain').classList.remove('verified');
+    el('proof-summary').textContent = 'Proof generated on completion';
+    el('run-banner').classList.remove('complete');
+    el('run-banner-title').textContent = 'A reproducible world, down to the event.';
+    el('run-banner-copy').textContent = 'Every result is calculated by the Rust runtime. Run the selected world to reveal resource flows, objectives, event history, and a tamper-evident proof chain.';
+    el('objectives-list').replaceChildren(emptyState('◇', '', 'Objectives will be evaluated across the whole run.', true));
+    el('objective-summary').textContent = 'Not evaluated';
+    el('distribution-meta').textContent = 'No run';
+    dom.eventFilter.value = '';
+    dom.eventType.replaceChildren(new Option('All event types', 'all'));
+    dom.eventLog.replaceChildren(emptyState('⌁', 'No events yet', 'Run a simulation to inspect its chronological audit trail.'));
+    dom.eventFooter.classList.add('hidden');
+    dom.exportButton.disabled = true;
+    document.querySelectorAll('[data-proof]').forEach(button => button.disabled = true);
+    ['proof-world', 'proof-initial', 'proof-final', 'proof-chain'].forEach(id => el(id).textContent = '—');
+    el('verified-chip').classList.remove('verified');
+    el('verified-chip').lastChild.textContent = 'Awaiting run';
+    el('resource-empty').classList.remove('hidden');
+    el('event-empty').classList.remove('hidden');
+    clearCanvas('resource-chart');
+    clearCanvas('event-chart');
+}
 
-    const rect = canvas.parentElement.getBoundingClientRect();
-    canvas.width = (rect.width - 40) * dpr;
-    canvas.height = 280 * dpr;
-    canvas.style.width = (rect.width - 40) + 'px';
-    canvas.style.height = '280px';
-    ctx.scale(dpr, dpr);
-
-    const w = rect.width - 40;
-    const h = 280;
-    const padding = { top: 20, right: 20, bottom: 40, left: 55 };
-    const chartW = w - padding.left - padding.right;
-    const chartH = h - padding.top - padding.bottom;
-
-    ctx.clearRect(0, 0, w, h);
-
-    const world = WORLDS[data.world];
-    const selectedResource = document.getElementById('resource-select').value;
-    const resources = selectedResource === 'all' ? world.resources.slice(0, 6) : [selectedResource];
-
-    // Find data range
-    let maxVal = 0;
-    data.snapshots.forEach(snap => {
-        resources.forEach(r => {
-            if (snap.levels[r] > maxVal) maxVal = snap.levels[r];
-        });
-    });
-    maxVal = Math.ceil(maxVal * 1.1);
-    if (maxVal === 0) maxVal = 100;
-
-    // Grid
-    ctx.strokeStyle = 'rgba(255,255,255,0.04)';
-    ctx.lineWidth = 1;
-    for (let i = 0; i <= 5; i++) {
-        const y = padding.top + (chartH / 5) * i;
-        ctx.beginPath();
-        ctx.moveTo(padding.left, y);
-        ctx.lineTo(padding.left + chartW, y);
-        ctx.stroke();
-
-        ctx.fillStyle = '#475569';
-        ctx.font = '11px "JetBrains Mono"';
-        ctx.textAlign = 'right';
-        ctx.fillText(Math.round(maxVal - (maxVal / 5) * i).toString(), padding.left - 8, y + 4);
+function emptyState(mark, title, copy, compact = false) {
+    const node = document.createElement('div');
+    node.className = `empty-state${compact ? ' compact' : ''}`;
+    const glyph = document.createElement('span');
+    glyph.className = 'empty-mark';
+    glyph.textContent = mark;
+    node.append(glyph);
+    if (title) {
+        const heading = document.createElement('h3');
+        heading.textContent = title;
+        node.append(heading);
     }
+    const paragraph = document.createElement('p');
+    paragraph.textContent = copy;
+    node.append(paragraph);
+    return node;
+}
 
-    // Tick labels
-    const tickStep = Math.max(1, Math.floor(data.snapshots.length / 6));
-    ctx.fillStyle = '#475569';
-    ctx.textAlign = 'center';
-    ctx.font = '11px "JetBrains Mono"';
-    for (let i = 0; i < data.snapshots.length; i += tickStep) {
-        const x = padding.left + (i / (data.snapshots.length - 1 || 1)) * chartW;
-        ctx.fillText(`t${data.snapshots[i].tick}`, x, h - 8);
+function renderObjectives(objectives) {
+    const container = el('objectives-list');
+    container.replaceChildren();
+    if (!objectives.length) {
+        container.append(emptyState('◇', '', 'This scenario has no configured objectives.', true));
+        return;
     }
-
-    // Lines
-    resources.forEach((resource, ri) => {
-        const color = CHART_COLORS[ri % CHART_COLORS.length];
-
-        // Area fill
-        ctx.beginPath();
-        data.snapshots.forEach((snap, i) => {
-            const x = padding.left + (i / (data.snapshots.length - 1 || 1)) * chartW;
-            const y = padding.top + chartH - (snap.levels[resource] || 0) / maxVal * chartH;
-            if (i === 0) ctx.moveTo(x, y);
-            else ctx.lineTo(x, y);
-        });
-        const lastX = padding.left + chartW;
-        ctx.lineTo(lastX, padding.top + chartH);
-        ctx.lineTo(padding.left, padding.top + chartH);
-        ctx.closePath();
-        ctx.fillStyle = color + '10';
-        ctx.fill();
-
-        // Line
-        ctx.beginPath();
-        data.snapshots.forEach((snap, i) => {
-            const x = padding.left + (i / (data.snapshots.length - 1 || 1)) * chartW;
-            const y = padding.top + chartH - (snap.levels[resource] || 0) / maxVal * chartH;
-            if (i === 0) ctx.moveTo(x, y);
-            else ctx.lineTo(x, y);
-        });
-        ctx.strokeStyle = color;
-        ctx.lineWidth = 2;
-        ctx.stroke();
-    });
-
-    // Legend
-    const legendY = h - 4;
-    let legendX = padding.left;
-    ctx.font = '11px Inter';
-    resources.forEach((r, i) => {
-        const color = CHART_COLORS[i % CHART_COLORS.length];
-        ctx.fillStyle = color;
-        ctx.fillRect(legendX, legendY - 8, 12, 3);
-        ctx.fillStyle = '#94a3b8';
-        ctx.textAlign = 'left';
-        ctx.fillText(r, legendX + 16, legendY - 3);
-        legendX += ctx.measureText(r).width + 32;
-    });
-}
-
-// === Entity Network ===
-function drawEntityNetwork(world) {
-    const canvas = document.getElementById('network-chart');
-    const ctx = canvas.getContext('2d');
-    const dpr = window.devicePixelRatio || 1;
-
-    const rect = canvas.parentElement.getBoundingClientRect();
-    const w = Math.min(rect.width - 40, 500);
-    const h = 280;
-    canvas.width = w * dpr;
-    canvas.height = h * dpr;
-    canvas.style.width = w + 'px';
-    canvas.style.height = h + 'px';
-    ctx.scale(dpr, dpr);
-    ctx.clearRect(0, 0, w, h);
-
-    const entities = world.entities;
-    const n = entities.length;
-    const cx = w / 2;
-    const cy = h / 2;
-    const radius = Math.min(w, h) * 0.35;
-
-    // Position entities in a circle
-    const positions = entities.map((_, i) => ({
-        x: cx + radius * Math.cos((2 * Math.PI * i) / n - Math.PI / 2),
-        y: cy + radius * Math.sin((2 * Math.PI * i) / n - Math.PI / 2),
-    }));
-
-    // Draw links
-    world.links.forEach(link => {
-        const fromIdx = entities.indexOf(link.from);
-        const toIdx = entities.indexOf(link.to);
-        if (fromIdx === -1 || toIdx === -1) return;
-
-        const from = positions[fromIdx];
-        const to = positions[toIdx];
-
-        ctx.beginPath();
-        ctx.moveTo(from.x, from.y);
-        ctx.lineTo(to.x, to.y);
-        ctx.strokeStyle = 'rgba(99, 102, 241, 0.3)';
-        ctx.lineWidth = 1.5;
-        ctx.stroke();
-
-        // Arrow
-        const angle = Math.atan2(to.y - from.y, to.x - from.x);
-        const arrowLen = 8;
-        const mx = (from.x + to.x) / 2;
-        const my = (from.y + to.y) / 2;
-        ctx.beginPath();
-        ctx.moveTo(mx, my);
-        ctx.lineTo(mx - arrowLen * Math.cos(angle - 0.4), my - arrowLen * Math.sin(angle - 0.4));
-        ctx.moveTo(mx, my);
-        ctx.lineTo(mx - arrowLen * Math.cos(angle + 0.4), my - arrowLen * Math.sin(angle + 0.4));
-        ctx.strokeStyle = 'rgba(139, 92, 246, 0.5)';
-        ctx.lineWidth = 1.5;
-        ctx.stroke();
-    });
-
-    // Draw nodes
-    positions.forEach((pos, i) => {
-        // Glow
-        const gradient = ctx.createRadialGradient(pos.x, pos.y, 0, pos.x, pos.y, 20);
-        gradient.addColorStop(0, 'rgba(99, 102, 241, 0.2)');
-        gradient.addColorStop(1, 'rgba(99, 102, 241, 0)');
-        ctx.fillStyle = gradient;
-        ctx.beginPath();
-        ctx.arc(pos.x, pos.y, 20, 0, Math.PI * 2);
-        ctx.fill();
-
-        // Node
-        ctx.beginPath();
-        ctx.arc(pos.x, pos.y, 8, 0, Math.PI * 2);
-        ctx.fillStyle = CHART_COLORS[i % CHART_COLORS.length];
-        ctx.fill();
-        ctx.strokeStyle = 'rgba(255,255,255,0.2)';
-        ctx.lineWidth = 1;
-        ctx.stroke();
-
-        // Label
-        ctx.fillStyle = '#cbd5e1';
-        ctx.font = '10px Inter';
-        ctx.textAlign = 'center';
-        const labelY = pos.y > cy ? pos.y + 22 : pos.y - 16;
-        ctx.fillText(entities[i], pos.x, labelY);
-    });
-}
-
-// === Event Distribution ===
-function drawEventDistribution(data) {
-    const canvas = document.getElementById('event-chart');
-    const ctx = canvas.getContext('2d');
-    const dpr = window.devicePixelRatio || 1;
-
-    const rect = canvas.parentElement.getBoundingClientRect();
-    const w = Math.min(rect.width - 40, 500);
-    const h = 280;
-    canvas.width = w * dpr;
-    canvas.height = h * dpr;
-    canvas.style.width = w + 'px';
-    canvas.style.height = h + 'px';
-    ctx.scale(dpr, dpr);
-    ctx.clearRect(0, 0, w, h);
-
-    const types = Object.entries(data.eventTypeCounts);
-    const maxCount = Math.max(1, ...types.map(([, c]) => c));
-    const barW = Math.min(60, (w - 80) / types.length - 16);
-    const padding = { top: 20, bottom: 50, left: 55 };
-    const chartH = h - padding.top - padding.bottom;
-
-    const typeColors = {
-        production: '#22c55e',
-        transfer: '#3b82f6',
-        shortage: '#ef4444',
-        price: '#f59e0b',
-    };
-
-    types.forEach(([type, count], i) => {
-        const barH = (count / maxCount) * chartH;
-        const x = padding.left + i * (barW + 16) + 20;
-        const y = padding.top + chartH - barH;
-        const color = typeColors[type] || CHART_COLORS[i];
-
-        // Bar gradient
-        const grad = ctx.createLinearGradient(x, y, x, y + barH);
-        grad.addColorStop(0, color);
-        grad.addColorStop(1, color + '40');
-        ctx.fillStyle = grad;
-
-        // Rounded bar
-        const r = 4;
-        ctx.beginPath();
-        ctx.moveTo(x + r, y);
-        ctx.lineTo(x + barW - r, y);
-        ctx.quadraticCurveTo(x + barW, y, x + barW, y + r);
-        ctx.lineTo(x + barW, y + barH);
-        ctx.lineTo(x, y + barH);
-        ctx.lineTo(x, y + r);
-        ctx.quadraticCurveTo(x, y, x + r, y);
-        ctx.fill();
-
-        // Count label
-        ctx.fillStyle = '#cbd5e1';
-        ctx.font = '11px "JetBrains Mono"';
-        ctx.textAlign = 'center';
-        ctx.fillText(count.toLocaleString(), x + barW / 2, y - 8);
-
-        // Type label
-        ctx.fillStyle = '#64748b';
-        ctx.font = '11px Inter';
-        ctx.fillText(type, x + barW / 2, h - 16);
-    });
-}
-
-// === Objectives ===
-function displayObjectives(objectives) {
-    const container = document.getElementById('objectives-list');
-    container.innerHTML = '';
-
-    objectives.forEach(obj => {
-        const card = document.createElement('div');
-        const status = obj.status.toLowerCase();
+    objectives.forEach(objective => {
+        const status = objective.status.toLowerCase();
+        const card = document.createElement('article');
         card.className = `objective-card ${status}`;
-        const icon = document.createElement('div');
+        const icon = document.createElement('span');
         icon.className = 'objective-icon';
-        icon.textContent = status === 'passed' ? '✅' : status === 'failed' ? '❌' : '⏳';
-        const name = document.createElement('div');
-        name.className = 'objective-name';
-        name.textContent = `${obj.name}: ${obj.status}`;
-        card.append(icon, name);
-        container.appendChild(card);
+        icon.textContent = status === 'passed' ? '✓' : status === 'failed' ? '×' : '…';
+        const copy = document.createElement('span');
+        copy.className = 'objective-copy';
+        const name = document.createElement('strong');
+        name.textContent = objective.name;
+        const detail = document.createElement('small');
+        detail.textContent = objective.status;
+        copy.append(name, detail);
+        card.append(icon, copy);
+        container.append(card);
     });
 }
 
-// === Event Log ===
-function displayEventLog(events) {
-    const container = document.getElementById('event-log');
-    container.innerHTML = '';
+function renderProof(fingerprints) {
+    const mapping = { world: 'proof-world', initial: 'proof-initial', final: 'proof-final', eventChain: 'proof-chain' };
+    Object.entries(mapping).forEach(([key, id]) => {
+        el(id).textContent = shortHash(fingerprints[key], 18);
+        const button = document.querySelector(`[data-proof="${key}"]`);
+        button.disabled = false;
+        button.title = fingerprints[key];
+    });
+    const chip = el('verified-chip');
+    chip.classList.add('verified');
+    chip.lastChild.textContent = 'Chain verified';
+}
 
-    const displayEvents = events.slice(0, 200);
-    displayEvents.forEach(evt => {
-        const entry = document.createElement('div');
-        entry.className = 'log-entry';
+function configureEventTypes(counts) {
+    const selected = dom.eventType.value;
+    dom.eventType.replaceChildren(new Option('All event types', 'all'));
+    Object.keys(counts).filter(type => counts[type] > 0).forEach(type => {
+        dom.eventType.add(new Option(`${prettyName(type)} (${formatNumber(counts[type])})`, type));
+    });
+    if ([...dom.eventType.options].some(option => option.value === selected)) dom.eventType.value = selected;
+}
+
+function resetAndRenderEvents() {
+    state.eventsVisible = EVENTS_PAGE_SIZE;
+    renderEvents();
+}
+
+function filteredEvents() {
+    if (!state.data) return [];
+    const query = dom.eventFilter.value.trim().toLowerCase();
+    const type = dom.eventType.value;
+    return state.data.events.filter(event => {
+        const matchesType = type === 'all' || event.type === type;
+        const haystack = `${event.tick} ${event.type} ${event.entity} ${event.resource} ${event.summary}`.toLowerCase();
+        return matchesType && (!query || haystack.includes(query));
+    });
+}
+
+function renderEvents() {
+    const events = filteredEvents();
+    dom.eventLog.replaceChildren();
+    if (!events.length) {
+        dom.eventLog.append(emptyState('⌕', 'No matching events', state.data ? 'Change the search or event type filter.' : 'Run a simulation to inspect events.'));
+        dom.eventFooter.classList.add('hidden');
+        return;
+    }
+    events.slice(0, state.eventsVisible).forEach(event => {
+        const row = document.createElement('div');
+        row.className = 'log-entry';
         const tick = document.createElement('span');
         tick.className = 'log-tick';
-        tick.textContent = `t${evt.tick}`;
+        tick.textContent = `t${formatNumber(event.tick)}`;
         const type = document.createElement('span');
-        type.className = `log-type ${evt.type}`;
-        type.textContent = evt.type;
+        type.className = `log-type ${event.type}`;
+        type.textContent = event.type;
         const detail = document.createElement('span');
         detail.className = 'log-detail';
-        detail.textContent = evt.summary || `${evt.entity} — ${evt.resource} ×${evt.amount}`;
-        entry.append(tick, type, detail);
-        container.appendChild(entry);
+        detail.textContent = event.summary || `${event.entity} · ${event.resource}`;
+        detail.title = detail.textContent;
+        const amount = document.createElement('span');
+        amount.className = 'log-amount';
+        amount.textContent = event.amount ? formatDecimal(event.amount) : '—';
+        row.append(tick, type, detail, amount);
+        dom.eventLog.append(row);
     });
+    dom.eventFooter.classList.remove('hidden');
+    dom.eventCountLabel.textContent = `Showing ${Math.min(events.length, state.eventsVisible).toLocaleString()} of ${events.length.toLocaleString()} matching events`;
+    dom.loadMore.classList.toggle('hidden', state.eventsVisible >= events.length);
+}
 
-    if (events.length > 200) {
-        const more = document.createElement('div');
-        more.className = 'log-empty';
-        more.textContent = `... and ${events.length - 200} more events`;
-        container.appendChild(more);
+function exportCurrentRun() {
+    if (!state.data) return;
+    const body = JSON.stringify(state.data, null, 2);
+    const url = URL.createObjectURL(new Blob([body], { type: 'application/json' }));
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = `${state.data.world}-seed-${state.data.seed}-${state.data.ticks}-ticks.json`;
+    document.body.append(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(url);
+    showToast('Run exported', 'The canonical simulation document was saved as JSON.');
+}
+
+async function copyProof(key) {
+    if (!state.data?.fingerprints?.[key]) return;
+    try {
+        await navigator.clipboard.writeText(state.data.fingerprints[key]);
+        showToast('Fingerprint copied', `${prettyName(key)} is ready to paste.`);
+    } catch {
+        showToast('Copy unavailable', 'Your browser did not grant clipboard access.', 'error');
     }
 }
 
-function resetStats() {
-    ['val-events', 'val-shortages', 'val-fingerprint', 'val-chain'].forEach(id => {
-        document.getElementById(id).textContent = '—';
+function addHistory(data, durationMs) {
+    state.history.unshift({
+        world: data.world, title: data.title, seed: data.seed, ticks: data.ticks,
+        events: data.totalEvents, hash: data.fingerprints.final, durationMs,
+        timestamp: Date.now(),
     });
-    ['proof-world', 'proof-initial', 'proof-final', 'proof-chain'].forEach(id => {
-        document.getElementById(id).textContent = '—';
-    });
-    document.getElementById('objectives-list').innerHTML = '<div class="objective-card pending"><div class="objective-icon">⏳</div><div class="objective-name">Awaiting simulation...</div></div>';
-    document.getElementById('event-log').innerHTML = '<div class="log-empty">Run a simulation to see events</div>';
+    state.history = state.history.slice(0, MAX_HISTORY);
+    saveHistory();
+    renderHistory();
 }
 
-// === Event Filtering ===
-document.getElementById('log-filter').addEventListener('input', (e) => {
-    const filter = e.target.value.toLowerCase();
-    document.querySelectorAll('.log-entry').forEach(entry => {
-        entry.style.display = entry.textContent.toLowerCase().includes(filter) ? '' : 'none';
+function loadHistory() {
+    try {
+        const history = JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]');
+        return Array.isArray(history) ? history.slice(0, MAX_HISTORY) : [];
+    } catch { return []; }
+}
+
+function saveHistory() {
+    try { localStorage.setItem(HISTORY_KEY, JSON.stringify(state.history)); } catch { /* private mode */ }
+}
+
+function renderHistory() {
+    const container = el('recent-runs');
+    container.replaceChildren();
+    if (!state.history.length) {
+        const empty = document.createElement('p');
+        empty.className = 'sidebar-empty';
+        empty.textContent = 'Completed runs appear here.';
+        container.append(empty);
+        return;
+    }
+    state.history.forEach(run => {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'recent-run';
+        const dot = document.createElement('span'); dot.className = 'recent-run-dot';
+        const copy = document.createElement('span'); copy.className = 'recent-run-copy';
+        const title = document.createElement('strong'); title.textContent = run.title;
+        const meta = document.createElement('small'); meta.textContent = `seed ${run.seed} · ${formatNumber(run.events)} events`;
+        copy.append(title, meta);
+        const time = document.createElement('span'); time.className = 'recent-run-time'; time.textContent = relativeTime(run.timestamp);
+        button.append(dot, copy, time);
+        button.addEventListener('click', () => {
+            if (state.worlds.some(world => world.id === run.world)) {
+                selectWorld(run.world);
+                dom.seed.value = run.seed;
+                dom.ticks.value = run.ticks;
+                toggleSidebar(false);
+                showToast('Run settings restored', 'Press Run simulation to reproduce this result.');
+            }
+        });
+        container.append(button);
     });
-});
+}
 
-document.getElementById('log-type-filter').addEventListener('change', (e) => {
-    const type = e.target.value;
-    document.querySelectorAll('.log-entry').forEach(entry => {
-        const entryType = entry.querySelector('.log-type').textContent;
-        entry.style.display = (type === 'all' || entryType === type) ? '' : 'none';
+function clearHistory() {
+    state.history = [];
+    saveHistory();
+    renderHistory();
+    showToast('History cleared', 'Saved run summaries were removed from this browser.');
+}
+
+function openComparison() {
+    if (!currentWorld()) return;
+    el('compare-seed-a').value = dom.seed.value;
+    el('compare-seed-b').value = Number(dom.seed.value || 42) + 1;
+    el('compare-ticks').value = dom.ticks.value;
+    dom.compareDialog.showModal();
+}
+
+async function runComparison() {
+    let seedA, seedB, ticks;
+    try {
+        seedA = numericInput(el('compare-seed-a'), { min: 0, max: Number.MAX_SAFE_INTEGER, name: 'Baseline seed' });
+        seedB = numericInput(el('compare-seed-b'), { min: 0, max: Number.MAX_SAFE_INTEGER, name: 'Candidate seed' });
+        ticks = numericInput(el('compare-ticks'), { min: 1, max: 1_000_000, name: 'Ticks' });
+    } catch (error) {
+        showToast('Check comparison settings', error.message, 'error'); return;
+    }
+    const button = el('compare-run');
+    setButtonBusy(button, true, 'Comparing…');
+    const results = el('compare-results');
+    results.replaceChildren(emptyState('◌', 'Running both simulations', 'The server is calculating two complete proof chains.'));
+    try {
+        const request = seed => api('/api/run', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ world: state.worldId, seed, ticks }) });
+        const [a, b] = await Promise.all([request(seedA), request(seedB)]);
+        renderComparison(a, b);
+    } catch (error) {
+        results.replaceChildren(emptyState('!', 'Comparison failed', error.message));
+    } finally { setButtonBusy(button, false, 'Compare runs'); }
+}
+
+function renderComparison(a, b) {
+    const results = el('compare-results');
+    results.replaceChildren();
+    const heading = document.createElement('div'); heading.className = 'result-heading';
+    const title = document.createElement('strong'); title.textContent = `${a.title} · ${formatNumber(a.ticks)} ticks`;
+    const detail = document.createElement('span'); detail.textContent = 'Engine-calculated results';
+    heading.append(title, detail);
+    const grid = document.createElement('div'); grid.className = 'comparison-grid';
+    grid.append(comparisonColumn('Baseline', a), comparisonColumn('Candidate', b));
+    const same = a.fingerprints.final === b.fingerprints.final && a.fingerprints.eventChain === b.fingerprints.eventChain;
+    const verdict = document.createElement('div'); verdict.className = 'comparison-verdict';
+    const mark = document.createElement('span'); mark.className = `verdict-mark${same ? '' : ' different'}`; mark.textContent = same ? '✓' : '≠';
+    const copy = document.createElement('span');
+    copy.textContent = same
+        ? 'The final state and event chain match exactly. Reproducibility verified.'
+        : `The seeds produced different valid outcomes: ${signedDifference(b.totalEvents - a.totalEvents)} events and ${signedDifference(b.shortageEvents - a.shortageEvents)} shortages.`;
+    verdict.append(mark, copy);
+    results.append(heading, grid, verdict);
+}
+
+function comparisonColumn(label, data) {
+    const column = document.createElement('section'); column.className = 'comparison-run';
+    const heading = document.createElement('h3'); heading.textContent = `${label} · seed ${data.seed}`;
+    const list = document.createElement('div'); list.className = 'metric-list';
+    [
+        ['Events', formatNumber(data.totalEvents)],
+        ['Shortages', formatNumber(data.shortageEvents)],
+        ['Objectives', `${data.objectives.filter(item => item.status === 'Passed').length}/${data.objectives.length} passed`],
+        ['Final state', shortHash(data.fingerprints.final, 16)],
+        ['Event chain', shortHash(data.fingerprints.eventChain, 16)],
+    ].forEach(([name, value]) => {
+        const row = document.createElement('div'); row.className = 'metric-row';
+        const key = document.createElement('span'); key.textContent = name;
+        const val = document.createElement('strong'); val.textContent = value; val.title = value;
+        row.append(key, val); list.append(row);
     });
-});
+    column.append(heading, list); return column;
+}
 
-// === Resource Select ===
-document.getElementById('resource-select').addEventListener('change', () => {
-    if (simulationData) drawResourceChart(simulationData);
-});
+function openBenchmark() {
+    if (!currentWorld()) return;
+    el('benchmark-ticks').value = dom.ticks.value;
+    dom.benchmarkDialog.showModal();
+}
 
-// === Window Resize ===
-let resizeTimeout;
-window.addEventListener('resize', () => {
-    clearTimeout(resizeTimeout);
-    resizeTimeout = setTimeout(() => {
-        const world = WORLDS[currentWorld];
-        if (world) drawEntityNetwork(world);
-        if (simulationData) {
-            drawResourceChart(simulationData);
-            drawEventDistribution(simulationData);
+async function runBenchmark() {
+    let ticks, reps;
+    try {
+        ticks = numericInput(el('benchmark-ticks'), { min: 1, max: 1_000_000, name: 'Ticks' });
+        reps = numericInput(el('benchmark-reps'), { min: 1, max: 20, name: 'Repetitions' });
+    } catch (error) {
+        showToast('Check benchmark settings', error.message, 'error'); return;
+    }
+    const button = el('benchmark-run');
+    setButtonBusy(button, true, 'Benchmarking…');
+    const results = el('benchmark-results');
+    results.replaceChildren(emptyState('◌', 'Benchmark in progress', `Running ${reps} complete simulations on the server.`));
+    try {
+        const report = await api('/api/benchmark', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ world: state.worldId, ticks, reps }),
+        });
+        renderBenchmark(report);
+    } catch (error) {
+        results.replaceChildren(emptyState('!', 'Benchmark failed', error.message));
+    } finally { setButtonBusy(button, false, 'Start benchmark'); }
+}
+
+function renderBenchmark(report) {
+    const results = el('benchmark-results'); results.replaceChildren();
+    const heading = document.createElement('div'); heading.className = 'result-heading';
+    const title = document.createElement('strong'); title.textContent = `${currentWorld()?.title || report.world} performance`;
+    const detail = document.createElement('span'); detail.textContent = `${report.reps} runs · ${formatNumber(report.ticks)} ticks each`;
+    heading.append(title, detail);
+    const kpis = document.createElement('div'); kpis.className = 'benchmark-kpis';
+    [
+        ['Average', `${formatDecimal(report.averageMs, 2)} ms`],
+        ['Range', `${formatDecimal(report.minMs, 1)}–${formatDecimal(report.maxMs, 1)} ms`],
+        ['Ticks / sec', compactNumber(report.ticksPerSecond)],
+        ['Events / sec', compactNumber(report.eventsPerSecond)],
+    ].forEach(([name, value]) => {
+        const card = document.createElement('div'); card.className = 'benchmark-kpi';
+        const label = document.createElement('span'); label.textContent = name;
+        const metric = document.createElement('strong'); metric.textContent = value;
+        card.append(label, metric); kpis.append(card);
+    });
+    const chart = document.createElement('div'); chart.className = 'sample-bars';
+    const max = Math.max(...report.samplesMs, 1);
+    report.samplesMs.forEach((sample, index) => {
+        const wrap = document.createElement('div'); wrap.className = 'sample-bar-wrap';
+        const bar = document.createElement('div'); bar.className = 'sample-bar';
+        bar.style.height = `${Math.max(4, sample / max * 100)}%`;
+        bar.dataset.value = `${formatDecimal(sample, 1)}ms`;
+        const label = document.createElement('small'); label.textContent = `Run ${index + 1}`;
+        wrap.append(bar, label); chart.append(wrap);
+    });
+    results.append(heading, kpis, chart);
+}
+
+function setButtonBusy(button, busy, label) {
+    button.disabled = busy;
+    button.textContent = label;
+}
+
+/* Canvas charts */
+function prepareCanvas(id, height) {
+    const canvas = el(id);
+    const parent = canvas.parentElement;
+    const width = Math.max(260, parent.clientWidth - 36);
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    canvas.width = Math.floor(width * dpr);
+    canvas.height = Math.floor(height * dpr);
+    canvas.style.width = `${width}px`;
+    canvas.style.height = `${height}px`;
+    const ctx = canvas.getContext('2d');
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, width, height);
+    return { canvas, ctx, width, height };
+}
+
+function clearCanvas(id) {
+    const canvas = el(id);
+    canvas.getContext('2d').clearRect(0, 0, canvas.width, canvas.height);
+}
+
+function drawResourceChart(data) {
+    const { ctx, width: w, height: h } = prepareCanvas('resource-chart', 300);
+    el('resource-empty').classList.toggle('hidden', Boolean(data.snapshots?.length));
+    if (!data.snapshots?.length) return;
+    const selected = dom.resourceSelect.value;
+    const allResources = data.resources || currentWorld()?.resources || [];
+    const resources = selected === 'all' ? allResources.slice(0, 6) : [selected];
+    const pad = { top: 28, right: 18, bottom: 50, left: 52 };
+    const cw = w - pad.left - pad.right, ch = h - pad.top - pad.bottom;
+    let maxValue = 0;
+    data.snapshots.forEach(snapshot => resources.forEach(resource => {
+        maxValue = Math.max(maxValue, Number(snapshot.levels[resource]) || 0);
+    }));
+    maxValue = niceMaximum(maxValue);
+
+    ctx.lineWidth = 1;
+    ctx.font = '10px ui-monospace, monospace';
+    for (let i = 0; i <= 4; i++) {
+        const y = pad.top + ch * i / 4;
+        ctx.strokeStyle = 'rgba(163,184,214,.09)';
+        ctx.beginPath(); ctx.moveTo(pad.left, y); ctx.lineTo(pad.left + cw, y); ctx.stroke();
+        ctx.fillStyle = '#64738a'; ctx.textAlign = 'right';
+        ctx.fillText(compactNumber(maxValue * (1 - i / 4)), pad.left - 8, y + 3);
+    }
+    const labels = Math.min(6, data.snapshots.length);
+    for (let i = 0; i < labels; i++) {
+        const index = Math.round(i * (data.snapshots.length - 1) / Math.max(1, labels - 1));
+        const x = pad.left + cw * index / Math.max(1, data.snapshots.length - 1);
+        ctx.fillStyle = '#64738a'; ctx.textAlign = 'center';
+        ctx.fillText(`t${compactNumber(data.snapshots[index].tick)}`, x, h - 17);
+    }
+    resources.forEach((resource, resourceIndex) => {
+        const color = COLORS[resourceIndex % COLORS.length];
+        const points = data.snapshots.map((snapshot, index) => ({
+            x: pad.left + cw * index / Math.max(1, data.snapshots.length - 1),
+            y: pad.top + ch - (Number(snapshot.levels[resource]) || 0) / maxValue * ch,
+        }));
+        const gradient = ctx.createLinearGradient(0, pad.top, 0, pad.top + ch);
+        gradient.addColorStop(0, `${color}27`); gradient.addColorStop(1, `${color}00`);
+        ctx.beginPath(); points.forEach((point, index) => index ? ctx.lineTo(point.x, point.y) : ctx.moveTo(point.x, point.y));
+        ctx.lineTo(points.at(-1).x, pad.top + ch); ctx.lineTo(points[0].x, pad.top + ch); ctx.closePath();
+        ctx.fillStyle = gradient; ctx.fill();
+        ctx.beginPath(); points.forEach((point, index) => index ? ctx.lineTo(point.x, point.y) : ctx.moveTo(point.x, point.y));
+        ctx.strokeStyle = color; ctx.lineWidth = 1.7; ctx.lineJoin = 'round'; ctx.stroke();
+    });
+    let legendX = pad.left;
+    ctx.font = '10px ui-sans-serif, sans-serif';
+    resources.forEach((resource, index) => {
+        const labelWidth = ctx.measureText(prettyName(resource)).width + 28;
+        if (legendX + labelWidth > w - pad.right) return;
+        ctx.fillStyle = COLORS[index % COLORS.length]; ctx.fillRect(legendX, 5, 12, 2);
+        ctx.fillStyle = '#93a1b5'; ctx.textAlign = 'left'; ctx.fillText(prettyName(resource), legendX + 17, 9);
+        legendX += labelWidth;
+    });
+}
+
+function drawEntityNetwork(world) {
+    if (!world) return;
+    const { ctx, width: w, height: h } = prepareCanvas('network-chart', 260);
+    const entities = world.entities || [], links = world.links || [];
+    if (!entities.length) return;
+    const cx = w / 2, cy = h / 2;
+    const radius = Math.max(58, Math.min(w * .34, h * .34));
+    const positions = entities.map((_, index) => ({
+        x: cx + radius * Math.cos(index / entities.length * Math.PI * 2 - Math.PI / 2),
+        y: cy + radius * Math.sin(index / entities.length * Math.PI * 2 - Math.PI / 2),
+    }));
+    links.forEach(link => {
+        const fromIndex = entities.indexOf(link.from), toIndex = entities.indexOf(link.to);
+        if (fromIndex < 0 || toIndex < 0) return;
+        const from = positions[fromIndex], to = positions[toIndex];
+        const gradient = ctx.createLinearGradient(from.x, from.y, to.x, to.y);
+        gradient.addColorStop(0, 'rgba(103,169,255,.18)'); gradient.addColorStop(1, 'rgba(66,211,234,.48)');
+        ctx.beginPath(); ctx.moveTo(from.x, from.y); ctx.lineTo(to.x, to.y); ctx.strokeStyle = gradient; ctx.lineWidth = 1; ctx.stroke();
+        const angle = Math.atan2(to.y - from.y, to.x - from.x), mx = (from.x + to.x) / 2, my = (from.y + to.y) / 2;
+        ctx.beginPath(); ctx.moveTo(mx, my); ctx.lineTo(mx - 5 * Math.cos(angle - .45), my - 5 * Math.sin(angle - .45)); ctx.lineTo(mx - 5 * Math.cos(angle + .45), my - 5 * Math.sin(angle + .45)); ctx.closePath();
+        ctx.fillStyle = 'rgba(66,211,234,.65)'; ctx.fill();
+    });
+    positions.forEach((position, index) => {
+        const glow = ctx.createRadialGradient(position.x, position.y, 1, position.x, position.y, 16);
+        glow.addColorStop(0, `${COLORS[index % COLORS.length]}55`); glow.addColorStop(1, `${COLORS[index % COLORS.length]}00`);
+        ctx.beginPath(); ctx.arc(position.x, position.y, 16, 0, Math.PI * 2); ctx.fillStyle = glow; ctx.fill();
+        ctx.beginPath(); ctx.arc(position.x, position.y, entities.length > 20 ? 3.2 : 5, 0, Math.PI * 2); ctx.fillStyle = COLORS[index % COLORS.length]; ctx.fill();
+        if (entities.length <= 14) {
+            ctx.fillStyle = '#9aa8bb'; ctx.font = '9px ui-sans-serif, sans-serif'; ctx.textAlign = 'center';
+            ctx.fillText(entities[index], position.x, position.y > cy ? position.y + 18 : position.y - 13);
         }
-    }, 150);
-});
+    });
+}
 
-// === Initialize ===
-switchWorld(currentWorld);
+function drawEventDistribution(data) {
+    const { ctx, width: w, height: h } = prepareCanvas('event-chart', 260);
+    const entries = Object.entries(data.eventTypeCounts || {}).filter(([, count]) => count > 0);
+    el('event-empty').classList.toggle('hidden', Boolean(entries.length));
+    el('distribution-meta').textContent = `${entries.length} categor${entries.length === 1 ? 'y' : 'ies'}`;
+    if (!entries.length) return;
+    const pad = { top: 28, right: 16, bottom: 42, left: 38 };
+    const cw = w - pad.left - pad.right, ch = h - pad.top - pad.bottom;
+    const max = Math.max(...entries.map(([, count]) => count), 1);
+    const slot = cw / entries.length, barWidth = Math.min(48, slot * .55);
+    ctx.strokeStyle = 'rgba(163,184,214,.09)'; ctx.beginPath(); ctx.moveTo(pad.left, pad.top + ch); ctx.lineTo(pad.left + cw, pad.top + ch); ctx.stroke();
+    entries.forEach(([type, count], index) => {
+        const height = count / max * ch, x = pad.left + slot * index + (slot - barWidth) / 2, y = pad.top + ch - height;
+        const color = TYPE_COLORS[type] || COLORS[index % COLORS.length];
+        const gradient = ctx.createLinearGradient(0, y, 0, pad.top + ch);
+        gradient.addColorStop(0, color); gradient.addColorStop(1, `${color}35`);
+        roundRect(ctx, x, y, barWidth, Math.max(2, height), 5); ctx.fillStyle = gradient; ctx.fill();
+        ctx.fillStyle = '#b7c1cf'; ctx.font = '10px ui-monospace, monospace'; ctx.textAlign = 'center'; ctx.fillText(compactNumber(count), x + barWidth / 2, y - 8);
+        ctx.fillStyle = '#718097'; ctx.font = '9px ui-sans-serif, sans-serif'; ctx.fillText(prettyName(type), x + barWidth / 2, h - 16);
+    });
+}
+
+function roundRect(ctx, x, y, width, height, radius) {
+    const r = Math.min(radius, width / 2, height / 2);
+    ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + width, y, x + width, y + height, r); ctx.arcTo(x + width, y + height, x, y + height, r); ctx.arcTo(x, y + height, x, y, r); ctx.arcTo(x, y, x + width, y, r); ctx.closePath();
+}
+
+function redrawCharts() {
+    const world = currentWorld();
+    if (world) drawEntityNetwork(world);
+    if (state.data) {
+        drawResourceChart(state.data);
+        drawEventDistribution(state.data);
+    }
+}
+
+/* Small utilities */
+function toggleSidebar(open) {
+    dom.body.classList.toggle('sidebar-open', open);
+    el('menu-button').setAttribute('aria-expanded', String(open));
+}
+
+function showToast(title, copy, type = 'success') {
+    const toast = document.createElement('div'); toast.className = `toast ${type}`;
+    const mark = document.createElement('span'); mark.className = 'toast-mark'; mark.textContent = type === 'error' ? '!' : '✓';
+    const body = document.createElement('div');
+    const heading = document.createElement('strong'); heading.textContent = title;
+    const paragraph = document.createElement('p'); paragraph.textContent = copy;
+    body.append(heading, paragraph); toast.append(mark, body); el('toast-region').append(toast);
+    setTimeout(() => toast.remove(), 4200);
+}
+
+function formatNumber(value) { return Number(value || 0).toLocaleString(); }
+function formatDecimal(value, digits = 2) { return Number(value || 0).toLocaleString(undefined, { maximumFractionDigits: digits }); }
+function compactNumber(value) { return Intl.NumberFormat(undefined, { notation: 'compact', maximumFractionDigits: 1 }).format(Number(value || 0)); }
+function prettyName(value) { return String(value).replace(/([a-z])([A-Z])/g, '$1 $2').replace(/[_-]/g, ' ').replace(/\b\w/g, char => char.toUpperCase()); }
+function shortHash(value, length = 12) { return value ? `${value.slice(0, length)}…${value.slice(-4)}` : '—'; }
+function signedDifference(value) { return `${value > 0 ? '+' : ''}${formatNumber(value)}`; }
+function niceMaximum(value) {
+    if (!value) return 100;
+    const magnitude = 10 ** Math.floor(Math.log10(value));
+    return Math.ceil(value / magnitude) * magnitude;
+}
+function relativeTime(timestamp) {
+    const seconds = Math.max(0, Math.round((Date.now() - timestamp) / 1000));
+    if (seconds < 60) return 'now';
+    if (seconds < 3600) return `${Math.floor(seconds / 60)}m`;
+    if (seconds < 86400) return `${Math.floor(seconds / 3600)}h`;
+    return `${Math.floor(seconds / 86400)}d`;
+}
+
+initialize();

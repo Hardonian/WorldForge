@@ -1,230 +1,258 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>World Forge — Simulation Dashboard</title>
-    <meta name="description" content="Visualize, analyze, and compare World Forge simulation runs">
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="dashboard.css">
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#080b12">
+    <meta name="description" content="Run, inspect, benchmark, and verify deterministic World Forge simulations.">
+    <title>World Forge — Simulation Studio</title>
+    <link rel="stylesheet" href="/dashboard.css">
 </head>
 <body>
+    <a class="skip-link" href="#dashboard-grid">Skip to simulation results</a>
+
     <div id="app">
-        <!-- Sidebar -->
-        <nav id="sidebar">
+        <div class="mobile-backdrop" id="mobile-backdrop" aria-hidden="true"></div>
+        <aside id="sidebar" aria-label="World Forge navigation">
             <div class="sidebar-brand">
-                <div class="brand-icon">
-                    <svg viewBox="0 0 32 32" fill="none">
-                        <path d="M16 2L4 9v14l12 7 12-7V9L16 2z" fill="url(#brand-grad)" opacity="0.15"/>
-                        <path d="M16 2L4 9v14l12 7 12-7V9L16 2z" stroke="url(#brand-grad)" stroke-width="1.5" fill="none"/>
-                        <path d="M16 9l-6 3.5v7L16 23l6-3.5v-7L16 9z" fill="url(#brand-grad)" opacity="0.3"/>
-                        <path d="M16 9l-6 3.5v7L16 23l6-3.5v-7L16 9z" stroke="url(#brand-grad)" stroke-width="1" fill="none"/>
-                        <circle cx="16" cy="16" r="2" fill="url(#brand-grad)"/>
-                        <defs>
-                            <linearGradient id="brand-grad" x1="4" y1="2" x2="28" y2="30">
-                                <stop offset="0%" stop-color="#6366f1"/>
-                                <stop offset="50%" stop-color="#8b5cf6"/>
-                                <stop offset="100%" stop-color="#a78bfa"/>
-                            </linearGradient>
-                        </defs>
+                <div class="brand-mark" aria-hidden="true">
+                    <svg viewBox="0 0 40 40" role="img">
+                        <path d="M20 3 5.5 11.4v17.2L20 37l14.5-8.4V11.4L20 3Z"/>
+                        <path d="m20 11-7.6 4.4v9.2L20 29l7.6-4.4v-9.2L20 11Z"/>
+                        <circle cx="20" cy="20" r="2.8"/>
                     </svg>
                 </div>
-                <span class="brand-text">World Forge</span>
-            </div>
-
-            <div class="sidebar-section">
-                <div class="section-label">WORLDS</div>
-                <button class="nav-item active" data-world="supply-chain">
-                    <span class="nav-icon">🏭</span>
-                    <span>Supply Chain</span>
-                </button>
-                <button class="nav-item" data-world="ecosystem">
-                    <span class="nav-icon">🌿</span>
-                    <span>Ecosystem</span>
-                </button>
-                <button class="nav-item" data-world="micro-city">
-                    <span class="nav-icon">🏙️</span>
-                    <span>Micro City</span>
-                </button>
-                <button class="nav-item" data-world="freight-network">
-                    <span class="nav-icon">🚛</span>
-                    <span>Freight Network</span>
-                </button>
-                <button class="nav-item" data-world="stress-test">
-                    <span class="nav-icon">⚡</span>
-                    <span>Stress Test</span>
+                <div>
+                    <div class="brand-name">World Forge</div>
+                    <div class="brand-kicker">Simulation Studio</div>
+                </div>
+                <button class="icon-button sidebar-close" id="sidebar-close" type="button" aria-label="Close navigation">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg>
                 </button>
             </div>
 
-            <div class="sidebar-section">
-                <div class="section-label">TOOLS</div>
-                <button class="nav-item" id="nav-compare">
-                    <span class="nav-icon">📊</span>
-                    <span>Compare Runs</span>
-                </button>
-                <button class="nav-item" id="nav-benchmark">
-                    <span class="nav-icon">⏱️</span>
-                    <span>Benchmarks</span>
-                </button>
-            </div>
+            <nav class="sidebar-scroll">
+                <section class="sidebar-section" aria-labelledby="worlds-label">
+                    <div class="section-heading">
+                        <span id="worlds-label">World catalog</span>
+                        <span class="count-badge" id="world-count">0</span>
+                    </div>
+                    <div id="world-nav" class="nav-stack" aria-live="polite">
+                        <div class="nav-skeleton"></div>
+                        <div class="nav-skeleton short"></div>
+                        <div class="nav-skeleton"></div>
+                    </div>
+                </section>
+
+                <section class="sidebar-section" aria-labelledby="tools-label">
+                    <div class="section-heading"><span id="tools-label">Analysis tools</span></div>
+                    <div class="nav-stack">
+                        <button class="nav-item" id="nav-compare" type="button">
+                            <span class="nav-icon" aria-hidden="true">
+                                <svg viewBox="0 0 24 24"><path d="M4 19V9m8 10V5m8 14v-7M2 19h20"/></svg>
+                            </span>
+                            <span class="nav-copy"><strong>Compare runs</strong><small>Seeds &amp; proofs</small></span>
+                            <span class="nav-arrow" aria-hidden="true">→</span>
+                        </button>
+                        <button class="nav-item" id="nav-benchmark" type="button">
+                            <span class="nav-icon" aria-hidden="true">
+                                <svg viewBox="0 0 24 24"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l3 2M9 2h6"/></svg>
+                            </span>
+                            <span class="nav-copy"><strong>Benchmarks</strong><small>Engine throughput</small></span>
+                            <span class="nav-arrow" aria-hidden="true">→</span>
+                        </button>
+                    </div>
+                </section>
+
+                <section class="sidebar-section recent-section" aria-labelledby="recent-label">
+                    <div class="section-heading">
+                        <span id="recent-label">Recent runs</span>
+                        <button class="text-button" id="clear-history" type="button">Clear</button>
+                    </div>
+                    <div id="recent-runs" class="recent-runs">
+                        <p class="sidebar-empty">Completed runs appear here.</p>
+                    </div>
+                </section>
+            </nav>
 
             <div class="sidebar-footer">
-                <div class="engine-badge">
-                    <span class="badge-dot"></span>
-                    Engine v0.1.0
+                <div class="engine-status">
+                    <span class="status-dot" id="engine-dot"></span>
+                    <div><strong id="engine-label">Connecting</strong><small id="engine-version">Checking engine…</small></div>
                 </div>
+                <a class="docs-link" href="https://github.com/Hardonian/WorldForge" target="_blank" rel="noreferrer" aria-label="Open World Forge documentation in a new tab">
+                    Docs
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 5h5v5M19 5l-8 8M19 13v6H5V5h6"/></svg>
+                </a>
             </div>
-        </nav>
+        </aside>
 
-        <!-- Main Content -->
         <main id="main-content">
-            <!-- Header -->
             <header id="page-header">
-                <div class="header-left">
-                    <h1 id="world-title">Supply Chain</h1>
-                    <span class="header-subtitle" id="world-desc">Three-region supply chain with production, transfer, shortage, and price dynamics</span>
-                </div>
-                <div class="header-actions">
-                    <div class="seed-control">
-                        <label for="seed-input">Seed</label>
-                        <input type="number" id="seed-input" value="42" min="0">
-                    </div>
-                    <div class="ticks-control">
-                        <label for="ticks-input">Ticks</label>
-                        <input type="number" id="ticks-input" value="1000" min="1" step="100">
-                    </div>
-                    <button id="run-btn" class="btn-primary">
-                        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-                            <path d="M4 2.5v11l9-5.5z"/>
-                        </svg>
-                        Run Simulation
+                <div class="header-primary">
+                    <button class="icon-button menu-button" id="menu-button" type="button" aria-label="Open navigation" aria-expanded="false">
+                        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
                     </button>
+                    <div class="world-heading">
+                        <div class="eyebrow"><span id="world-category">Deterministic world</span><span class="eyebrow-divider"></span><span id="world-meta">Select a world</span></div>
+                        <h1 id="world-title">Simulation overview</h1>
+                        <p id="world-desc">Choose a packaged world, configure a run, and inspect its deterministic proof.</p>
+                    </div>
                 </div>
+
+                <form class="run-controls" id="run-form">
+                    <label class="field compact-field">
+                        <span>Seed</span>
+                        <input type="number" id="seed-input" value="42" min="0" max="18446744073709551615" inputmode="numeric">
+                    </label>
+                    <label class="field compact-field">
+                        <span>Ticks</span>
+                        <input type="number" id="ticks-input" value="1000" min="1" max="1000000" step="100" inputmode="numeric">
+                    </label>
+                    <button id="run-btn" class="button button-primary" type="submit">
+                        <span class="button-icon" aria-hidden="true">
+                            <svg class="play-icon" viewBox="0 0 20 20"><path d="m6.5 4 8 6-8 6V4Z"/></svg>
+                            <span class="button-spinner"></span>
+                        </span>
+                        <span id="run-label">Run simulation</span>
+                    </button>
+                    <button id="export-btn" class="button button-secondary" type="button" disabled>
+                        <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 3v9m0 0 3-3m-3 3L7 9M4 14v2h12v-2"/></svg>
+                        Export
+                    </button>
+                </form>
             </header>
 
-            <!-- Dashboard Grid -->
+            <div class="ambient-art" aria-hidden="true"></div>
+
             <div id="dashboard-grid">
-                <!-- Stats Row -->
-                <div class="stats-row">
-                    <div class="stat-card" id="stat-events">
-                        <div class="stat-label">Total Events</div>
+                <section class="run-banner" id="run-banner" aria-labelledby="run-banner-title">
+                    <div class="banner-orbit" aria-hidden="true"><span></span><span></span><span></span></div>
+                    <div class="banner-copy">
+                        <div class="eyebrow">Engine-backed simulation</div>
+                        <h2 id="run-banner-title">A reproducible world, down to the event.</h2>
+                        <p id="run-banner-copy">Every result is calculated by the Rust runtime. Run the selected world to reveal resource flows, objectives, event history, and a tamper-evident proof chain.</p>
+                    </div>
+                    <div class="banner-features" aria-label="Engine guarantees">
+                        <div><span class="feature-icon">01</span><strong>Fixed-point</strong><small>Cross-platform math</small></div>
+                        <div><span class="feature-icon">02</span><strong>Seeded</strong><small>Repeatable outcomes</small></div>
+                        <div><span class="feature-icon">03</span><strong>Verified</strong><small>BLAKE3 proof chain</small></div>
+                    </div>
+                </section>
+
+                <section class="stats-grid" aria-label="Run summary">
+                    <article class="stat-card accent-blue">
+                        <div class="stat-top"><span>Total events</span><span class="stat-icon"><svg viewBox="0 0 24 24"><path d="M5 4v16M5 7h10l-2 3 2 3H5"/></svg></span></div>
                         <div class="stat-value" id="val-events">—</div>
-                        <div class="stat-trend" id="trend-events"></div>
-                    </div>
-                    <div class="stat-card" id="stat-shortages">
-                        <div class="stat-label">Shortages</div>
+                        <div class="stat-foot" id="trend-events">Awaiting run</div>
+                    </article>
+                    <article class="stat-card accent-amber">
+                        <div class="stat-top"><span>Shortages</span><span class="stat-icon"><svg viewBox="0 0 24 24"><path d="m12 3 9 17H3L12 3Zm0 6v5m0 3v.1"/></svg></span></div>
                         <div class="stat-value" id="val-shortages">—</div>
-                        <div class="stat-trend" id="trend-shortages"></div>
+                        <div class="stat-foot" id="trend-shortages">Awaiting run</div>
+                    </article>
+                    <article class="stat-card accent-violet">
+                        <div class="stat-top"><span>Final state</span><span class="stat-icon"><svg viewBox="0 0 24 24"><path d="M12 3 4 7v10l8 4 8-4V7l-8-4Zm-8 4 8 4 8-4m-8 4v10"/></svg></span></div>
+                        <button class="stat-hash mono" id="val-fingerprint" type="button" disabled title="Copy final state fingerprint">—</button>
+                        <div class="stat-foot">Deterministic fingerprint</div>
+                    </article>
+                    <article class="stat-card accent-green">
+                        <div class="stat-top"><span>Proof status</span><span class="stat-icon"><svg viewBox="0 0 24 24"><path d="m7 12 3 3 7-7M12 3l8 4v5c0 4.5-3.3 7.8-8 9-4.7-1.2-8-4.5-8-9V7l8-4Z"/></svg></span></div>
+                        <div class="stat-value proof-state" id="val-chain">Not run</div>
+                        <div class="stat-foot" id="proof-summary">Proof generated on completion</div>
+                    </article>
+                </section>
+
+                <section class="panel panel-wide" aria-labelledby="resource-title">
+                    <div class="panel-header">
+                        <div><div class="panel-kicker">Time series</div><h2 id="resource-title">Resource flow</h2></div>
+                        <label class="select-field"><span class="sr-only">Resource to display</span><select id="resource-select"><option value="all">All resources</option></select></label>
                     </div>
-                    <div class="stat-card" id="stat-fingerprint">
-                        <div class="stat-label">State Fingerprint</div>
-                        <div class="stat-value mono" id="val-fingerprint">—</div>
-                        <div class="stat-trend">deterministic</div>
+                    <div class="chart-wrap chart-large">
+                        <canvas id="resource-chart" role="img" aria-label="Resource inventory over simulation ticks"></canvas>
+                        <div class="chart-empty" id="resource-empty"><span>Run the world to chart its resource inventory.</span></div>
                     </div>
-                    <div class="stat-card" id="stat-chain">
-                        <div class="stat-label">Event Chain</div>
-                        <div class="stat-value mono" id="val-chain">—</div>
-                        <div class="stat-trend">verified ✓</div>
-                    </div>
+                </section>
+
+                <div class="split-grid">
+                    <section class="panel" aria-labelledby="network-title">
+                        <div class="panel-header"><div><div class="panel-kicker">Topology</div><h2 id="network-title">Entity network</h2></div><span class="panel-meta" id="network-meta">0 links</span></div>
+                        <div class="chart-wrap"><canvas id="network-chart" role="img" aria-label="Network of entities and supply links"></canvas></div>
+                    </section>
+                    <section class="panel" aria-labelledby="events-title">
+                        <div class="panel-header"><div><div class="panel-kicker">Composition</div><h2 id="events-title">Event distribution</h2></div><span class="panel-meta" id="distribution-meta">No run</span></div>
+                        <div class="chart-wrap"><canvas id="event-chart" role="img" aria-label="Distribution of simulation event types"></canvas><div class="chart-empty" id="event-empty"><span>Event categories appear after a run.</span></div></div>
+                    </section>
                 </div>
 
-                <!-- Charts -->
-                <div class="chart-row">
-                    <div class="chart-card large">
-                        <div class="chart-header">
-                            <h3>Resource Flow</h3>
-                            <div class="chart-controls">
-                                <select id="resource-select">
-                                    <option value="all">All Resources</option>
-                                </select>
-                            </div>
-                        </div>
-                        <canvas id="resource-chart" width="800" height="300"></canvas>
-                    </div>
-                </div>
+                <section class="panel" aria-labelledby="objectives-title">
+                    <div class="panel-header"><div><div class="panel-kicker">Scenario goals</div><h2 id="objectives-title">Objectives</h2></div><span class="panel-meta" id="objective-summary">Not evaluated</span></div>
+                    <div id="objectives-list" class="objectives-grid"><div class="empty-state compact"><span class="empty-mark">◇</span><p>Objectives will be evaluated across the whole run.</p></div></div>
+                </section>
 
-                <div class="chart-row split">
-                    <div class="chart-card">
-                        <div class="chart-header">
-                            <h3>Entity Network</h3>
-                        </div>
-                        <canvas id="network-chart" width="400" height="300"></canvas>
-                    </div>
-                    <div class="chart-card">
-                        <div class="chart-header">
-                            <h3>Event Distribution</h3>
-                        </div>
-                        <canvas id="event-chart" width="400" height="300"></canvas>
-                    </div>
-                </div>
-
-                <!-- Objectives -->
-                <div class="objectives-section">
-                    <h3>Objectives</h3>
-                    <div id="objectives-list" class="objectives-grid">
-                        <div class="objective-card pending">
-                            <div class="objective-icon">⏳</div>
-                            <div class="objective-name">Awaiting simulation...</div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Event Log -->
-                <div class="event-log-section">
-                    <div class="log-header">
-                        <h3>Event Log</h3>
+                <section class="panel event-panel" aria-labelledby="event-log-title">
+                    <div class="panel-header log-header">
+                        <div><div class="panel-kicker">Audit trail</div><h2 id="event-log-title">Event log</h2></div>
                         <div class="log-controls">
-                            <input type="text" id="log-filter" placeholder="Filter events...">
-                            <select id="log-type-filter">
-                                <option value="all">All Types</option>
-                                <option value="production">Production</option>
-                                <option value="transfer">Transfer</option>
-                                <option value="shortage">Shortage</option>
-                                <option value="price">Price</option>
-                            </select>
+                            <label class="search-field"><span class="sr-only">Search events</span><svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="9" cy="9" r="5.5"/><path d="m13 13 4 4"/></svg><input type="search" id="log-filter" placeholder="Search entity or resource…"></label>
+                            <label class="select-field"><span class="sr-only">Filter event type</span><select id="log-type-filter"><option value="all">All event types</option></select></label>
                         </div>
                     </div>
-                    <div id="event-log" class="event-log-body">
-                        <div class="log-empty">Run a simulation to see events</div>
-                    </div>
-                </div>
+                    <div class="event-table-head" aria-hidden="true"><span>Tick</span><span>Type</span><span>Event detail</span><span>Amount</span></div>
+                    <div id="event-log" class="event-log-body" aria-live="polite"><div class="empty-state"><span class="empty-mark">⌁</span><h3>No events yet</h3><p>Run a simulation to inspect its chronological audit trail.</p></div></div>
+                    <div class="panel-footer hidden" id="event-footer"><span id="event-count-label"></span><button class="button button-quiet" id="load-more-events" type="button">Load more</button></div>
+                </section>
 
-                <!-- Proof Section -->
-                <div class="proof-section">
-                    <h3>Verification Proof</h3>
-                    <div id="proof-details" class="proof-grid">
-                        <div class="proof-item">
-                            <span class="proof-label">World Fingerprint</span>
-                            <span class="proof-value mono" id="proof-world">—</span>
-                        </div>
-                        <div class="proof-item">
-                            <span class="proof-label">Initial State</span>
-                            <span class="proof-value mono" id="proof-initial">—</span>
-                        </div>
-                        <div class="proof-item">
-                            <span class="proof-label">Final State</span>
-                            <span class="proof-value mono" id="proof-final">—</span>
-                        </div>
-                        <div class="proof-item">
-                            <span class="proof-label">Event Chain Root</span>
-                            <span class="proof-value mono" id="proof-chain">—</span>
-                        </div>
+                <section class="panel proof-panel" aria-labelledby="proof-title">
+                    <div class="panel-header"><div><div class="panel-kicker">Cryptographic receipt</div><h2 id="proof-title">Verification proof</h2></div><span class="verified-chip" id="verified-chip"><span></span>Awaiting run</span></div>
+                    <div class="proof-grid" id="proof-details">
+                        <button class="proof-item" type="button" data-proof="world" disabled><span>World package</span><strong class="mono" id="proof-world">—</strong><small>Copy fingerprint</small></button>
+                        <button class="proof-item" type="button" data-proof="initial" disabled><span>Initial state</span><strong class="mono" id="proof-initial">—</strong><small>Copy fingerprint</small></button>
+                        <button class="proof-item" type="button" data-proof="final" disabled><span>Final state</span><strong class="mono" id="proof-final">—</strong><small>Copy fingerprint</small></button>
+                        <button class="proof-item" type="button" data-proof="eventChain" disabled><span>Event chain root</span><strong class="mono" id="proof-chain">—</strong><small>Copy fingerprint</small></button>
                     </div>
-                </div>
+                </section>
+
+                <footer class="product-footer"><span>World Forge <span id="footer-version">engine</span></span><span>Deterministic by design · Local-first · Open source</span></footer>
             </div>
         </main>
     </div>
 
-    <!-- Loading Overlay -->
-    <div id="loading-overlay" class="hidden">
-        <div class="loading-spinner">
-            <div class="spinner-ring"></div>
-            <div class="spinner-text">Simulating...</div>
-        </div>
-    </div>
+    <dialog class="tool-dialog" id="compare-dialog" aria-labelledby="compare-title">
+        <form method="dialog" class="dialog-shell">
+            <header class="dialog-header"><div><div class="panel-kicker">Run analysis</div><h2 id="compare-title">Compare deterministic runs</h2><p>Change the seed to explore variance, or keep both seeds equal to prove reproducibility.</p></div><button class="icon-button dialog-close" value="cancel" aria-label="Close comparison"><svg viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></svg></button></header>
+            <div class="dialog-body">
+                <div class="comparison-form">
+                    <label class="field"><span>Baseline seed</span><input id="compare-seed-a" type="number" min="0" value="42"></label>
+                    <div class="versus-mark" aria-hidden="true">↔</div>
+                    <label class="field"><span>Candidate seed</span><input id="compare-seed-b" type="number" min="0" value="84"></label>
+                    <label class="field"><span>Ticks</span><input id="compare-ticks" type="number" min="1" max="1000000" value="1000"></label>
+                    <button class="button button-primary" id="compare-run" type="button">Compare runs</button>
+                </div>
+                <div id="compare-results" class="tool-results"><div class="empty-state"><span class="empty-mark">⇄</span><h3>Two runs, one clear view</h3><p>Compare event totals, shortages, objectives, and final fingerprints.</p></div></div>
+            </div>
+        </form>
+    </dialog>
 
-    <script src="dashboard.js"></script>
+    <dialog class="tool-dialog" id="benchmark-dialog" aria-labelledby="benchmark-title">
+        <form method="dialog" class="dialog-shell">
+            <header class="dialog-header"><div><div class="panel-kicker">Performance lab</div><h2 id="benchmark-title">Benchmark the engine</h2><p>Measure real server-side simulation throughput for the selected world.</p></div><button class="icon-button dialog-close" value="cancel" aria-label="Close benchmark"><svg viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></svg></button></header>
+            <div class="dialog-body">
+                <div class="benchmark-form">
+                    <label class="field"><span>Ticks per run</span><input id="benchmark-ticks" type="number" min="1" max="1000000" value="1000"></label>
+                    <label class="field"><span>Repetitions</span><input id="benchmark-reps" type="number" min="1" max="20" value="5"></label>
+                    <button class="button button-primary" id="benchmark-run" type="button">Start benchmark</button>
+                </div>
+                <div id="benchmark-results" class="tool-results"><div class="empty-state"><span class="empty-mark">◴</span><h3>Measure actual throughput</h3><p>Results include latency range, ticks per second, and events per second.</p></div></div>
+            </div>
+        </form>
+    </dialog>
+
+    <div class="loading-overlay hidden" id="loading-overlay" role="status" aria-live="polite">
+        <div class="loading-card"><div class="forge-loader" aria-hidden="true"><span></span><span></span><span></span></div><strong id="loading-title">Forging simulation</strong><p id="loading-copy">Advancing deterministic ticks…</p></div>
+    </div>
+    <div class="toast-region" id="toast-region" aria-live="polite" aria-atomic="true"></div>
+
+    <script src="/dashboard.js"></script>
 </body>
 </html>

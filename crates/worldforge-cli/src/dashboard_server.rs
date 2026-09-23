@@ -297,7 +297,10 @@ fn require_json_content_type(header: &str) -> Result<(), WorldForgeError> {
     let is_json = header.lines().any(|line| {
         line.split_once(':').is_some_and(|(name, value)| {
             name.eq_ignore_ascii_case("content-type")
-                && value.trim().to_ascii_lowercase().starts_with("application/json")
+                && value
+                    .trim()
+                    .to_ascii_lowercase()
+                    .starts_with("application/json")
         })
     });
     if is_json {
