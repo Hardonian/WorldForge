@@ -180,19 +180,16 @@ pub fn update_prices(
     events: &mut Vec<SimulationEvent>,
 ) {
     for (entity_id, _entity_name) in entity_ids {
-        let inventory = match world.get_component::<Inventory>(entity_id) {
-            Some(inventory) => inventory,
-            None => continue,
+        let stocks = {
+            let inventory = match world.get_component::<Inventory>(entity_id) {
+                Some(inventory) => inventory,
+                None => continue,
+            };
+            resources
+                .iter()
+                .map(|resource| (resource.clone(), inventory.get(resource)))
+                .collect::<Vec<_>>()
         };
-        let prices = match world.get_component_mut::<PriceSignal>(entity_id) {
-            Some(prices) => prices,
-            None => continue,
-        };
-
-        let stocks = resources
-            .iter()
-            .map(|resource| (resource.clone(), inventory.get(resource)))
-            .collect::<Vec<_>>();
         let prices = match world.get_component_mut::<PriceSignal>(entity_id) {
             Some(prices) => prices,
             None => continue,

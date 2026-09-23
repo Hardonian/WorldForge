@@ -288,7 +288,7 @@ impl SimulationRuntime {
         for resource in &tracked_resources {
             resource_totals.insert(resource.clone(), Fixed64::ZERO);
         }
-        for (_, entity_id) in &entity_ids {
+        for (entity_id, _) in &entity_ids {
             if let Some(inventory) = ecs_world.get_component::<Inventory>(entity_id) {
                 for (resource, amount) in &inventory.resources {
                     *resource_totals.entry(resource.clone()).or_insert(Fixed64::ZERO) += *amount;
@@ -652,8 +652,7 @@ impl SimulationRuntime {
         let mut events = Vec::new();
         if let Some(scheduled_events) = self.scheduled_events.get(&tick) {
             for scheduled in scheduled_events {
-                if let ScheduledEventType::CapacityChange { target, value } = &scheduled.event_type
-                {
+                let ScheduledEventType::CapacityChange { target, value } = &scheduled.event_type;
                     if let Some(&entity_id) = self.entity_id_map.get(target) {
                         if let Some(rule) =
                             self.world.get_component_mut::<ProductionRule>(&entity_id)
@@ -773,9 +772,11 @@ impl SimulationRuntime {
     }
 
     fn evaluate_objectives(&mut self, elapsed_ticks: u64, final_evaluation: bool) {
+        let production_totals = &self.production_totals;
+        let objectives = &mut self.objectives;
         self.evaluate_continuous_objectives(
-            &mut self.objectives,
-            &self.production_totals,
+            objectives,
+            production_totals,
             elapsed_ticks,
             final_evaluation,
         );
