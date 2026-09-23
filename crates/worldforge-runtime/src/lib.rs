@@ -388,6 +388,7 @@ impl SimulationRuntime {
         let duration = self.scenario.duration_ticks;
         let remaining = duration.saturating_sub(self.world.current_tick().value());
         let steps = tick_count.min(remaining);
+        let mut recent_events = Vec::new();
 
         for _ in 0..steps {
             let tick_num = self.world.current_tick().value();
@@ -445,7 +446,7 @@ impl SimulationRuntime {
 
             self.evaluate_objectives(tick_num + 1, false);
 
-            let recent_events = tick_events
+            recent_events = tick_events
                 .iter()
                 .rev()
                 .take(MAX_RECENT_EVENTS)
@@ -524,7 +525,7 @@ impl SimulationRuntime {
     fn finalize(&mut self) -> Result<(), WorldForgeError> {
         let duration = self.scenario.duration_ticks;
         self.evaluate_objectives(duration, true);
-        let final_fp = self.world.fingerprint();
+        let final_fp = self.state_fingerprint;
 
         // Build proof
         let mut replay = self
