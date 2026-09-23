@@ -101,6 +101,9 @@ enum Command {
         /// Directory containing example worlds exposed by the dashboard
         #[arg(long, default_value = "examples")]
         worlds_dir: PathBuf,
+        /// Directory used for durable local play saves
+        #[arg(long, default_value = ".worldforge/saves")]
+        saves_dir: PathBuf,
     },
 
     /// Package operations
@@ -178,7 +181,11 @@ fn main() -> ExitCode {
             output_path,
         } => commands::export(&path, ticks, seed, output_path.as_deref()),
         Command::Benchmark { path, ticks, reps } => commands::benchmark(&path, ticks, reps),
-        Command::Dashboard { bind, worlds_dir } => dashboard_server::serve(&bind, &worlds_dir),
+        Command::Dashboard {
+            bind,
+            worlds_dir,
+            saves_dir,
+        } => dashboard_server::serve(&bind, &worlds_dir, &saves_dir),
         Command::Package { action } => match action {
             PackageAction::Validate { path } => commands::validate(&path),
             PackageAction::Build { path, output_path } => {

@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use worldforge_core::{EngineVersion, ErrorCode, WorldForgeError};
 use worldforge_runtime::{RunProgress, SimulationRuntime};
@@ -29,13 +29,41 @@ type SessionRegistry = BTreeMap<String, SharedPlaySession>;
 
 struct ServerState {
     worlds_dir: PathBuf,
+    saves_dir: PathBuf,
     sessions: Mutex<SessionRegistry>,
 }
 
 struct PlaySession {
     world: String,
+    seed: u64,
+    total_ticks: u64,
+    interventions: Vec<InterventionRecord>,
     runtime: SimulationRuntime,
     last_access: Instant,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct InterventionRecord {
+    tick: u64,
+    entity: String,
+    capacity: f64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SaveGame {
+    format_version: u32,
+    id: String,
+    name: String,
+    world: String,
+    world_fingerprint: String,
+    seed: u64,
+    total_ticks: u64,
+    current_tick: u64,
+    interventions: Vec<InterventionRecord>,
+    created_at: u64,
+    updated_at: u64,
 }
 
 #[derive(Deserialize)]
@@ -65,6 +93,15 @@ struct InterventionRequest {
     capacity: f64,
 }
 
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SaveRequest {
+    session_id: String,
+    name: String,
+    #[serde(default)]
+    save_id: Option<String>,
+}
+
 fn default_step_ticks() -> u64 {
     1
 }
@@ -73,7 +110,7 @@ fn default_benchmark_reps() -> u32 {
     5
 }
 
-pub fn serve(bind: &str, worlds_dir: &Path) -> Result<(), WorldForgeError> {
+pub fn serve(bind: &str, worlds_dir: &Path, saves_dir: &Path) -> Result<(), WorldForgeError> {
     if !worlds_dir.is_dir() {
         return Err(WorldForgeError::new(
             ErrorCode::WorldNotFound,
@@ -81,6 +118,8 @@ pub fn serve(bind: &str, worlds_dir: &Path) -> Result<(), WorldForgeError> {
         ));
     }
     let worlds_dir = std::fs::canonicalize(worlds_dir).map_err(io_error)?;
+    std::fs::create_dir_all(saves_dir).map_err(io_error)?;
+    let saves_dir = std::fs::canonicalize(saves_dir).map_err(io_error)?;
     let listener = TcpListener::bind(bind).map_err(|error| {
         WorldForgeError::new(
             ErrorCode::RuntimeInitFailed,
@@ -89,10 +128,12 @@ pub fn serve(bind: &str, worlds_dir: &Path) -> Result<(), WorldForgeError> {
     })?;
     println!("World Forge dashboard: http://{bind}");
     println!("World catalog: {}", worlds_dir.display());
+    println!("Save slots: {}", saves_dir.display());
     println!("Press Ctrl+C to stop.");
 
     let state = Arc::new(ServerState {
         worlds_dir,
+        saves_dir,
         sessions: Mutex::new(BTreeMap::new()),
     });
     for connection in listener.incoming() {
@@ -225,9 +266,36 @@ fn handle_connection(stream: &mut TcpStream, state: &ServerState) -> Result<(), 
             let response = intervene_play_session(state, id, request)?;
             respond_json(stream, "200 OK", &response)
         }
+        ("GET", route)
+            if route.ends_with("/replay") && play_action_id(route, "replay").is_some() =>
+        {
+            let id = play_action_id(route, "replay").unwrap_or_default();
+            let (filename, replay) = play_replay(state, id)?;
+            respond_download(stream, &filename, "application/cbor", &replay)
+        }
         ("DELETE", route) if play_session_id(route).is_some() => {
             let id = play_session_id(route).unwrap_or_default();
             delete_play_session(state, id)?;
+            respond(stream, "204 No Content", "text/plain", &[], false)
+        }
+        ("GET", "/api/saves") => {
+            let saves = list_saves(state)?;
+            respond_json(stream, "200 OK", &json!({ "saves": saves }))
+        }
+        ("POST", "/api/saves") => {
+            require_json_content_type(&header)?;
+            let request: SaveRequest = parse_json(body)?;
+            let save = save_play_session(state, request)?;
+            respond_json(stream, "201 Created", &json!({ "save": save }))
+        }
+        ("POST", route) if save_action_id(route, "load").is_some() => {
+            let id = save_action_id(route, "load").unwrap_or_default();
+            let response = load_save(state, id)?;
+            respond_json(stream, "201 Created", &response)
+        }
+        ("DELETE", route) if save_id(route).is_some() => {
+            let id = save_id(route).unwrap_or_default();
+            delete_save(state, id)?;
             respond(stream, "204 No Content", "text/plain", &[], false)
         }
         ("OPTIONS", route) if route.starts_with("/api/") => {
@@ -260,6 +328,21 @@ fn play_action_id<'a>(route: &'a str, action: &str) -> Option<&'a str> {
     (!middle.is_empty() && !middle.contains('/')).then_some(middle)
 }
 
+fn save_id(route: &str) -> Option<&str> {
+    let id = route.strip_prefix("/api/saves/")?;
+    valid_save_id(id).then_some(id)
+}
+
+fn save_action_id<'a>(route: &'a str, action: &str) -> Option<&'a str> {
+    let suffix = format!("/{action}");
+    let id = route.strip_prefix("/api/saves/")?.strip_suffix(&suffix)?;
+    valid_save_id(id).then_some(id)
+}
+
+fn valid_save_id(id: &str) -> bool {
+    id.len() == 32 && id.chars().all(|character| character.is_ascii_hexdigit())
+}
+
 fn lock_sessions(
     state: &ServerState,
 ) -> Result<std::sync::MutexGuard<'_, SessionRegistry>, WorldForgeError> {
@@ -275,13 +358,20 @@ fn create_play_session(state: &ServerState, request: RunRequest) -> Result<Value
     let world_path = resolve_world(&state.worlds_dir, &request.world)?;
     let runtime = SimulationRuntime::load(&world_path, request.seed, Some(request.ticks))?;
     let progress = runtime.current_progress();
-    let id = uuid::Uuid::new_v4().simple().to_string();
-    let session = Arc::new(Mutex::new(PlaySession {
+    let session = PlaySession {
         world: request.world.clone(),
+        seed: request.seed,
+        total_ticks: request.ticks,
+        interventions: Vec::new(),
         runtime,
         last_access: Instant::now(),
-    }));
+    };
+    let id = register_session(state, session)?;
+    Ok(play_document(&id, &request.world, &progress, None))
+}
 
+fn register_session(state: &ServerState, session: PlaySession) -> Result<String, WorldForgeError> {
+    let id = uuid::Uuid::new_v4().simple().to_string();
     let mut sessions = lock_sessions(state)?;
     sessions.retain(|_, session| {
         session
@@ -294,8 +384,8 @@ fn create_play_session(state: &ServerState, request: RunRequest) -> Result<Value
             format!("at most {MAX_PLAY_SESSIONS} play sessions may be active"),
         ));
     }
-    sessions.insert(id.clone(), session);
-    Ok(play_document(&id, &request.world, &progress, None))
+    sessions.insert(id.clone(), Arc::new(Mutex::new(session)));
+    Ok(id)
 }
 
 fn inspect_play_session(state: &ServerState, id: &str) -> Result<Value, WorldForgeError> {
@@ -328,9 +418,15 @@ fn intervene_play_session(
     request: InterventionRequest,
 ) -> Result<Value, WorldForgeError> {
     with_play_session(state, id, |session| {
+        let tick = session.runtime.current_progress().current_tick;
         let progress = session
             .runtime
             .set_capacity(&request.entity, request.capacity)?;
+        session.interventions.push(InterventionRecord {
+            tick,
+            entity: request.entity,
+            capacity: request.capacity,
+        });
         Ok(play_document(
             id,
             &session.world,
@@ -369,6 +465,203 @@ fn delete_play_session(state: &ServerState, id: &str) -> Result<(), WorldForgeEr
         ));
     }
     Ok(())
+}
+
+fn play_replay(state: &ServerState, id: &str) -> Result<(String, Vec<u8>), WorldForgeError> {
+    with_play_session(state, id, |session| {
+        let replay = session.runtime.replay().ok_or_else(|| {
+            WorldForgeError::new(
+                ErrorCode::RuntimeStateMismatch,
+                "replay is available only after the session completes",
+            )
+        })?;
+        Ok((
+            format!("{}-{}.replay", session.world, &id[..8]),
+            replay.to_cbor(),
+        ))
+    })
+}
+
+fn save_play_session(
+    state: &ServerState,
+    request: SaveRequest,
+) -> Result<SaveGame, WorldForgeError> {
+    let name = request.name.trim();
+    if name.is_empty() || name.len() > 64 || name.chars().any(char::is_control) {
+        return Err(invalid_request(
+            "save name must contain 1 to 64 printable characters",
+        ));
+    }
+    if request
+        .save_id
+        .as_deref()
+        .is_some_and(|id| !valid_save_id(id))
+    {
+        return Err(invalid_request("save id is invalid"));
+    }
+    let now = unix_timestamp()?;
+    let requested_overwrite = request.save_id.is_some();
+    let id = request
+        .save_id
+        .unwrap_or_else(|| uuid::Uuid::new_v4().simple().to_string());
+    let existing = if save_path(state, &id).is_file() {
+        Some(read_save(state, &id)?)
+    } else {
+        None
+    };
+    if existing.is_none() && requested_overwrite {
+        return Err(WorldForgeError::new(
+            ErrorCode::WorldNotFound,
+            "save slot does not exist",
+        ));
+    }
+
+    let save = with_play_session(state, &request.session_id, |session| {
+        let progress = session.runtime.current_progress();
+        let fingerprint =
+            worldforge_package::fingerprint_world(&state.worlds_dir.join(&session.world))?;
+        Ok(SaveGame {
+            format_version: 1,
+            id: id.clone(),
+            name: name.to_string(),
+            world: session.world.clone(),
+            world_fingerprint: fingerprint.to_string(),
+            seed: session.seed,
+            total_ticks: session.total_ticks,
+            current_tick: progress.current_tick,
+            interventions: session.interventions.clone(),
+            created_at: existing.as_ref().map_or(now, |save| save.created_at),
+            updated_at: now,
+        })
+    })?;
+    let encoded = serde_json::to_vec_pretty(&save)
+        .map_err(|error| WorldForgeError::new(ErrorCode::InternalError, error.to_string()))?;
+    std::fs::write(save_path(state, &id), encoded).map_err(io_error)?;
+    Ok(save)
+}
+
+fn list_saves(state: &ServerState) -> Result<Vec<SaveGame>, WorldForgeError> {
+    let mut saves = std::fs::read_dir(&state.saves_dir)
+        .map_err(io_error)?
+        .filter_map(Result::ok)
+        .filter(|entry| {
+            entry
+                .path()
+                .extension()
+                .is_some_and(|extension| extension == "json")
+        })
+        .filter_map(|entry| std::fs::read(entry.path()).ok())
+        .filter_map(|bytes| serde_json::from_slice::<SaveGame>(&bytes).ok())
+        .collect::<Vec<_>>();
+    saves.sort_by(|left, right| right.updated_at.cmp(&left.updated_at));
+    Ok(saves)
+}
+
+fn load_save(state: &ServerState, id: &str) -> Result<Value, WorldForgeError> {
+    let save = read_save(state, id)?;
+    if save.format_version != 1 {
+        return Err(WorldForgeError::new(
+            ErrorCode::ReplayVersionIncompatible,
+            format!("save format {} is not supported", save.format_version),
+        ));
+    }
+    validate_ticks(save.total_ticks)?;
+    if save.current_tick > save.total_ticks {
+        return Err(WorldForgeError::new(
+            ErrorCode::ReplayFormatInvalid,
+            "save tick exceeds its configured duration",
+        ));
+    }
+    let world_path = resolve_world(&state.worlds_dir, &save.world)?;
+    let current_fingerprint = worldforge_package::fingerprint_world(&world_path)?;
+    if current_fingerprint.to_string() != save.world_fingerprint {
+        return Err(WorldForgeError::new(
+            ErrorCode::ReplayFingerprintMismatch,
+            "world content changed after this save was created",
+        ));
+    }
+    let mut runtime = SimulationRuntime::load(&world_path, save.seed, Some(save.total_ticks))?;
+    for intervention in &save.interventions {
+        let current_tick = runtime.current_progress().current_tick;
+        if intervention.tick < current_tick || intervention.tick > save.current_tick {
+            return Err(WorldForgeError::new(
+                ErrorCode::ReplayFormatInvalid,
+                "save interventions are not in deterministic tick order",
+            ));
+        }
+        if intervention.tick > current_tick {
+            runtime.step(intervention.tick - current_tick)?;
+        }
+        runtime.set_capacity(&intervention.entity, intervention.capacity)?;
+    }
+    let current_tick = runtime.current_progress().current_tick;
+    if save.current_tick > current_tick {
+        runtime.step(save.current_tick - current_tick)?;
+    }
+    let progress = runtime.current_progress();
+    let world = save.world.clone();
+    let session = PlaySession {
+        world: world.clone(),
+        seed: save.seed,
+        total_ticks: save.total_ticks,
+        interventions: save.interventions,
+        runtime,
+        last_access: Instant::now(),
+    };
+    let session_id = register_session(state, session)?;
+    let session = lock_sessions(state)?
+        .get(&session_id)
+        .cloned()
+        .ok_or_else(|| WorldForgeError::new(ErrorCode::InternalError, "session unavailable"))?;
+    let session = session
+        .lock()
+        .map_err(|_| WorldForgeError::new(ErrorCode::InternalError, "session unavailable"))?;
+    Ok(play_document(
+        &session_id,
+        &world,
+        &progress,
+        session.runtime.replay(),
+    ))
+}
+
+fn delete_save(state: &ServerState, id: &str) -> Result<(), WorldForgeError> {
+    let path = save_path(state, id);
+    if !path.is_file() {
+        return Err(WorldForgeError::new(
+            ErrorCode::WorldNotFound,
+            "save slot does not exist",
+        ));
+    }
+    std::fs::remove_file(path).map_err(io_error)
+}
+
+fn read_save(state: &ServerState, id: &str) -> Result<SaveGame, WorldForgeError> {
+    if !valid_save_id(id) {
+        return Err(invalid_request("save id is invalid"));
+    }
+    let bytes = std::fs::read(save_path(state, id)).map_err(|error| {
+        WorldForgeError::new(
+            ErrorCode::WorldNotFound,
+            format!("cannot read save slot: {error}"),
+        )
+    })?;
+    serde_json::from_slice(&bytes).map_err(|error| {
+        WorldForgeError::new(
+            ErrorCode::ReplayFormatInvalid,
+            format!("save slot is invalid: {error}"),
+        )
+    })
+}
+
+fn save_path(state: &ServerState, id: &str) -> PathBuf {
+    state.saves_dir.join(format!("{id}.json"))
+}
+
+fn unix_timestamp() -> Result<u64, WorldForgeError> {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|duration| duration.as_secs())
+        .map_err(|error| WorldForgeError::new(ErrorCode::InternalError, error.to_string()))
 }
 
 fn play_document(
@@ -689,6 +982,31 @@ fn respond_json(
     )
 }
 
+fn respond_download(
+    stream: &mut TcpStream,
+    filename: &str,
+    content_type: &str,
+    body: &[u8],
+) -> Result<(), WorldForgeError> {
+    write!(
+        stream,
+        concat!(
+            "HTTP/1.1 200 OK\r\n",
+            "Content-Type: {content_type}\r\n",
+            "Content-Disposition: attachment; filename=\"{filename}\"\r\n",
+            "Content-Length: {length}\r\n",
+            "Cache-Control: no-store\r\n",
+            "X-Content-Type-Options: nosniff\r\n",
+            "Connection: close\r\n\r\n"
+        ),
+        content_type = content_type,
+        filename = filename,
+        length = body.len(),
+    )
+    .map_err(io_error)?;
+    stream.write_all(body).map_err(io_error)
+}
+
 fn respond_error(
     stream: &mut TcpStream,
     status: &str,
@@ -747,8 +1065,10 @@ fn status_for_error(error: &WorldForgeError) -> &'static str {
         }
         ErrorCode::WorldManifestInvalid
         | ErrorCode::WorldSchemaViolation
-        | ErrorCode::ScenarioInvalid => "400 Bad Request",
-        ErrorCode::RuntimeStateMismatch => "409 Conflict",
+        | ErrorCode::ScenarioInvalid
+        | ErrorCode::ReplayFormatInvalid
+        | ErrorCode::ReplayVersionIncompatible => "400 Bad Request",
+        ErrorCode::RuntimeStateMismatch | ErrorCode::ReplayFingerprintMismatch => "409 Conflict",
         _ => "500 Internal Server Error",
     }
 }
@@ -767,6 +1087,22 @@ mod tests {
 
     fn examples_dir() -> PathBuf {
         Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples")
+    }
+
+    fn test_state() -> (ServerState, PathBuf) {
+        let saves_dir = std::env::temp_dir().join(format!(
+            "worldforge-dashboard-saves-{}",
+            uuid::Uuid::new_v4().simple()
+        ));
+        std::fs::create_dir_all(&saves_dir).unwrap();
+        (
+            ServerState {
+                worlds_dir: examples_dir(),
+                saves_dir: saves_dir.clone(),
+                sessions: Mutex::new(BTreeMap::new()),
+            },
+            saves_dir,
+        )
     }
 
     #[test]
@@ -810,10 +1146,7 @@ mod tests {
 
     #[test]
     fn play_sessions_step_intervene_and_delete() {
-        let state = ServerState {
-            worlds_dir: examples_dir(),
-            sessions: Mutex::new(BTreeMap::new()),
-        };
+        let (state, saves_dir) = test_state();
         let created = create_play_session(
             &state,
             RunRequest {
@@ -849,5 +1182,61 @@ mod tests {
 
         delete_play_session(&state, id).unwrap();
         assert!(inspect_play_session(&state, id).is_err());
+        std::fs::remove_dir_all(saves_dir).unwrap();
+    }
+
+    #[test]
+    fn save_slots_resume_with_the_same_final_proof() {
+        let (state, saves_dir) = test_state();
+        let created = create_play_session(
+            &state,
+            RunRequest {
+                world: "supply-chain".to_string(),
+                seed: 19,
+                ticks: 15,
+            },
+        )
+        .unwrap();
+        let original_id = created["sessionId"].as_str().unwrap();
+        step_play_session(&state, original_id, 4).unwrap();
+        intervene_play_session(
+            &state,
+            original_id,
+            InterventionRequest {
+                entity: "factory".to_string(),
+                capacity: 0.65,
+            },
+        )
+        .unwrap();
+        step_play_session(&state, original_id, 3).unwrap();
+
+        let save = save_play_session(
+            &state,
+            SaveRequest {
+                session_id: original_id.to_string(),
+                name: "Before the disruption".to_string(),
+                save_id: None,
+            },
+        )
+        .unwrap();
+        assert_eq!(list_saves(&state).unwrap().len(), 1);
+
+        let original_final = step_play_session(&state, original_id, 100).unwrap();
+        let resumed = load_save(&state, &save.id).unwrap();
+        assert_eq!(resumed["currentTick"], 7);
+        let resumed_id = resumed["sessionId"].as_str().unwrap();
+        let resumed_final = step_play_session(&state, resumed_id, 100).unwrap();
+        assert_eq!(
+            resumed_final["proof"]["eventChain"],
+            original_final["proof"]["eventChain"]
+        );
+        assert_eq!(
+            resumed_final["proof"]["final"],
+            original_final["proof"]["final"]
+        );
+
+        delete_save(&state, &save.id).unwrap();
+        assert!(list_saves(&state).unwrap().is_empty());
+        std::fs::remove_dir_all(saves_dir).unwrap();
     }
 }

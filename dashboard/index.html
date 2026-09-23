@@ -268,6 +268,14 @@
                     <svg viewBox="0 0 20 20" aria-hidden="true"><path d="m5 5 6 5-6 5V5Zm9 0v10"/></svg>
                     Step
                 </button>
+                <button class="button button-secondary" id="play-save" type="button" disabled>
+                    <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 3h10l2 2v12H4V3Zm3 0v5h6V3m-6 14v-5h6v5"/></svg>
+                    Save
+                </button>
+                <button class="button button-secondary" id="play-saves" type="button">
+                    <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 5h5l2 2h7v9H3V5Z"/></svg>
+                    Saves
+                </button>
                 <label class="speed-control"><span>Speed</span><select id="play-speed"><option value="1">1×</option><option value="2">2×</option><option value="5" selected>5×</option><option value="10">10×</option></select></label>
                 <div class="tick-progress" aria-label="Simulation progress">
                     <div class="tick-progress-copy"><span>Timeline</span><strong id="play-tick-label">Tick 0 / 0</strong></div>
@@ -276,6 +284,10 @@
                 <button class="button button-quiet" id="play-reset" type="button" disabled>
                     <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 10a6 6 0 1 0 2-4.5M4 3v5h5"/></svg>
                     Restart
+                </button>
+                <button class="button button-quiet hidden" id="play-replay" type="button">
+                    <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 3v9m0 0 3-3m-3 3L7 9M4 14v2h12v-2"/></svg>
+                    Replay
                 </button>
             </div>
 
@@ -328,6 +340,23 @@
                         <div class="live-feed" id="live-feed"></div>
                     </section>
                 </div>
+            </div>
+        </div>
+    </dialog>
+
+    <dialog class="tool-dialog save-dialog" id="save-dialog" aria-labelledby="save-title">
+        <div class="dialog-shell">
+            <header class="dialog-header">
+                <div><div class="panel-kicker">Durable progress</div><h2 id="save-title">Save games</h2><p>Resume a deterministic world exactly where you left it—even after restarting the dashboard.</p></div>
+                <button class="icon-button dialog-close" id="save-close" type="button" aria-label="Close save games"><svg viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></svg></button>
+            </header>
+            <div class="dialog-body save-body">
+                <form class="save-create" id="save-form">
+                    <label class="field"><span>Save name</span><input id="save-name" maxlength="64" placeholder="My world at tick 250" autocomplete="off"></label>
+                    <button class="button button-primary" id="save-submit" type="submit">Save current world</button>
+                </form>
+                <div class="save-list-heading"><div><span>Your slots</span><strong id="save-count">0 saves</strong></div><button class="button button-quiet" id="refresh-saves" type="button">Refresh</button></div>
+                <div class="save-list" id="save-list"><div class="empty-state"><span class="empty-mark">□</span><h3>No saves yet</h3><p>Start a world and create your first durable save.</p></div></div>
             </div>
         </div>
     </dialog>
