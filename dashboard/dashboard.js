@@ -118,11 +118,12 @@ function bindInteractions() {
     el('play-saves').addEventListener('click', () => openSaveManager(false));
     el('play-replay').addEventListener('click', downloadPlayReplay);
     el('play-close').addEventListener('click', closePlayMode);
-    dom.playDialog.addEventListener('close', () => setPlayRunning(false));
+    dom.playDialog.addEventListener('close', () => { setPlayRunning(false); WorldForgeCG.stop(); });
     el('play-speed').addEventListener('change', () => state.play.running && schedulePlayStep());
     el('capacity-slider').addEventListener('input', updateCapacityLabel);
     el('play-entity-select').addEventListener('change', syncCapacityControl);
     el('apply-capacity').addEventListener('click', applyCapacityDecision);
+    WorldForgeCG.bindControls();
     el('save-close').addEventListener('click', () => dom.saveDialog.close());
     el('save-form').addEventListener('submit', saveCurrentSession);
     el('refresh-saves').addEventListener('click', refreshSaves);
@@ -748,11 +749,13 @@ function openPlayMode() {
     } else {
         showPlayIntro();
     }
+    WorldForgeCG.start();
     dom.playDialog.showModal();
 }
 
 function closePlayMode() {
     setPlayRunning(false);
+    WorldForgeCG.stop();
     dom.playDialog.close();
 }
 
@@ -886,6 +889,7 @@ function consumePlayUpdate(data) {
     if (data.recentEvents?.length) {
         state.play.events.push(...data.recentEvents);
         state.play.events = state.play.events.slice(-120);
+        WorldForgeCG.onEvents(data.recentEvents);
     }
     Object.entries(data.snapshot.levels).forEach(([resource, value]) => {
         state.play.maxima[resource] = Math.max(state.play.maxima[resource] || 0, value, 1);
@@ -943,6 +947,7 @@ function syncCapacityControl() {
     if (!entity || entity.capacity == null) return;
     el('capacity-slider').value = Math.round(entity.capacity * 100);
     updateCapacityLabel();
+    WorldForgeCG.setSelectedEntity(el('play-entity-select').value);
 }
 
 function renderPlayState() {
@@ -957,6 +962,7 @@ function renderPlayState() {
     renderLiveObjectives(data.objectives);
     renderLiveFeed();
     renderPlayNetwork(data);
+    WorldForgeCG.setData(data);
     renderProducerOptions(data.entityStates);
     updatePlayStatus();
 }
@@ -1533,5 +1539,1198 @@ function relativeTime(timestamp) {
     if (seconds < 86400) return `${Math.floor(seconds / 3600)}h`;
     return `${Math.floor(seconds / 86400)}d`;
 }
+
+/* ============================================================================
+ * World Forge — High-Performance Tactical CG Graphics & Game Animation Engine
+ * ============================================================================ */
+
+const RESOURCE_NEON = {
+    ore: '#f1b96b', steel: '#9b8cff', goods: '#46d29a', energy: '#42d3ea',
+    power: '#42d3ea', wind: '#67a9ff', water: '#38bdf8', seawater: '#0ea5e9',
+    food: '#a3e635', biomass: '#84cc16', feedstock: '#fb923c', chemicals: '#f97316',
+    medicine: '#f43f5e', care: '#ec4899', sunlight: '#facc15', prey: '#34d399',
+    herbivores: '#34d399', carnivores: '#f87171', residents: '#e879f9', alloy: '#c084fc',
+};
+
+function getResourceNeonColor(resource) {
+    if (!resource) return '#67a9ff';
+    const key = String(resource).toLowerCase();
+    return RESOURCE_NEON[key] || COLORS[Math.abs(key.split('').reduce((a, c) => a + c.charCodeAt(0), 0)) % COLORS.length];
+}
+
+function detectArchetype(entity) {
+    const type = (entity.entity_type || '').toLowerCase();
+    const name = (entity.name || '').toLowerCase();
+    if (type.includes('renewable') || type.includes('power') || name.includes('wind') || name.includes('solar') || name.includes('sunlight')) return 'power';
+    if (type.includes('producer') || type.includes('extractor') || name.includes('mine') || name.includes('quarry')) return 'extractor';
+    if (type.includes('processor') || type.includes('refiner') || name.includes('mill') || name.includes('chemical') || name.includes('desal')) return 'processor';
+    if (type.includes('manufacturer') || name.includes('factory')) return 'manufacturer';
+    if (type.includes('distributor') || name.includes('warehouse') || name.includes('depot') || name.includes('port')) return 'depot';
+    if (type.includes('consumer') || name.includes('city') || name.includes('market') || name.includes('population') || name.includes('resident')) return 'habitat';
+    if (type.includes('food') || name.includes('farm') || name.includes('vegetation') || name.includes('prey') || name.includes('carnivore')) return 'bio';
+    if (type.includes('water') || name.includes('water')) return 'water';
+    if (type.includes('care') || name.includes('medical') || name.includes('care')) return 'care';
+    return 'generic';
+}
+
+const ARCHETYPE_META = {
+    power: { color: '#42d3ea', label: 'ENERGY CORE' },
+    extractor: { color: '#f1b96b', label: 'EXTRACTOR' },
+    processor: { color: '#9b8cff', label: 'REFINERY' },
+    manufacturer: { color: '#46d29a', label: 'ASSEMBLY' },
+    depot: { color: '#38bdf8', label: 'LOGISTICS' },
+    habitat: { color: '#f59e0b', label: 'HABITAT' },
+    bio: { color: '#a3e635', label: 'ORGANIC' },
+    water: { color: '#06b6d4', label: 'HYDRO' },
+    care: { color: '#f43f5e', label: 'MEDICAL' },
+    generic: { color: '#67a9ff', label: 'FACILITY' },
+};
+
+const WorldForgeCG = {
+    canvas: null,
+    ctx: null,
+    hud: null,
+    active: false,
+    viewMode: 'cg',
+    vfxEnabled: true,
+    rafId: null,
+    lastTime: 0,
+    radarAngle: 0,
+
+    data: null,
+    nodes: new Map(),
+    links: [],
+    particles: [],
+    shockwaves: [],
+    floaties: [],
+    ambientDust: [],
+
+    camera: {
+        x: 0, y: 0, zoom: 1,
+        targetX: 0, targetY: 0, targetZoom: 1,
+        isDragging: false,
+        dragStartX: 0, dragStartY: 0,
+        camStartX: 0, camStartY: 0,
+        hasInteracted: false,
+    },
+
+    hoveredNode: null,
+    selectedNodeName: null,
+    lastPointerX: 0,
+    lastPointerY: 0,
+
+    init() {
+        if (this.canvas) return;
+        this.canvas = el('play-cg-canvas');
+        if (!this.canvas) return;
+        this.ctx = this.canvas.getContext('2d');
+        this.hud = el('cg-hud-card');
+
+        // Initialize ambient cyber dust particles
+        this.ambientDust = Array.from({ length: 45 }, () => ({
+            x: (Math.random() - 0.5) * 1200,
+            y: (Math.random() - 0.5) * 800,
+            r: Math.random() * 1.5 + 0.5,
+            speedX: (Math.random() - 0.5) * 0.18,
+            speedY: (Math.random() - 0.5) * 0.18,
+            alpha: Math.random() * 0.4 + 0.1,
+            color: Math.random() > 0.5 ? '#67a9ff' : '#42d3ea',
+        }));
+
+        this.bindEvents();
+    },
+
+    bindControls() {
+        this.init();
+        el('btn-view-cg')?.addEventListener('click', () => this.setViewMode('cg'));
+        el('btn-view-schematic')?.addEventListener('click', () => this.setViewMode('schematic'));
+        el('cg-btn-zoom-in')?.addEventListener('click', () => this.zoomBy(1.28));
+        el('cg-btn-zoom-out')?.addEventListener('click', () => this.zoomBy(0.78));
+        el('cg-btn-reset-cam')?.addEventListener('click', () => this.fitView(true));
+        el('cg-btn-fx-toggle')?.addEventListener('click', () => this.toggleVfx());
+    },
+
+    bindEvents() {
+        const c = this.canvas;
+        if (!c) return;
+
+        // Pointer / mouse drag
+        c.addEventListener('pointerdown', e => {
+            if (e.button !== 0) return;
+            c.setPointerCapture(e.pointerId);
+            this.camera.isDragging = true;
+            this.camera.dragStartX = e.clientX;
+            this.camera.dragStartY = e.clientY;
+            this.camera.camStartX = this.camera.targetX;
+            this.camera.camStartY = this.camera.targetY;
+        });
+
+        window.addEventListener('pointermove', e => {
+            if (this.camera.isDragging) {
+                const dx = e.clientX - this.camera.dragStartX;
+                const dy = e.clientY - this.camera.dragStartY;
+                this.camera.targetX = this.camera.camStartX + dx;
+                this.camera.targetY = this.camera.camStartY + dy;
+                this.camera.hasInteracted = true;
+            } else if (this.active && this.viewMode === 'cg') {
+                const rect = c.getBoundingClientRect();
+                this.lastPointerX = e.clientX - rect.left;
+                this.lastPointerY = e.clientY - rect.top;
+                this.checkHover(this.lastPointerX, this.lastPointerY);
+            }
+        });
+
+        window.addEventListener('pointerup', e => {
+            if (this.camera.isDragging) {
+                this.camera.isDragging = false;
+                try { c.releasePointerCapture(e.pointerId); } catch (_) {}
+            }
+        });
+
+        // Click selection
+        c.addEventListener('click', e => {
+            const rect = c.getBoundingClientRect();
+            const px = e.clientX - rect.left;
+            const py = e.clientY - rect.top;
+            const hit = this.getNodeAt(px, py);
+            if (hit) {
+                this.setSelectedEntity(hit.name);
+                const select = el('play-entity-select');
+                if (select) {
+                    select.value = hit.name;
+                    syncCapacityControl();
+                }
+                this.shockwaves.push({
+                    x: hit.x, y: hit.y, r: hit.radius, maxR: hit.radius + 36,
+                    color: '#f1b96b', alpha: 1, width: 2.2,
+                });
+            }
+        });
+
+        // Mouse wheel zoom to cursor
+        c.addEventListener('wheel', e => {
+            e.preventDefault();
+            const rect = c.getBoundingClientRect();
+            const px = e.clientX - rect.left;
+            const py = e.clientY - rect.top;
+            const factor = e.deltaY < 0 ? 1.15 : 0.87;
+            this.zoomAt(px, py, factor);
+        }, { passive: false });
+
+        window.addEventListener('resize', () => {
+            if (this.active) this.fitView(false);
+        });
+    },
+
+    setViewMode(mode) {
+        this.viewMode = mode;
+        const btnCg = el('btn-view-cg');
+        const btnSchem = el('btn-view-schematic');
+        const canvas = el('play-cg-canvas');
+        const svg = el('play-network');
+        const toolbar = el('cg-toolbar');
+        const hud = el('cg-hud-card');
+
+        if (mode === 'cg') {
+            btnCg?.classList.add('active');
+            btnSchem?.classList.remove('active');
+            canvas?.classList.remove('hidden');
+            svg?.classList.add('hidden');
+            toolbar?.classList.remove('hidden');
+            this.start();
+        } else {
+            btnCg?.classList.remove('active');
+            btnSchem?.classList.add('active');
+            canvas?.classList.add('hidden');
+            svg?.classList.remove('hidden');
+            toolbar?.classList.add('hidden');
+            hud?.classList.add('hidden');
+            this.stop();
+        }
+    },
+
+    toggleVfx() {
+        this.vfxEnabled = !this.vfxEnabled;
+        const btn = el('cg-btn-fx-toggle');
+        btn?.classList.toggle('active', this.vfxEnabled);
+        showToast('VFX settings', `Visual effects & particles ${this.vfxEnabled ? 'enabled' : 'disabled'}.`);
+    },
+
+    zoomBy(factor) {
+        const w = this.canvas ? this.canvas.clientWidth / 2 : 400;
+        const h = this.canvas ? this.canvas.clientHeight / 2 : 210;
+        this.zoomAt(w, h, factor);
+    },
+
+    zoomAt(px, py, factor) {
+        if (!this.canvas) return;
+        const rect = this.canvas.getBoundingClientRect();
+        const dpr = window.devicePixelRatio || 1;
+        const cx = rect.width / 2;
+        const cy = rect.height / 2;
+
+        const worldX = (px - cx - this.camera.targetX) / this.camera.targetZoom;
+        const worldY = (py - cy - this.camera.targetY) / this.camera.targetZoom;
+
+        const newZoom = Math.max(0.38, Math.min(3.2, this.camera.targetZoom * factor));
+        this.camera.targetZoom = newZoom;
+        this.camera.targetX = px - cx - worldX * newZoom;
+        this.camera.targetY = py - cy - worldY * newZoom;
+        this.camera.hasInteracted = true;
+    },
+
+    fitView(force = false) {
+        if (!this.canvas || (!force && this.camera.hasInteracted)) return;
+        const count = this.nodes.size;
+        if (!count) return;
+
+        let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+        this.nodes.forEach(node => {
+            minX = Math.min(minX, node.targetX - node.radius);
+            maxX = Math.max(maxX, node.targetX + node.radius);
+            minY = Math.min(minY, node.targetY - node.radius);
+            maxY = Math.max(maxY, node.targetY + node.radius);
+        });
+
+        const w = this.canvas.clientWidth || 800;
+        const h = this.canvas.clientHeight || 420;
+        const boxW = Math.max(100, maxX - minX + 170);
+        const boxH = Math.max(100, maxY - minY + 150);
+
+        const zoom = Math.max(0.45, Math.min(1.35, Math.min(w / boxW, h / boxH)));
+        const midX = (minX + maxX) / 2;
+        const midY = (minY + maxY) / 2;
+
+        this.camera.targetZoom = zoom;
+        this.camera.targetX = -midX * zoom;
+        this.camera.targetY = -midY * zoom;
+
+        if (force) {
+            this.camera.x = this.camera.targetX;
+            this.camera.y = this.camera.targetY;
+            this.camera.zoom = this.camera.targetZoom;
+            this.camera.hasInteracted = false;
+        }
+    },
+
+    start() {
+        this.init();
+        if (this.active) return;
+        this.active = true;
+        this.lastTime = performance.now();
+        const tick = now => {
+            if (!this.active) return;
+            this.render(now);
+            this.rafId = requestAnimationFrame(tick);
+        };
+        this.rafId = requestAnimationFrame(tick);
+    },
+
+    stop() {
+        this.active = false;
+        if (this.rafId) {
+            cancelAnimationFrame(this.rafId);
+            this.rafId = null;
+        }
+        if (this.hud) this.hud.classList.add('hidden');
+    },
+
+    setData(data) {
+        this.data = data;
+        this.init();
+        if (!data || !data.entityStates) return;
+
+        const entities = data.entityStates.slice(0, MAX_NETWORK_NODES);
+        const rawEntities = data.entities || [];
+        const links = data.links || [];
+
+        // Build entity map & update states
+        const currentNames = new Set(entities.map(e => e.name));
+        // Remove old nodes
+        for (const [name] of this.nodes) {
+            if (!currentNames.has(name)) this.nodes.delete(name);
+        }
+
+        // Layout computation if node set changed
+        const needsLayout = entities.some(e => !this.nodes.has(e.name));
+        const positions = needsLayout ? this.computeLayout(entities, links) : null;
+
+        entities.forEach(entityState => {
+            const raw = rawEntities.find(e => e.name === entityState.name) || {};
+            const archetype = detectArchetype({ ...raw, ...entityState });
+            const archetypeTheme = ARCHETYPE_META[archetype] || ARCHETYPE_META.generic;
+            let node = this.nodes.get(entityState.name);
+
+            if (!node) {
+                const pos = positions?.get(entityState.name) || { x: 0, y: 0 };
+                node = {
+                    name: entityState.name,
+                    entityType: raw.entity_type || entityState.entity_type || 'facility',
+                    region: raw.region || entityState.region || 'zone',
+                    archetype,
+                    theme: archetypeTheme,
+                    x: pos.x,
+                    y: pos.y,
+                    targetX: pos.x,
+                    targetY: pos.y,
+                    radius: entities.length > 16 ? 24 : 32,
+                    inventory: entityState.inventory || {},
+                    capacity: entityState.capacity != null ? entityState.capacity : 1.0,
+                    production: raw.production || entityState.production || null,
+                    pulse: 0,
+                    warningPulse: 0,
+                    sparkTimer: 0,
+                };
+                this.nodes.set(entityState.name, node);
+            } else {
+                node.inventory = entityState.inventory || {};
+                node.capacity = entityState.capacity != null ? entityState.capacity : node.capacity;
+                if (positions?.has(entityState.name)) {
+                    const pos = positions.get(entityState.name);
+                    node.targetX = pos.x;
+                    node.targetY = pos.y;
+                }
+            }
+        });
+
+        // Update links & particles
+        this.links = links.slice(0, MAX_NETWORK_LINKS).map(link => {
+            const from = this.nodes.get(link.from);
+            const to = this.nodes.get(link.to);
+            return {
+                from: link.from,
+                to: link.to,
+                resource: link.resource,
+                maxPerTick: link.max_per_tick || 1,
+                color: getResourceNeonColor(link.resource),
+                valid: Boolean(from && to),
+            };
+        }).filter(link => link.valid);
+
+        // Adjust particle pool based on links
+        if (this.vfxEnabled && this.links.length > 0) {
+            const targetParticles = Math.min(100, Math.max(16, this.links.length * 6));
+            while (this.particles.length < targetParticles) {
+                const link = this.links[Math.floor(Math.random() * this.links.length)];
+                this.particles.push({
+                    link,
+                    t: Math.random(),
+                    speed: 0.0035 + Math.random() * 0.004,
+                    r: Math.random() * 1.5 + 2.4,
+                    color: link.color,
+                });
+            }
+        }
+
+        if (needsLayout) {
+            this.fitView(true);
+        }
+    },
+
+    computeLayout(entities, links) {
+        const count = entities.length;
+        const positions = new Map();
+        if (!count) return positions;
+
+        // Build simple adjacency for tier estimation
+        const incoming = new Map(entities.map(e => [e.name, []]));
+        const outgoing = new Map(entities.map(e => [e.name, []]));
+        links.forEach(link => {
+            outgoing.get(link.from)?.push(link.to);
+            incoming.get(link.to)?.push(link.from);
+        });
+
+        // Compute flow ranks: producers = rank 0, downstream = rank + 1
+        const ranks = new Map();
+        entities.forEach(e => {
+            const inc = incoming.get(e.name) || [];
+            if (!inc.length) ranks.set(e.name, 0);
+        });
+
+        // Propagate ranks
+        for (let iter = 0; iter < 6; iter++) {
+            entities.forEach(e => {
+                const inc = incoming.get(e.name) || [];
+                if (inc.length) {
+                    const maxInc = Math.max(...inc.map(p => ranks.get(p) ?? 0));
+                    ranks.set(e.name, Math.min(4, maxInc + 1));
+                }
+            });
+        }
+
+        // Check if topological ranking gave good variance
+        const rankGroups = new Map();
+        ranks.forEach((rank, name) => {
+            if (!rankGroups.has(rank)) rankGroups.set(rank, []);
+            rankGroups.get(rank).push(name);
+        });
+
+        if (rankGroups.size > 1 && count <= 24) {
+            // Tiered flow layout (left to right)
+            const sortedRanks = [...rankGroups.keys()].sort((a, b) => a - b);
+            const totalCols = sortedRanks.length;
+            const widthSpan = count > 10 ? 640 : 540;
+            const xStep = totalCols > 1 ? widthSpan / (totalCols - 1) : 0;
+            const startX = -widthSpan / 2;
+
+            sortedRanks.forEach((rank, colIdx) => {
+                const colNodes = rankGroups.get(rank);
+                const colCount = colNodes.length;
+                const heightSpan = Math.min(320, Math.max(90, (colCount - 1) * 95));
+                const yStep = colCount > 1 ? heightSpan / (colCount - 1) : 0;
+                const startY = -heightSpan / 2;
+
+                colNodes.forEach((name, rowIdx) => {
+                    positions.set(name, {
+                        x: Math.round(startX + colIdx * xStep),
+                        y: Math.round(startY + rowIdx * yStep),
+                    });
+                });
+            });
+        } else {
+            // Organic tactical ellipse layout
+            const rx = count > 14 ? 310 : 260;
+            const ry = count > 14 ? 160 : 135;
+            entities.forEach((e, idx) => {
+                const angle = (idx / count) * Math.PI * 2 - Math.PI / 2;
+                positions.set(e.name, {
+                    x: Math.round(rx * Math.cos(angle)),
+                    y: Math.round(ry * Math.sin(angle)),
+                });
+            });
+        }
+
+        return positions;
+    },
+
+    onEvents(events) {
+        if (!events || !events.length) return;
+        events.forEach(event => {
+            const node = this.nodes.get(event.entity);
+            if (!node) return;
+
+            if (event.type === 'production') {
+                node.pulse = 1.0;
+                if (this.vfxEnabled) {
+                    this.shockwaves.push({
+                        x: node.x, y: node.y, r: node.radius, maxR: node.radius + 38,
+                        color: '#46d29a', alpha: 0.9, width: 2.0,
+                    });
+                    this.floaties.push({
+                        text: `+${compactNumber(event.amount)} ${prettyName(event.resource)}`,
+                        x: node.x, y: node.y - node.radius - 8,
+                        vy: -1.2, color: '#46d29a', alpha: 1, life: 60, maxLife: 60,
+                    });
+                }
+            } else if (event.type === 'shortage') {
+                node.warningPulse = 1.0;
+                if (this.vfxEnabled) {
+                    this.shockwaves.push({
+                        x: node.x, y: node.y, r: node.radius, maxR: node.radius + 50,
+                        color: '#ff6f7c', alpha: 1.0, width: 2.6,
+                    });
+                    this.floaties.push({
+                        text: `⚠ SHORTAGE: ${prettyName(event.resource)}`,
+                        x: node.x, y: node.y - node.radius - 12,
+                        vy: -0.9, color: '#ff6f7c', alpha: 1, life: 80, maxLife: 80,
+                    });
+                }
+            } else if (event.type === 'capacity_change') {
+                if (this.vfxEnabled) {
+                    this.shockwaves.push({
+                        x: node.x, y: node.y, r: node.radius, maxR: node.radius + 32,
+                        color: '#f1b96b', alpha: 0.85, width: 2.0,
+                    });
+                    this.floaties.push({
+                        text: `⚡ ${Math.round(event.value * 100)}%`,
+                        x: node.x, y: node.y - node.radius - 8,
+                        vy: -1.0, color: '#f1b96b', alpha: 1, life: 65, maxLife: 65,
+                    });
+                }
+            }
+        });
+    },
+
+    setSelectedEntity(name) {
+        this.selectedNodeName = name;
+    },
+
+    getNodeAt(px, py) {
+        if (!this.canvas) return null;
+        const rect = this.canvas.getBoundingClientRect();
+        const cx = rect.width / 2;
+        const cy = rect.height / 2;
+
+        const wx = (px - cx - this.camera.x) / this.camera.zoom;
+        const wy = (py - cy - this.camera.y) / this.camera.zoom;
+
+        for (const node of this.nodes.values()) {
+            const dist = Math.hypot(wx - node.x, wy - node.y);
+            if (dist <= node.radius + 8) return node;
+        }
+        return null;
+    },
+
+    checkHover(px, py) {
+        const hit = this.getNodeAt(px, py);
+        this.hoveredNode = hit;
+        this.canvas.style.cursor = hit ? 'pointer' : (this.camera.isDragging ? 'grabbing' : 'grab');
+        this.updateHud(hit, px, py);
+    },
+
+    updateHud(node, px, py) {
+        if (!this.hud) return;
+        if (!node) {
+            this.hud.classList.add('hidden');
+            return;
+        }
+
+        el('cg-hud-title').textContent = prettyName(node.name);
+        const typeEl = el('cg-hud-type');
+        typeEl.textContent = node.theme.label;
+        typeEl.style.color = node.theme.color;
+        typeEl.style.borderColor = `${node.theme.color}44`;
+
+        el('cg-hud-region').textContent = `Sector: ${prettyName(node.region)}`;
+
+        // Rates
+        const ratesEl = el('cg-hud-rates');
+        ratesEl.replaceChildren();
+        if (node.production) {
+            const inps = Object.entries(node.production.inputs || {}).map(([r, v]) => `-${v} ${prettyName(r)}`).join(' · ');
+            const outs = Object.entries(node.production.outputs || {}).map(([r, v]) => `+${v} ${prettyName(r)}`).join(' · ');
+            if (inps) {
+                const rowIn = document.createElement('div');
+                rowIn.textContent = `Consumes: ${inps}`;
+                ratesEl.append(rowIn);
+            }
+            if (outs) {
+                const rowOut = document.createElement('div');
+                rowOut.style.color = 'var(--green)';
+                rowOut.textContent = `Produces: ${outs}`;
+                ratesEl.append(rowOut);
+            }
+        }
+        if (node.capacity != null) {
+            const capRow = document.createElement('div');
+            capRow.textContent = `Capacity: ${Math.round(node.capacity * 100)}%`;
+            ratesEl.append(capRow);
+        }
+
+        // Inventory
+        const invEl = el('cg-hud-inventory');
+        invEl.replaceChildren();
+        const entries = Object.entries(node.inventory);
+        if (entries.length) {
+            entries.forEach(([resource, amount]) => {
+                const row = document.createElement('div');
+                row.className = 'cg-hud-inv-row';
+                const name = document.createElement('span');
+                name.textContent = prettyName(resource);
+                const val = document.createElement('strong');
+                val.textContent = compactNumber(amount);
+                val.style.color = getResourceNeonColor(resource);
+                row.append(name, val);
+                invEl.append(row);
+            });
+        } else {
+            const empty = document.createElement('span');
+            empty.style.color = 'var(--text-muted)';
+            empty.textContent = 'Inventory empty';
+            invEl.append(empty);
+        }
+
+        // Position HUD near entity or cursor
+        const pad = 16;
+        const rect = this.canvas.getBoundingClientRect();
+        let left = px + pad;
+        let top = py + pad;
+        if (left + 230 > rect.width) left = px - 230 - pad;
+        if (top + 180 > rect.height) top = py - 180 - pad;
+
+        this.hud.style.left = `${Math.max(10, left)}px`;
+        this.hud.style.top = `${Math.max(10, top)}px`;
+        this.hud.classList.remove('hidden');
+    },
+
+    render(now) {
+        if (!this.canvas || !this.ctx) return;
+        const ctx = this.ctx;
+        const dpr = window.devicePixelRatio || 1;
+        const w = this.canvas.clientWidth;
+        const h = this.canvas.clientHeight;
+
+        if (this.canvas.width !== Math.floor(w * dpr) || this.canvas.height !== Math.floor(h * dpr)) {
+            this.canvas.width = Math.floor(w * dpr);
+            this.canvas.height = Math.floor(h * dpr);
+        }
+
+        ctx.save();
+        ctx.scale(dpr, dpr);
+        ctx.clearRect(0, 0, w, h);
+
+        // Smooth camera lerp
+        this.camera.x += (this.camera.targetX - this.camera.x) * 0.16;
+        this.camera.y += (this.camera.targetY - this.camera.y) * 0.16;
+        this.camera.zoom += (this.camera.targetZoom - this.camera.zoom) * 0.16;
+
+        // Smooth node position lerp
+        this.nodes.forEach(node => {
+            node.x += (node.targetX - node.x) * 0.12;
+            node.y += (node.targetY - node.y) * 0.12;
+            if (node.pulse > 0) node.pulse = Math.max(0, node.pulse - 0.025);
+            if (node.warningPulse > 0) node.warningPulse = Math.max(0, node.warningPulse - 0.02);
+        });
+
+        // 1. Draw ambient background & tactical grid
+        this.drawBackground(w, h, now);
+
+        // Transform into world space
+        ctx.save();
+        ctx.translate(w / 2 + this.camera.x, h / 2 + this.camera.y);
+        ctx.scale(this.camera.zoom, this.camera.zoom);
+
+        // 2. Draw conduits
+        this.drawConduits(ctx, now);
+
+        // 3. Draw resource packet particles
+        if (this.vfxEnabled) {
+            this.drawParticles(ctx, now);
+        }
+
+        // 4. Draw shockwave ripple effects
+        if (this.vfxEnabled) {
+            this.drawShockwaves(ctx);
+        }
+
+        // 5. Draw entity nodes
+        this.drawNodes(ctx, now);
+
+        // 6. Draw floating combat-style text ("floaties")
+        if (this.vfxEnabled) {
+            this.drawFloaties(ctx);
+        }
+
+        ctx.restore();
+        ctx.restore();
+    },
+
+    drawBackground(w, h, now) {
+        const ctx = this.ctx;
+        // Central subtle radar sweep line
+        this.radarAngle = (now * 0.0006) % (Math.PI * 2);
+        const cx = w / 2 + this.camera.x * 0.2;
+        const cy = h / 2 + this.camera.y * 0.2;
+        const sweepLen = Math.max(w, h) * 0.7;
+
+        ctx.save();
+        const sweepGrad = ctx.createLinearGradient(cx, cy, cx + Math.cos(this.radarAngle) * sweepLen, cy + Math.sin(this.radarAngle) * sweepLen);
+        sweepGrad.addColorStop(0, 'rgba(66,211,234,0.06)');
+        sweepGrad.addColorStop(1, 'transparent');
+        ctx.beginPath();
+        ctx.moveTo(cx, cy);
+        ctx.arc(cx, cy, sweepLen, this.radarAngle - 0.35, this.radarAngle);
+        ctx.closePath();
+        ctx.fillStyle = sweepGrad;
+        ctx.fill();
+
+        // Subtle ambient floating dust particles
+        if (this.vfxEnabled) {
+            this.ambientDust.forEach(dust => {
+                dust.x += dust.speedX;
+                dust.y += dust.speedY;
+                if (dust.x > w / 2 + 300) dust.x = -w / 2 - 300;
+                if (dust.x < -w / 2 - 300) dust.x = w / 2 + 300;
+                if (dust.y > h / 2 + 200) dust.y = -h / 2 - 200;
+                if (dust.y < -h / 2 - 200) dust.y = h / 2 + 200;
+
+                const screenX = w / 2 + dust.x + this.camera.x * 0.4;
+                const screenY = h / 2 + dust.y + this.camera.y * 0.4;
+                ctx.beginPath();
+                ctx.arc(screenX, screenY, dust.r, 0, Math.PI * 2);
+                ctx.fillStyle = `${dust.color}${Math.floor(dust.alpha * 255).toString(16).padStart(2, '0')}`;
+                ctx.fill();
+            });
+        }
+        ctx.restore();
+    },
+
+    getConduitControlPoint(from, to) {
+        const dx = to.x - from.x;
+        const dy = to.y - from.y;
+        const dist = Math.hypot(dx, dy) || 1;
+        const nx = -dy / dist;
+        const ny = dx / dist;
+        const curvature = Math.min(35, Math.max(12, dist * 0.12));
+        return {
+            x: (from.x + to.x) / 2 + nx * curvature,
+            y: (from.y + to.y) / 2 + ny * curvature,
+        };
+    },
+
+    drawConduits(ctx, now) {
+        const flowOffset = (now * 0.04) % 20;
+        this.links.forEach(link => {
+            const from = this.nodes.get(link.from);
+            const to = this.nodes.get(link.to);
+            if (!from || !to) return;
+
+            const cp = this.getConduitControlPoint(from, to);
+
+            // Conduit dark base shield
+            ctx.beginPath();
+            ctx.moveTo(from.x, from.y);
+            ctx.quadraticCurveTo(cp.x, cp.y, to.x, to.y);
+            ctx.strokeStyle = 'rgba(7,14,24,0.7)';
+            ctx.lineWidth = 4.5;
+            ctx.stroke();
+
+            // Conduit neon core
+            ctx.beginPath();
+            ctx.moveTo(from.x, from.y);
+            ctx.quadraticCurveTo(cp.x, cp.y, to.x, to.y);
+            ctx.strokeStyle = `${link.color}40`;
+            ctx.lineWidth = 1.8;
+            ctx.stroke();
+
+            // Flow pulses
+            ctx.save();
+            ctx.setLineDash([4, 12]);
+            ctx.lineDashOffset = -flowOffset;
+            ctx.strokeStyle = `${link.color}aa`;
+            ctx.lineWidth = 1.4;
+            ctx.stroke();
+            ctx.restore();
+        });
+    },
+
+    drawParticles(ctx, now) {
+        this.particles.forEach(p => {
+            const from = this.nodes.get(p.link.from);
+            const to = this.nodes.get(p.link.to);
+            if (!from || !to) return;
+
+            p.t += p.speed;
+            if (p.t >= 1) {
+                p.t = 0;
+                // Micro absorption spark at destination
+                if (Math.random() < 0.25) {
+                    this.shockwaves.push({
+                        x: to.x, y: to.y, r: to.radius - 4, maxR: to.radius + 12,
+                        color: p.color, alpha: 0.5, width: 1.2,
+                    });
+                }
+            }
+
+            const cp = this.getConduitControlPoint(from, to);
+            const t = p.t;
+            const px = (1 - t) * (1 - t) * from.x + 2 * (1 - t) * t * cp.x + t * t * to.x;
+            const py = (1 - t) * (1 - t) * from.y + 2 * (1 - t) * t * cp.y + t * t * to.y;
+
+            // Tail
+            const t0 = Math.max(0, t - 0.05);
+            const tx0 = (1 - t0) * (1 - t0) * from.x + 2 * (1 - t0) * t0 * cp.x + t0 * t0 * to.x;
+            const ty0 = (1 - t0) * (1 - t0) * from.y + 2 * (1 - t0) * t0 * cp.y + t0 * t0 * to.y;
+
+            ctx.beginPath();
+            ctx.moveTo(tx0, ty0);
+            ctx.lineTo(px, py);
+            ctx.strokeStyle = `${p.color}55`;
+            ctx.lineWidth = p.r * 1.5;
+            ctx.stroke();
+
+            // Head
+            ctx.beginPath();
+            ctx.arc(px, py, p.r, 0, Math.PI * 2);
+            ctx.fillStyle = '#ffffff';
+            ctx.shadowColor = p.color;
+            ctx.shadowBlur = 8;
+            ctx.fill();
+            ctx.shadowBlur = 0;
+        });
+    },
+
+    drawShockwaves(ctx) {
+        for (let i = this.shockwaves.length - 1; i >= 0; i--) {
+            const sw = this.shockwaves[i];
+            sw.r += (sw.maxR - sw.r) * 0.14 + 0.8;
+            sw.alpha *= 0.91;
+
+            if (sw.alpha < 0.05 || sw.r >= sw.maxR) {
+                this.shockwaves.splice(i, 1);
+                continue;
+            }
+
+            ctx.save();
+            ctx.beginPath();
+            ctx.arc(sw.x, sw.y, sw.r, 0, Math.PI * 2);
+            ctx.strokeStyle = `${sw.color}${Math.floor(sw.alpha * 255).toString(16).padStart(2, '0')}`;
+            ctx.lineWidth = sw.width;
+            ctx.shadowColor = sw.color;
+            ctx.shadowBlur = 10;
+            ctx.stroke();
+            ctx.restore();
+        }
+    },
+
+    drawFloaties(ctx) {
+        ctx.font = '600 11px ui-monospace, SFMono-Regular, monospace';
+        ctx.textAlign = 'center';
+        for (let i = this.floaties.length - 1; i >= 0; i--) {
+            const fl = this.floaties[i];
+            fl.y += fl.vy;
+            fl.vy *= 0.97;
+            fl.life--;
+            fl.alpha = Math.max(0, fl.life / fl.maxLife);
+
+            if (fl.life <= 0) {
+                this.floaties.splice(i, 1);
+                continue;
+            }
+
+            ctx.save();
+            ctx.fillStyle = `${fl.color}${Math.floor(fl.alpha * 255).toString(16).padStart(2, '0')}`;
+            ctx.shadowColor = '#000000';
+            ctx.shadowBlur = 5;
+            ctx.fillText(fl.text, fl.x, fl.y);
+            ctx.restore();
+        }
+    },
+
+    drawNodes(ctx, now) {
+        this.nodes.forEach(node => {
+            const isHovered = this.hoveredNode === node;
+            const isSelected = this.selectedNodeName === node.name;
+            const r = node.radius;
+
+            ctx.save();
+            ctx.translate(node.x, node.y);
+
+            // 1. Node base glow
+            const glowR = r + (node.pulse * 14) + (isHovered ? 8 : 4);
+            const baseGlow = ctx.createRadialGradient(0, 0, r * 0.4, 0, 0, glowR);
+            baseGlow.addColorStop(0, `${node.theme.color}35`);
+            baseGlow.addColorStop(1, `${node.theme.color}00`);
+            ctx.beginPath();
+            ctx.arc(0, 0, glowR, 0, Math.PI * 2);
+            ctx.fillStyle = baseGlow;
+            ctx.fill();
+
+            // 2. Rotating tactical corner brackets
+            const bracketRot = (now * 0.0008) % (Math.PI * 2);
+            ctx.save();
+            ctx.rotate(bracketRot);
+            ctx.strokeStyle = isSelected ? '#f1b96b' : `${node.theme.color}77`;
+            ctx.lineWidth = 1.4;
+            const bR = r + 4;
+            for (let b = 0; b < 4; b++) {
+                ctx.beginPath();
+                ctx.arc(0, 0, bR, b * Math.PI / 2 + 0.12, (b + 1) * Math.PI / 2 - 0.12);
+                ctx.stroke();
+            }
+            ctx.restore();
+
+            // 3. Base plate
+            ctx.beginPath();
+            ctx.arc(0, 0, r, 0, Math.PI * 2);
+            ctx.fillStyle = '#0a101b';
+            ctx.fill();
+            ctx.strokeStyle = isSelected ? '#f1b96b' : (node.warningPulse > 0.1 ? '#ff6f7c' : `${node.theme.color}bb`);
+            ctx.lineWidth = isSelected ? 2.6 : 2;
+            ctx.shadowColor = isSelected ? '#f1b96b' : node.theme.color;
+            ctx.shadowBlur = isSelected ? 12 : 6;
+            ctx.stroke();
+            ctx.shadowBlur = 0;
+
+            // 4. Radial inventory ring gauge
+            const invEntries = Object.entries(node.inventory);
+            const totalInv = invEntries.reduce((sum, [, val]) => sum + val, 0);
+            if (totalInv > 0) {
+                let startAngle = -Math.PI / 2;
+                invEntries.forEach(([res, val]) => {
+                    const slice = (val / totalInv) * Math.PI * 2;
+                    ctx.beginPath();
+                    ctx.arc(0, 0, r - 3, startAngle, startAngle + slice);
+                    ctx.strokeStyle = getResourceNeonColor(res);
+                    ctx.lineWidth = 2.4;
+                    ctx.stroke();
+                    startAngle += slice;
+                });
+            }
+
+            // 5. Archetype procedural CG graphic icon
+            this.drawArchetypeGraphic(ctx, node.archetype, node.theme.color, now, node.capacity);
+
+            // 6. Overdrive sparks
+            if (node.capacity > 1.05 && this.vfxEnabled) {
+                this.drawOverdriveSparks(ctx, r, now);
+            }
+
+            // 7. Hazard warning overlay
+            if (node.warningPulse > 0.05) {
+                ctx.beginPath();
+                ctx.arc(0, 0, r + 8, 0, Math.PI * 2);
+                ctx.strokeStyle = `rgba(255,111,124,${node.warningPulse})`;
+                ctx.lineWidth = 2;
+                ctx.stroke();
+            }
+
+            // 8. Capacity badge pill
+            if (node.capacity != null) {
+                const capPct = Math.round(node.capacity * 100);
+                const capText = `${capPct}%`;
+                ctx.font = '700 8px ui-monospace, monospace';
+                const tw = ctx.measureText(capText).width;
+                ctx.fillStyle = node.capacity > 1.0 ? 'rgba(241,185,107,0.9)' : (node.capacity === 0 ? 'rgba(255,111,124,0.85)' : 'rgba(8,12,20,0.85)');
+                ctx.strokeStyle = node.capacity > 1.0 ? '#f1b96b' : (node.capacity === 0 ? '#ff6f7c' : 'rgba(103,169,255,0.4)');
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                ctx.roundRect(-tw / 2 - 4, -r - 11, tw + 8, 12, 3);
+                ctx.fill();
+                ctx.stroke();
+                ctx.fillStyle = node.capacity > 1.0 ? '#000000' : '#dce5f2';
+                ctx.textAlign = 'center';
+                ctx.fillText(capText, 0, -r - 2);
+            }
+
+            // 9. Label and Inventory Count
+            ctx.font = '600 11px ui-sans-serif, system-ui, sans-serif';
+            ctx.textAlign = 'center';
+            const nameText = prettyName(node.name);
+            const nameWidth = ctx.measureText(nameText).width;
+
+            // Name plate background
+            ctx.fillStyle = 'rgba(7,11,18,0.82)';
+            ctx.beginPath();
+            ctx.roundRect(-nameWidth / 2 - 5, r + 7, nameWidth + 10, 16, 4);
+            ctx.fill();
+            ctx.strokeStyle = isSelected ? '#f1b96b' : 'rgba(163,184,214,0.18)';
+            ctx.lineWidth = 1;
+            ctx.stroke();
+
+            ctx.fillStyle = isSelected ? '#f1b96b' : '#e2e8f0';
+            ctx.fillText(nameText, 0, r + 19);
+
+            // Subtitle inventory
+            ctx.font = '500 9px ui-monospace, monospace';
+            ctx.fillStyle = '#74839a';
+            ctx.fillText(`${compactNumber(totalInv)} units`, 0, r + 33);
+
+            // 10. Selected Reticle
+            if (isSelected) {
+                this.drawReticle(ctx, r + 10, now);
+            }
+
+            ctx.restore();
+        });
+    },
+
+    drawArchetypeGraphic(ctx, archetype, color, now, capacity) {
+        ctx.save();
+        ctx.fillStyle = color;
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 1.6;
+
+        switch (archetype) {
+            case 'power': {
+                // Spinning 3-blade turbine
+                const angle = now * 0.003 * (capacity || 1);
+                ctx.beginPath();
+                ctx.arc(0, 0, 3.5, 0, Math.PI * 2);
+                ctx.fill();
+                for (let i = 0; i < 3; i++) {
+                    const a = angle + i * (Math.PI * 2 / 3);
+                    ctx.beginPath();
+                    ctx.moveTo(Math.cos(a) * 3, Math.sin(a) * 3);
+                    ctx.lineTo(Math.cos(a + 0.35) * 11, Math.sin(a + 0.35) * 11);
+                    ctx.lineTo(Math.cos(a) * 13, Math.sin(a) * 13);
+                    ctx.closePath();
+                    ctx.fill();
+                }
+                break;
+            }
+            case 'extractor': {
+                // Reciprocating drill triangle with piston
+                const yOff = Math.sin(now * 0.007) * 3;
+                ctx.beginPath();
+                ctx.moveTo(0, 9 + yOff);
+                ctx.lineTo(-7, -4 + yOff);
+                ctx.lineTo(7, -4 + yOff);
+                ctx.closePath();
+                ctx.stroke();
+                ctx.fillRect(-2, -9, 4, 6 + yOff);
+                break;
+            }
+            case 'processor': {
+                // Crucible vat / foundry with molten flame
+                ctx.beginPath();
+                ctx.moveTo(-8, -6);
+                ctx.lineTo(8, -6);
+                ctx.lineTo(5, 7);
+                ctx.lineTo(-5, 7);
+                ctx.closePath();
+                ctx.stroke();
+                // Molten core
+                ctx.beginPath();
+                ctx.arc(0, 1 + Math.sin(now * 0.008) * 1.5, 3, 0, Math.PI * 2);
+                ctx.fill();
+                break;
+            }
+            case 'manufacturer': {
+                // Dual interlocking cogs
+                const a1 = now * 0.0025;
+                ctx.save();
+                ctx.translate(-3, 0);
+                ctx.rotate(a1);
+                this.drawCog(ctx, 7, 6);
+                ctx.restore();
+                ctx.save();
+                ctx.translate(6, 4);
+                ctx.rotate(-a1 + 0.4);
+                this.drawCog(ctx, 5, 5);
+                ctx.restore();
+                break;
+            }
+            case 'depot': {
+                // Isometric storage cube
+                ctx.beginPath();
+                ctx.moveTo(0, -9);
+                ctx.lineTo(8, -4.5);
+                ctx.lineTo(8, 4.5);
+                ctx.lineTo(0, 9);
+                ctx.lineTo(-8, 4.5);
+                ctx.lineTo(-8, -4.5);
+                ctx.closePath();
+                ctx.stroke();
+                ctx.beginPath();
+                ctx.moveTo(0, -9); ctx.lineTo(0, 0);
+                ctx.moveTo(0, 0); ctx.lineTo(8, -4.5);
+                ctx.moveTo(0, 0); ctx.lineTo(-8, -4.5);
+                ctx.moveTo(0, 0); ctx.lineTo(0, 9);
+                ctx.stroke();
+                break;
+            }
+            case 'habitat': {
+                // City towers silhouette
+                ctx.fillRect(-8, -3, 4, 11);
+                ctx.fillRect(-3, -9, 6, 17);
+                ctx.fillRect(4, -5, 4, 13);
+                ctx.fillStyle = '#ffffff';
+                ctx.fillRect(-1, -7, 2, 2);
+                ctx.fillRect(-1, -3, 2, 2);
+                ctx.fillRect(5, -3, 2, 2);
+                break;
+            }
+            case 'bio': {
+                // Organic double leaf / helix
+                ctx.beginPath();
+                ctx.ellipse(0, 0, 4, 9, Math.PI / 4, 0, Math.PI * 2);
+                ctx.stroke();
+                ctx.beginPath();
+                ctx.ellipse(0, 0, 4, 9, -Math.PI / 4, 0, Math.PI * 2);
+                ctx.stroke();
+                ctx.beginPath();
+                ctx.arc(0, 0, 2.5, 0, Math.PI * 2);
+                ctx.fill();
+                break;
+            }
+            case 'water': {
+                // Undulating waves
+                const wOff = now * 0.005;
+                for (let row = -3; row <= 5; row += 4) {
+                    ctx.beginPath();
+                    for (let x = -8; x <= 8; x += 2) {
+                        const y = row + Math.sin(x * 0.5 + wOff) * 2;
+                        if (x === -8) ctx.moveTo(x, y);
+                        else ctx.lineTo(x, y);
+                    }
+                    ctx.stroke();
+                }
+                break;
+            }
+            case 'care': {
+                // Medical cross
+                ctx.fillRect(-3, -8, 6, 16);
+                ctx.fillRect(-8, -3, 16, 6);
+                break;
+            }
+            default: {
+                // Tech diamond
+                ctx.beginPath();
+                ctx.moveTo(0, -8);
+                ctx.lineTo(8, 0);
+                ctx.lineTo(0, 8);
+                ctx.lineTo(-8, 0);
+                ctx.closePath();
+                ctx.stroke();
+                ctx.beginPath();
+                ctx.arc(0, 0, 3, 0, Math.PI * 2);
+                ctx.fill();
+                break;
+            }
+        }
+        ctx.restore();
+    },
+
+    drawCog(ctx, r, teeth) {
+        ctx.beginPath();
+        for (let i = 0; i < teeth * 2; i++) {
+            const angle = (i * Math.PI) / teeth;
+            const dist = i % 2 === 0 ? r : r - 2.5;
+            const x = Math.cos(angle) * dist;
+            const y = Math.sin(angle) * dist;
+            if (i === 0) ctx.moveTo(x, y);
+            else ctx.lineTo(x, y);
+        }
+        ctx.closePath();
+        ctx.stroke();
+    },
+
+    drawOverdriveSparks(ctx, r, now) {
+        ctx.save();
+        ctx.strokeStyle = '#42d3ea';
+        ctx.lineWidth = 1.5;
+        const sparkCount = 3;
+        for (let i = 0; i < sparkCount; i++) {
+            const a = (now * 0.01 + i * 2.1) % (Math.PI * 2);
+            const dist = r + 3 + (Math.sin(now * 0.02 + i) * 3);
+            const x = Math.cos(a) * dist;
+            const y = Math.sin(a) * dist;
+            ctx.beginPath();
+            ctx.moveTo(x, y);
+            ctx.lineTo(x + (Math.random() - 0.5) * 8, y + (Math.random() - 0.5) * 8);
+            ctx.stroke();
+        }
+        ctx.restore();
+    },
+
+    drawReticle(ctx, r, now) {
+        ctx.save();
+        ctx.strokeStyle = '#f1b96b';
+        ctx.lineWidth = 1.8;
+        const cornerSize = 7;
+        // 4 corner targeting brackets
+        [
+            [-r, -r, 1, 1],
+            [r, -r, -1, 1],
+            [-r, r, 1, -1],
+            [r, r, -1, -1],
+        ].forEach(([x, y, dx, dy]) => {
+            ctx.beginPath();
+            ctx.moveTo(x + dx * cornerSize, y);
+            ctx.lineTo(x, y);
+            ctx.lineTo(x, y + dy * cornerSize);
+            ctx.stroke();
+        });
+
+        // Pulsing outer tick
+        ctx.setLineDash([2, 8]);
+        ctx.lineDashOffset = -(now * 0.02);
+        ctx.beginPath();
+        ctx.arc(0, 0, r + 5, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+    },
+};
 
 initialize();

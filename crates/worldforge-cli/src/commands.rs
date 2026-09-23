@@ -137,7 +137,29 @@ pub fn run(
             worldforge_world::ObjectiveStatus::Failed => "✗",
             worldforge_world::ObjectiveStatus::Pending => "?",
         };
-        println!("  {} {}: {:?}", icon, obj.name, obj.status);
+        println!(
+            "  {} {}: {:?} ({:.0}% · {:.2} / {:.2})",
+            icon,
+            obj.name,
+            obj.status,
+            obj.progress * 100.0,
+            obj.current,
+            obj.target
+        );
+    }
+
+    println!();
+    println!("Resource telemetry:");
+    for metric in &result.resource_metrics {
+        println!(
+            "  {:<18} {:>10.2} → {:>10.2}  range {:>10.2}..{:>10.2}  net {:+.2}",
+            metric.resource,
+            metric.initial,
+            metric.final_level,
+            metric.minimum,
+            metric.maximum,
+            metric.net_change
+        );
     }
 
     // Save replay

@@ -11,6 +11,7 @@ World Forge 0.1.0 is a local-first beta of the deterministic simulation runtime 
 - Capability-gated WebAssembly mod runtime
 - CLI validation, simulation, determinism testing, export, benchmarking, replay, packaging, and diagnostics
 - Browser-based Simulation Studio with World Builder, durable saves, interactive Play Mode, live decisions, charts, audit logs, comparisons, benchmarks, proof inspection, and JSON export
+- Exact resource extrema and objective-progress analytics with run-level resilience, stress, growth, and recovery interpretation
 
 ## World Builder
 
@@ -26,6 +27,7 @@ Open **Play world** from the Simulation Studio navigation. Play Mode creates an 
 - Live entity topology, aggregate world resources, objectives, and chronological activity
 - Producer-capacity decisions from 0% through 200%
 - A final BLAKE3 state fingerprint and event-chain proof containing every player decision
+- Live objective values and normalized progress toward each configured target
 
 Incremental execution is parity-tested against continuous execution: with the same world, seed, duration, and decisions it produces the same final state and event-chain root.
 
@@ -75,3 +77,5 @@ Report security issues using the private process in [SECURITY.md](../SECURITY.md
 3. Package each example world and inspect its fingerprint.
 4. Smoke-test the dashboard at desktop and mobile widths.
 5. Create the Git tag only after CI and determinism checks pass.
+
+The example catalog includes Coastal Resilience as the broadest systems demonstration: eight entities connect renewable energy, desalination, food, chemical, medical, storage, care, and population systems across a staged disruption and recovery.

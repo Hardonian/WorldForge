@@ -4,6 +4,9 @@
 
 ### Simulation Studio
 
+- Added an operational-insights layer with resilience scoring, stress/growth/recovery signals, exact resource ledgers, and measurable objective progress in completed and live runs.
+- Added the eight-entity Coastal Resilience scenario with coupled energy, water, food, medicine, care, and wellbeing systems plus staged disruption and recovery events.
+- Added a Tactical CG Game Viewport with continuous 60 FPS animations, camera pan/zoom/fit controls, animated flow conduits, traveling resource packet particles, archetype visual silhouettes, floating delta text, production shockwaves, shortage warnings, holographic HUD cards, and dual CG/Schematic view modes.
 - Added persistent Play Mode sessions with pause, step, variable speed, restart, live entity topology, inventory meters, mission status, and world activity feed.
 - Added proof-chained player interventions for production capacity, with deterministic incremental runtime execution.
 - Added an engine-derived world catalog and health metadata API.
@@ -16,6 +19,7 @@
 
 ### Release readiness
 
+- Added per-tick resource extrema telemetry that remains exact even when long-run chart history is downsampled, with API contract and regression coverage.
 - Documented beta scope, verification commands, security posture, and known limitations in `docs/beta-release.md`.
 - Added bounded proof capture with full event-chain parity, 2,048-point snapshot retention, 5,000-event dashboard windows, and accurate full-run aggregates.
 - Replaced unbounded request threads with a CPU-sized worker pool and bounded overload queue.

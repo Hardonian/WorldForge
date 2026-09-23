@@ -65,11 +65,39 @@ impl EntitiesConfig {
 
     /// Validate names, numeric values, and all cross-entity references.
     pub fn validate(&self) -> Result<(), WorldForgeError> {
+        self.validate_fragment()?;
         if self.entities.is_empty() {
             return Err(schema_error(
                 "entities.toml must define at least one entity",
             ));
         }
+
+        let names = self
+            .entities
+            .iter()
+            .map(|entity| entity.name.as_str())
+            .collect::<BTreeSet<_>>();
+
+        for link in &self.links {
+            if !names.contains(link.from.as_str()) {
+                return Err(schema_error(format!(
+                    "link source '{}' does not exist",
+                    link.from
+                )));
+            }
+            if !names.contains(link.to.as_str()) {
+                return Err(schema_error(format!(
+                    "link destination '{}' does not exist",
+                    link.to
+                )));
+            }
+        }
+        Ok(())
+    }
+
+    /// Validate a local inheritance fragment. Links may reference entities
+    /// supplied by a base world, and an entirely empty fragment is valid.
+    pub fn validate_fragment(&self) -> Result<(), WorldForgeError> {
 
         let mut names = BTreeSet::new();
         for entity in &self.entities {
@@ -111,18 +139,10 @@ impl EntitiesConfig {
             }
         }
 
+        let mut link_keys = BTreeSet::new();
         for link in &self.links {
-            if !names.contains(link.from.as_str()) {
-                return Err(schema_error(format!(
-                    "link source '{}' does not exist",
-                    link.from
-                )));
-            }
-            if !names.contains(link.to.as_str()) {
-                return Err(schema_error(format!(
-                    "link destination '{}' does not exist",
-                    link.to
-                )));
+            if link.from.trim().is_empty() || link.to.trim().is_empty() {
+                return Err(schema_error("link endpoints must be non-empty"));
             }
             if link.from == link.to {
                 return Err(schema_error(format!(
@@ -134,8 +154,46 @@ impl EntitiesConfig {
                 return Err(schema_error("link resource must be non-empty"));
             }
             validate_number(link.max_per_tick, "link max_per_tick", false)?;
+            if !link_keys.insert((
+                link.from.as_str(),
+                link.to.as_str(),
+                link.resource.as_str(),
+            )) {
+                return Err(schema_error(format!(
+                    "duplicate link '{} -> {}' for resource '{}'",
+                    link.from, link.to, link.resource
+                )));
+            }
         }
         Ok(())
+    }
+
+    /// Overlay a fragment onto this configuration. Named entities and links
+    /// with the same `(from, to, resource)` identity are replaced in place;
+    /// new definitions append in declaration order.
+    pub fn overlay(&mut self, fragment: EntitiesConfig) {
+        for entity in fragment.entities {
+            if let Some(existing) = self
+                .entities
+                .iter_mut()
+                .find(|existing| existing.name == entity.name)
+            {
+                *existing = entity;
+            } else {
+                self.entities.push(entity);
+            }
+        }
+        for link in fragment.links {
+            if let Some(existing) = self.links.iter_mut().find(|existing| {
+                existing.from == link.from
+                    && existing.to == link.to
+                    && existing.resource == link.resource
+            }) {
+                *existing = link;
+            } else {
+                self.links.push(link);
+            }
+        }
     }
 }
 
@@ -223,5 +281,48 @@ mod tests {
         )
         .unwrap();
         config.validate().unwrap();
+    }
+
+    #[test]
+    fn fragment_overlay_replaces_named_content_and_allows_parent_references() {
+        let mut base = EntitiesConfig::from_toml(
+            r#"
+            [[entities]]
+            name = "source"
+            entity_type = "producer"
+            region = "base"
+            [entities.initial_inventory]
+            ore = 10.0
+            "#,
+        )
+        .unwrap();
+        let fragment = EntitiesConfig::from_toml(
+            r#"
+            [[entities]]
+            name = "source"
+            entity_type = "producer"
+            region = "derived"
+            [entities.initial_inventory]
+            ore = 20.0
+
+            [[entities]]
+            name = "sink"
+            entity_type = "storage"
+            region = "derived"
+
+            [[links]]
+            from = "source"
+            to = "sink"
+            resource = "ore"
+            max_per_tick = 2.0
+            "#,
+        )
+        .unwrap();
+        fragment.validate_fragment().unwrap();
+        base.overlay(fragment);
+        base.validate().unwrap();
+        assert_eq!(base.entities.len(), 2);
+        assert_eq!(base.entities[0].region, "derived");
+        assert_eq!(base.links.len(), 1);
     }
 }

@@ -21,6 +21,7 @@ const INDEX: &str = include_str!("../../../dashboard/index.html");
 const SCRIPT: &str = include_str!("../../../dashboard/dashboard.js");
 const STYLE: &str = include_str!("../../../dashboard/dashboard.css");
 const WORLD_ATLAS: &[u8] = include_bytes!("../../../dashboard/assets/world-atlas.png");
+const TACTICAL_HOLO_BG: &[u8] = include_bytes!("../../../dashboard/assets/tactical-holo-bg.jpg");
 const MAX_REQUEST_BYTES: usize = 64 * 1024;
 const MAX_TICKS: u64 = 1_000_000;
 const MAX_BENCHMARK_REPS: u32 = 20;
@@ -252,6 +253,13 @@ fn handle_connection(stream: &mut TcpStream, state: &ServerState) -> Result<(), 
             "200 OK",
             "image/png",
             WORLD_ATLAS,
+            true,
+        ),
+        ("GET", "/assets/tactical-holo-bg.jpg") => respond(
+            stream,
+            "200 OK",
+            "image/jpeg",
+            TACTICAL_HOLO_BG,
             true,
         ),
         ("GET", "/api/health") => {

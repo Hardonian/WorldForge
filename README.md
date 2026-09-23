@@ -24,6 +24,7 @@ World Forge is a simulation operating system for building games, simulations, wo
 | Capability-based mod API | ✅ Implemented | Deny-by-default capability system |
 | WASM mod runtime | ✅ Implemented | Wasmtime core-Wasm sandbox, fuel/memory limits, capability-gated host ABI |
 | Simulation Studio | ✅ Implemented | World Builder, durable saves, Play Mode, live decisions, charts, proofs, comparisons, benchmarks, export |
+| Operational analytics | ✅ Implemented | Exact resource extrema, objective progress, stress/growth/recovery signals, resilience scoring |
 | CLI | ✅ Implemented | doctor, validate, run, export, benchmark, dashboard, package, replay |
 | CI pipeline | ✅ Implemented | Cross-platform tests + determinism verification |
 
@@ -53,7 +54,7 @@ cargo run -p worldforge-cli -- dashboard
 
 ## Architecture
 
-World Forge is a Rust workspace of 12 crates:
+World Forge is a Rust workspace of 13 crates (12 product crates plus the benchmark harness):
 
 ```
 worldforge-core        Foundation: typed IDs, Fixed64, Tick, RNG, BLAKE3, errors
@@ -68,6 +69,7 @@ worldforge-mod-api     Capability-based mod API (deny-by-default)
 worldforge-mod-runtime Sandboxed Wasmtime lifecycle with capability-gated host ABI
 worldforge-package     .world package format with reproducible fingerprints
 worldforge-cli         Command-line interface
+worldforge-bench       Criterion simulation and stress benchmarks
 ```
 
 ### Design Principles
@@ -168,11 +170,14 @@ WIT interfaces for the Component Model are defined in `wit/worldforge/`. The exe
 - Crash-safe local save slots with deterministic resume reconstruction and world-fingerprint compatibility checks
 - Deterministic production-capacity decisions recorded inside the replay proof chain
 - Responsive resource, topology, and event visualizations
+- Exact whole-run resource extrema, measurable objective progress, resilience scoring, and operational insights
 - Filterable event audit trails and objective status
 - Same-seed determinism checks and cross-seed run comparison
 - Server-side performance benchmarks
 - Canonical JSON export, copyable proof fingerprints, and local recent-run history
 - Bounded high-DPI rendering, bounded dashboard payloads, and proof-only capture for long analytical runs
+
+The chart history is intentionally downsampled for long runs, while the resource ledger's initial, final, minimum, maximum, and extrema ticks are computed on every simulation tick. See [operational analytics](docs/analytics.md) for the metric definitions and scoring model.
 
 Use a different catalog or local bind address when needed:
 
