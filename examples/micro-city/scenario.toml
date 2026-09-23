@@ -18,6 +18,6 @@ type = "avoid_shortage"
 resource = "power"
 
 [[objectives]]
-type = "maintain_inventory"
+type = "reach_inventory_target"
 resource = "population"
-minimum = 500.0
+target = 500.0

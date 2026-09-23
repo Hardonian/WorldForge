@@ -20,8 +20,6 @@ pub struct ModRuntimeConfig {
     pub fuel_per_tick: u64,
     /// Maximum memory in bytes.
     pub max_memory_bytes: usize,
-    /// Maximum execution time per tick in milliseconds.
-    pub max_tick_ms: u64,
 }
 
 impl Default for ModRuntimeConfig {
@@ -29,7 +27,6 @@ impl Default for ModRuntimeConfig {
         Self {
             fuel_per_tick: 1_000_000,
             max_memory_bytes: 64 * 1024 * 1024, // 64MB
-            max_tick_ms: 100,
         }
     }
 }
@@ -261,12 +258,14 @@ pub fn load_wasm_mod(
 }
 
 /// A mock mod for testing the mod lifecycle without WASM.
+#[cfg(test)]
 pub struct MockMod {
     pub name: String,
     pub tick_count: u64,
     pub events_received: Vec<Vec<u8>>,
 }
 
+#[cfg(test)]
 impl MockMod {
     pub fn new(name: &str) -> Self {
         Self {
@@ -277,6 +276,7 @@ impl MockMod {
     }
 }
 
+#[cfg(test)]
 impl ModCallbacks for MockMod {
     fn init(&mut self) -> Result<(), String> {
         tracing::info!(mod_name = %self.name, "mock mod initialized");
@@ -301,8 +301,10 @@ impl ModCallbacks for MockMod {
 }
 
 /// A mock mod that requests a denied capability (for testing).
+#[cfg(test)]
 pub struct DeniedCapabilityMod;
 
+#[cfg(test)]
 impl ModCallbacks for DeniedCapabilityMod {
     fn init(&mut self) -> Result<(), String> {
         Ok(())

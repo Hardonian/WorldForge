@@ -26,7 +26,7 @@ echo ""
 
 # 4. Clippy
 echo "▸ Running clippy..."
-cargo clippy --workspace -- -D warnings
+cargo clippy --workspace --all-targets -- -D warnings
 echo "  ✓ No clippy warnings"
 echo ""
 
@@ -37,8 +37,11 @@ echo ""
 
 # 6. Validate example worlds
 echo "▸ Validating example worlds..."
-cargo run -p worldforge-cli --quiet -- validate examples/supply-chain
-cargo run -p worldforge-cli --quiet -- validate examples/minimal-world
+for world in examples/*; do
+  if [[ -f "$world/world.toml" ]]; then
+    cargo run -p worldforge-cli --quiet -- validate "$world"
+  fi
+done
 echo "  ✓ All example worlds valid"
 echo ""
 
@@ -54,6 +57,11 @@ echo ""
 
 echo "▸ Verifying replay..."
 cargo run -p worldforge-cli --quiet -- replay verify examples/supply-chain/last.replay
+cargo run -p worldforge-cli --quiet -- replay run examples/supply-chain/last.replay
+echo ""
+
+echo "▸ Verifying canonical JSON export..."
+cargo run -p worldforge-cli --quiet -- export examples/supply-chain --seed 42 --ticks 25 --output target/supply-chain-export.json
 echo ""
 
 echo "=== All verification checks passed ✓ ==="

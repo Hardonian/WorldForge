@@ -20,8 +20,9 @@ World Forge is a simulation operating system for building games, simulations, wo
 | Package system (.world) | ✅ Implemented | Deterministic tar with content fingerprinting |
 | Agent framework | ✅ Implemented | Rule-based and utility-based policies |
 | Capability-based mod API | ✅ Implemented | Deny-by-default capability system |
-| WASM mod runtime | ⚠️ Contract only | WIT interfaces defined; wasmtime integration planned |
-| CLI | ✅ Implemented | doctor, validate, run, test-world, package, replay |
+| WASM mod runtime | ✅ Implemented | Wasmtime core-Wasm sandbox, fuel/memory limits, capability-gated host ABI |
+| Dashboard | ✅ Implemented | Local engine-backed API, resource charts, events, objectives, proofs |
+| CLI | ✅ Implemented | doctor, validate, run, export, benchmark, dashboard, package, replay |
 | CI pipeline | ✅ Implemented | Cross-platform tests + determinism verification |
 
 ## Quick Start
@@ -43,6 +44,9 @@ cargo run -p worldforge-cli -- replay verify examples/supply-chain/last.replay
 
 # Check runtime health
 cargo run -p worldforge-cli -- doctor
+
+# Open the engine-backed dashboard at http://127.0.0.1:8787
+cargo run -p worldforge-cli -- dashboard
 ```
 
 ## Architecture
@@ -59,7 +63,7 @@ worldforge-replay      CBOR replay artifacts with tamper detection
 worldforge-runtime     Simulation executor (load → validate → tick → proof)
 worldforge-agent       Rule-based and utility-based agent policies
 worldforge-mod-api     Capability-based mod API (deny-by-default)
-worldforge-mod-runtime WASM mod lifecycle (mock runtime; wasmtime planned)
+worldforge-mod-runtime Sandboxed Wasmtime lifecycle with capability-gated host ABI
 worldforge-package     .world package format with reproducible fingerprints
 worldforge-cli         Command-line interface
 ```
@@ -70,7 +74,7 @@ worldforge-cli         Command-line interface
 
 2. **Worlds are packages.** A world is a directory containing `world.toml`, `scenario.toml`, `entities.toml`, and optionally mods. Package into `.world` archives with reproducible content fingerprints.
 
-3. **No fake features.** Where functionality is not yet implemented (e.g., WASM mod loading), the code returns `FeatureStatus::Unavailable` with a clear reason — never a silent no-op.
+3. **No fake features.** Validation is typed and referential: malformed values, duplicate entities, dangling links, mismatched scenarios, and invalid event targets fail before execution.
 
 4. **Replay verifies the run.** Every simulation produces a CBOR replay artifact containing the event hash chain. Tampering with any event invalidates the chain root.
 
@@ -84,7 +88,7 @@ The `examples/supply-chain` directory demonstrates a complete simulation:
 - **Resource flow**: ore → steel → goods, with energy costs
 - **Disruption event**: Factory capacity drops to 50% at tick 250
 - **Objectives**: Maintain goods inventory ≥ 50, avoid stockouts
-- **Outcome**: The disruption causes cascading shortages — objectives fail, demonstrating that the simulation produces meaningful, realistic behavior
+- **Outcome**: The disruption causes cascading shortages; objectives are evaluated continuously and production targets use cumulative output
 
 ```bash
 cargo run -p worldforge-cli -- run examples/supply-chain --seed 42 --ticks 1000
@@ -100,7 +104,7 @@ cargo run -p worldforge-cli -- run examples/supply-chain --seed 42 --ticks 1000
 
 The CI pipeline runs these checks on every push:
 - Workspace compilation
-- 73+ unit tests across all crates
+- 80+ unit and integration tests across all crates
 - Cross-platform tests (Linux, Windows, macOS)
 - Determinism verification (20 runs with same seed)
 - Format and lint checks
@@ -148,7 +152,15 @@ let policy = CapabilityPolicy::with_capabilities(vec![
 assert!(!policy.check(&Capability::EntityWrite));
 ```
 
-WIT interfaces for the WASM Component Model are defined in `wit/worldforge/`. The runtime contract is specified; wasmtime integration is planned for M1.
+WIT interfaces for the Component Model are defined in `wit/worldforge/`. The executable v0 runtime loads core WebAssembly modules without WASI, enforces fuel and memory limits, and exposes only capability-checked `read_resource` and `emit_event` host calls. See `examples/mods/read-emit.wat` and `docs/architecture/mod-security.md`.
+
+## Dashboard and exports
+
+`worldforge dashboard` serves the bundled UI and a localhost-only simulation API. Every chart, event, objective, and fingerprint comes from the Rust runtime. For other tools, export the same canonical document directly:
+
+```bash
+cargo run -p worldforge-cli -- export examples/ecosystem --ticks 1000 --seed 42 --output ecosystem.json
+```
 
 ## License
 

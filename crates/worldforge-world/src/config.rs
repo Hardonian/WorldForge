@@ -66,7 +66,9 @@ impl EntitiesConfig {
     /// Validate names, numeric values, and all cross-entity references.
     pub fn validate(&self) -> Result<(), WorldForgeError> {
         if self.entities.is_empty() {
-            return Err(schema_error("entities.toml must define at least one entity"));
+            return Err(schema_error(
+                "entities.toml must define at least one entity",
+            ));
         }
 
         let mut names = BTreeSet::new();

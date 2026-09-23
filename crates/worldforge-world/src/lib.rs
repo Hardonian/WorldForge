@@ -13,9 +13,9 @@ pub mod model;
 pub mod objective;
 pub mod scenario;
 
+pub use config::{EntitiesConfig, EntityConfig, LinkConfig, ProductionConfig};
 pub use event::{EventType, ScheduledEvent, ScheduledEventType, SimulationEvent};
 pub use manifest::WorldManifest;
 pub use model::*;
 pub use objective::{Objective, ObjectiveStatus, ObjectiveType};
 pub use scenario::Scenario;
-pub use config::{EntitiesConfig, EntityConfig, LinkConfig, ProductionConfig};

@@ -1,4 +1,4 @@
-# 100-entity stress test: 20 producers → 30 processors → 30 distributors → 20 consumers
+# 40-entity stress test: 20 producers → 10 processors → 5 distributors → 5 consumers
 # With cross-connected links for maximum simulation load
 
 # ====== PRODUCERS (20) ======
@@ -282,7 +282,7 @@ energy = 3.0
 [entities.production.outputs]
 chemicals = 7.0
 
-# ====== PROCESSORS (10 of 30 — representative) ======
+# ====== PROCESSORS (10) ======
 [[entities]]
 name = "smelter-01"
 entity_type = "processor"
@@ -447,7 +447,7 @@ energy = 1.0
 [entities.production.outputs]
 textiles = 4.0
 
-# ====== DISTRIBUTORS (5 of 30) ======
+# ====== DISTRIBUTORS (5) ======
 [[entities]]
 name = "warehouse-01"
 entity_type = "storage"
@@ -493,7 +493,7 @@ region = "logistics-zone"
 goods = 250.0
 furniture = 60.0
 
-# ====== CONSUMERS (5 of 20) ======
+# ====== CONSUMERS (5) ======
 [[entities]]
 name = "city-01"
 entity_type = "consumer"

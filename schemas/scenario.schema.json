@@ -43,7 +43,7 @@
         "properties": {
           "type": {
             "type": "string",
-            "enum": ["maintain_inventory", "avoid_shortage", "reach_production_target", "survive_until_tick"]
+            "enum": ["maintain_inventory", "avoid_shortage", "reach_production_target", "reach_inventory_target", "survive_until_tick"]
           },
           "resource": { "type": "string" },
           "minimum": { "type": "number" },

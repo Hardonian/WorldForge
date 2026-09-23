@@ -142,7 +142,7 @@ runBtn.addEventListener('click', () => {
     runSimulation();
 });
 
-function runSimulation() {
+async function runSimulation() {
     const world = WORLDS[currentWorld];
     if (!world) return;
 
@@ -154,127 +154,39 @@ function runSimulation() {
     runBtn.classList.add('running');
     runBtn.innerHTML = '<span class="spinner-ring" style="width:16px;height:16px;border-width:2px;display:inline-block"></span> Running...';
 
-    // Simulate with mock data (in production, this would call `worldforge export`)
-    setTimeout(() => {
-        simulationData = generateSimulationData(currentWorld, seed, ticks);
+    try {
+        const response = await fetch('/api/run', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ world: currentWorld, seed, ticks }),
+        });
+        const payload = await response.json();
+        if (!response.ok) throw new Error(payload.error || `Simulation failed (${response.status})`);
+
+        simulationData = payload;
+        WORLDS[currentWorld] = {
+            ...world,
+            title: payload.title || world.title,
+            desc: payload.description || world.desc,
+            entities: payload.entities || world.entities,
+            resources: payload.resources || world.resources,
+            links: payload.links || world.links,
+        };
+        switchWorld(currentWorld);
         displayResults(simulationData);
 
+    } catch (error) {
+        console.error(error);
+        document.getElementById('event-log').innerHTML = '';
+        const message = document.createElement('div');
+        message.className = 'log-empty';
+        message.textContent = `Unable to run: ${error.message}. Start this page with “worldforge dashboard”.`;
+        document.getElementById('event-log').appendChild(message);
+    } finally {
         loadingOverlay.classList.add('hidden');
         runBtn.classList.remove('running');
         runBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M4 2.5v11l9-5.5z"/></svg> Run Simulation';
-    }, 800);
-}
-
-// === Generate Simulation Data ===
-function generateSimulationData(worldId, seed, ticks) {
-    const world = WORLDS[worldId];
-    const rng = seedRng(seed);
-
-    // Generate tick-by-tick resource snapshots
-    const snapshots = [];
-    const resourceLevels = {};
-    world.resources.forEach(r => {
-        resourceLevels[r] = 100 + rng() * 400;
-    });
-
-    let totalEvents = 0;
-    let shortageEvents = 0;
-    const events = [];
-    const eventTypeCounts = { production: 0, transfer: 0, shortage: 0, price: 0 };
-
-    for (let t = 0; t < ticks; t++) {
-        // Update resource levels with production/consumption dynamics
-        world.resources.forEach(r => {
-            const change = (rng() - 0.45) * 10;
-            resourceLevels[r] = Math.max(0, resourceLevels[r] + change);
-
-            // Simulate disruption event
-            if (t === Math.floor(ticks * 0.25)) {
-                resourceLevels[r] *= 0.6;
-            }
-        });
-
-        // Record snapshot every N ticks
-        if (t % Math.max(1, Math.floor(ticks / 200)) === 0) {
-            snapshots.push({
-                tick: t,
-                levels: { ...resourceLevels },
-            });
-        }
-
-        // Generate events
-        const eventRoll = rng();
-        if (eventRoll < 0.7) {
-            const type = eventRoll < 0.3 ? 'production' : eventRoll < 0.5 ? 'transfer' : eventRoll < 0.6 ? 'shortage' : 'price';
-            eventTypeCounts[type]++;
-            totalEvents++;
-            if (type === 'shortage') shortageEvents++;
-
-            if (events.length < 500) {
-                const entity = world.entities[Math.floor(rng() * world.entities.length)];
-                const resource = world.resources[Math.floor(rng() * world.resources.length)];
-                events.push({
-                    tick: t,
-                    type,
-                    entity,
-                    resource,
-                    amount: Math.floor(rng() * 100),
-                });
-            }
-        }
     }
-
-    // Generate fingerprints
-    const fp = () => {
-        let hex = '';
-        for (let i = 0; i < 16; i++) hex += Math.floor(rng() * 16).toString(16);
-        return hex;
-    };
-
-    // Generate objectives
-    const objectives = [];
-    if (worldId === 'supply-chain') {
-        objectives.push({ name: 'maintain goods ≥ 50', status: shortageEvents > 100 ? 'Failed' : 'Passed' });
-        objectives.push({ name: 'avoid goods shortage', status: shortageEvents > 50 ? 'Failed' : 'Passed' });
-    } else if (worldId === 'ecosystem') {
-        objectives.push({ name: 'maintain wolves ≥ 5', status: 'Passed' });
-        objectives.push({ name: 'avoid deer shortage', status: 'Passed' });
-        objectives.push({ name: 'maintain grass ≥ 100', status: shortageEvents > 80 ? 'Failed' : 'Passed' });
-    } else if (worldId === 'micro-city') {
-        objectives.push({ name: 'maintain happiness ≥ 30', status: 'Passed' });
-        objectives.push({ name: 'avoid power shortage', status: 'Passed' });
-        objectives.push({ name: 'maintain population ≥ 500', status: 'Passed' });
-    } else if (worldId === 'freight-network') {
-        objectives.push({ name: 'maintain parcels ≥ 20', status: 'Passed' });
-        objectives.push({ name: 'avoid fuel shortage', status: 'Passed' });
-    }
-
-    return {
-        world: worldId,
-        seed,
-        ticks,
-        totalEvents,
-        shortageEvents,
-        snapshots,
-        events,
-        eventTypeCounts,
-        objectives,
-        fingerprints: {
-            world: fp(),
-            initial: fp(),
-            final: fp(),
-            eventChain: fp(),
-        },
-    };
-}
-
-// === Deterministic PRNG ===
-function seedRng(seed) {
-    let s = seed;
-    return () => {
-        s = (s * 1103515245 + 12345) & 0x7fffffff;
-        return s / 0x7fffffff;
-    };
 }
 
 // === Display Results ===
@@ -286,7 +198,8 @@ function displayResults(data) {
     document.getElementById('val-chain').textContent = data.fingerprints.eventChain;
 
     document.getElementById('trend-events').textContent = `${data.ticks} ticks, seed ${data.seed}`;
-    document.getElementById('trend-shortages').textContent = `${((data.shortageEvents / data.totalEvents) * 100).toFixed(1)}% of events`;
+    const shortageRate = data.totalEvents === 0 ? 0 : (data.shortageEvents / data.totalEvents) * 100;
+    document.getElementById('trend-shortages').textContent = `${shortageRate.toFixed(1)}% of events`;
 
     // Proof
     document.getElementById('proof-world').textContent = data.fingerprints.world;
@@ -518,7 +431,7 @@ function drawEventDistribution(data) {
     ctx.clearRect(0, 0, w, h);
 
     const types = Object.entries(data.eventTypeCounts);
-    const maxCount = Math.max(...types.map(([, c]) => c));
+    const maxCount = Math.max(1, ...types.map(([, c]) => c));
     const barW = Math.min(60, (w - 80) / types.length - 16);
     const padding = { top: 20, bottom: 50, left: 55 };
     const chartH = h - padding.top - padding.bottom;
@@ -576,10 +489,13 @@ function displayObjectives(objectives) {
         const card = document.createElement('div');
         const status = obj.status.toLowerCase();
         card.className = `objective-card ${status}`;
-        card.innerHTML = `
-            <div class="objective-icon">${status === 'passed' ? '✅' : status === 'failed' ? '❌' : '⏳'}</div>
-            <div class="objective-name">${obj.name}: ${obj.status}</div>
-        `;
+        const icon = document.createElement('div');
+        icon.className = 'objective-icon';
+        icon.textContent = status === 'passed' ? '✅' : status === 'failed' ? '❌' : '⏳';
+        const name = document.createElement('div');
+        name.className = 'objective-name';
+        name.textContent = `${obj.name}: ${obj.status}`;
+        card.append(icon, name);
         container.appendChild(card);
     });
 }
@@ -593,11 +509,16 @@ function displayEventLog(events) {
     displayEvents.forEach(evt => {
         const entry = document.createElement('div');
         entry.className = 'log-entry';
-        entry.innerHTML = `
-            <span class="log-tick">t${evt.tick}</span>
-            <span class="log-type ${evt.type}">${evt.type}</span>
-            <span class="log-detail">${evt.entity} — ${evt.resource} ×${evt.amount}</span>
-        `;
+        const tick = document.createElement('span');
+        tick.className = 'log-tick';
+        tick.textContent = `t${evt.tick}`;
+        const type = document.createElement('span');
+        type.className = `log-type ${evt.type}`;
+        type.textContent = evt.type;
+        const detail = document.createElement('span');
+        detail.className = 'log-detail';
+        detail.textContent = evt.summary || `${evt.entity} — ${evt.resource} ×${evt.amount}`;
+        entry.append(tick, type, detail);
         container.appendChild(entry);
     });
 

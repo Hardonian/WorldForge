@@ -20,6 +20,14 @@ if ($LASTEXITCODE -ne 0) { throw "Tests failed" }
 Write-Host "  ✓ All tests pass" -ForegroundColor Green
 Write-Host ""
 
+Write-Host "▸ Checking formatting and lints..." -ForegroundColor Yellow
+cargo fmt --all -- --check
+if ($LASTEXITCODE -ne 0) { throw "Format check failed" }
+cargo clippy --workspace --all-targets -- -D warnings
+if ($LASTEXITCODE -ne 0) { throw "Clippy failed" }
+Write-Host "  ✓ Formatting and lints pass" -ForegroundColor Green
+Write-Host ""
+
 # 3. Doctor
 Write-Host "▸ Running doctor..." -ForegroundColor Yellow
 cargo run -p worldforge-cli --quiet -- doctor
@@ -28,10 +36,10 @@ Write-Host ""
 
 # 4. Validate example worlds
 Write-Host "▸ Validating example worlds..." -ForegroundColor Yellow
-cargo run -p worldforge-cli --quiet -- validate examples/supply-chain
-if ($LASTEXITCODE -ne 0) { throw "Validation failed" }
-cargo run -p worldforge-cli --quiet -- validate examples/minimal-world
-if ($LASTEXITCODE -ne 0) { throw "Validation failed" }
+Get-ChildItem examples -Directory | Where-Object { Test-Path (Join-Path $_.FullName 'world.toml') } | ForEach-Object {
+    cargo run -p worldforge-cli --quiet -- validate $_.FullName
+    if ($LASTEXITCODE -ne 0) { throw "Validation failed: $($_.Name)" }
+}
 Write-Host "  ✓ All example worlds valid" -ForegroundColor Green
 Write-Host ""
 
@@ -50,6 +58,13 @@ Write-Host ""
 Write-Host "▸ Verifying replay..." -ForegroundColor Yellow
 cargo run -p worldforge-cli --quiet -- replay verify examples/supply-chain/last.replay
 if ($LASTEXITCODE -ne 0) { throw "Replay verification failed" }
+cargo run -p worldforge-cli --quiet -- replay run examples/supply-chain/last.replay
+if ($LASTEXITCODE -ne 0) { throw "Replay re-execution failed" }
+Write-Host ""
+
+Write-Host "▸ Verifying canonical JSON export..." -ForegroundColor Yellow
+cargo run -p worldforge-cli --quiet -- export examples/supply-chain --seed 42 --ticks 25 --output target/supply-chain-export.json
+if ($LASTEXITCODE -ne 0) { throw "Export failed" }
 Write-Host ""
 
 Write-Host "=== All verification checks passed ✓ ===" -ForegroundColor Green

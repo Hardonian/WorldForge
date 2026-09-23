@@ -5,6 +5,7 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 
 mod commands;
+mod dashboard_server;
 
 #[derive(Parser)]
 #[command(
@@ -46,14 +47,14 @@ enum Command {
         /// Path to the world directory
         path: PathBuf,
         /// Number of ticks to simulate
-        #[arg(long, default_value = "1000")]
-        ticks: u64,
+        #[arg(long)]
+        ticks: Option<u64>,
         /// Random seed
-        #[arg(long, default_value = "42")]
-        seed: u64,
+        #[arg(long)]
+        seed: Option<u64>,
     },
 
-    /// Test a world across multiple seeds for determinism
+    /// Repeat a world with the same seed and verify deterministic results
     TestWorld {
         /// Path to the world directory
         path: PathBuf,
@@ -70,14 +71,14 @@ enum Command {
         /// Path to the world directory
         path: PathBuf,
         /// Number of ticks
-        #[arg(long, default_value = "1000")]
-        ticks: u64,
-        /// Random seed
-        #[arg(long, default_value = "42")]
-        seed: u64,
-        /// Output file path (stdout if omitted)
         #[arg(long)]
-        output: Option<PathBuf>,
+        ticks: Option<u64>,
+        /// Random seed
+        #[arg(long)]
+        seed: Option<u64>,
+        /// Output file path (stdout if omitted)
+        #[arg(long = "output")]
+        output_path: Option<PathBuf>,
     },
 
     /// Run performance benchmarks
@@ -90,6 +91,13 @@ enum Command {
         /// Number of repetitions
         #[arg(long, default_value = "5")]
         reps: u32,
+    },
+
+    /// Serve the browser dashboard backed by the real simulation engine
+    Dashboard {
+        /// Local address to bind
+        #[arg(long, default_value = "127.0.0.1:8787")]
+        bind: String,
     },
 
     /// Package operations
@@ -164,9 +172,10 @@ fn main() -> ExitCode {
             path,
             ticks,
             seed,
-            output,
-        } => commands::export(&path, ticks, seed, output.as_deref()),
+            output_path,
+        } => commands::export(&path, ticks, seed, output_path.as_deref()),
         Command::Benchmark { path, ticks, reps } => commands::benchmark(&path, ticks, reps),
+        Command::Dashboard { bind } => dashboard_server::serve(&bind),
         Command::Package { action } => match action {
             PackageAction::Validate { path } => commands::validate(&path),
             PackageAction::Build { path, output_path } => {
@@ -188,5 +197,32 @@ fn main() -> ExitCode {
             eprintln!("error: {}", e);
             ExitCode::FAILURE
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn export_output_does_not_conflict_with_global_format() {
+        let cli = Cli::try_parse_from([
+            "worldforge",
+            "--format",
+            "json",
+            "export",
+            "examples/minimal-world",
+            "--output",
+            "run.json",
+        ])
+        .unwrap();
+        assert!(matches!(cli.output, OutputFormat::Json));
+        assert!(matches!(
+            cli.command,
+            Command::Export {
+                output_path: Some(_),
+                ..
+            }
+        ));
     }
 }

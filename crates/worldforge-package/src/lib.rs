@@ -189,7 +189,10 @@ pub fn inspect_package(package_path: &Path) -> Result<PackageInfo, WorldForgeErr
                 format!("unsafe package path '{path}'"),
             ));
         }
-        if previous_path.as_ref().is_some_and(|previous| previous >= &path) {
+        if previous_path
+            .as_ref()
+            .is_some_and(|previous| previous >= &path)
+        {
             return Err(WorldForgeError::new(
                 ErrorCode::PackageInvalid,
                 format!("package entries are duplicated or not sorted at '{path}'"),

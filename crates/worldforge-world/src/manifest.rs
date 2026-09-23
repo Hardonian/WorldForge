@@ -60,11 +60,20 @@ impl WorldManifest {
         semver::Version::parse(&self.version).map_err(|error| {
             WorldForgeError::new(
                 ErrorCode::WorldManifestInvalid,
-                format!("world version '{}' is not valid SemVer: {error}", self.version),
+                format!(
+                    "world version '{}' is not valid SemVer: {error}",
+                    self.version
+                ),
             )
         })?;
-        if self.extends.iter().any(|dependency| dependency.trim().is_empty())
-            || self.mods.iter().any(|dependency| dependency.trim().is_empty())
+        if self
+            .extends
+            .iter()
+            .any(|dependency| dependency.trim().is_empty())
+            || self
+                .mods
+                .iter()
+                .any(|dependency| dependency.trim().is_empty())
         {
             return Err(WorldForgeError::new(
                 ErrorCode::WorldManifestInvalid,

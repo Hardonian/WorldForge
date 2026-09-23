@@ -18,11 +18,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `worldforge-runtime`: Full simulation lifecycle (load → validate → tick → proof)
 - `worldforge-agent`: Rule-based and utility-based agent policies with deterministic RNG
 - `worldforge-mod-api`: Capability-based mod API with deny-by-default policy
-- `worldforge-mod-runtime`: Mock mod runtime with lifecycle management (WASM planned for M1)
+- `worldforge-mod-runtime`: Wasmtime sandbox with fuel/memory limits and capability-gated host calls
 - `worldforge-package`: Deterministic .world package format with reproducible fingerprints
-- `worldforge-cli`: Commands: doctor, validate, run, test-world, package (build/inspect), replay (inspect/verify)
+- `worldforge-cli`: Commands: doctor, validate, run, test-world, export, benchmark, dashboard, package, replay
 - Supply-chain vertical slice example with 5 entities, disruption events, and objectives
 - WIT interface definitions for WASM Component Model mods
 - JSON schemas for world.toml and scenario.toml
 - CI pipeline with cross-platform testing and determinism verification
-- 73+ unit tests covering all crates
+- Typed, referential validation for entities, links, scenarios, and scheduled events
+- Engine-backed dashboard API with real snapshots, events, objectives, and proofs
+- Continuous objective evaluation and cumulative production targets
+- 80+ unit and integration tests covering all crates

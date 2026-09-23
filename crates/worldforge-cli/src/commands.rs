@@ -4,6 +4,7 @@ use std::path::Path;
 use worldforge_core::error::WorldForgeError;
 use worldforge_core::hash::Fingerprint;
 use worldforge_core::version::EngineVersion;
+use worldforge_world::{EventType, WorldManifest};
 
 use super::OutputFormat;
 
@@ -40,7 +41,11 @@ pub fn doctor() -> Result<(), WorldForgeError> {
     }
 
     // Check schemas
-    let schemas = ["schemas/world.schema.json", "schemas/scenario.schema.json"];
+    let schemas = [
+        "schemas/world.schema.json",
+        "schemas/scenario.schema.json",
+        "schemas/entities.schema.json",
+    ];
     for schema in &schemas {
         let exists = Path::new(schema).exists();
         print_check(&format!("Schema: {}", schema), exists);
@@ -83,10 +88,13 @@ pub fn validate(path: &Path) -> Result<(), WorldForgeError> {
 
 pub fn run(
     path: &Path,
-    ticks: u64,
-    seed: u64,
+    ticks: Option<u64>,
+    seed: Option<u64>,
     output: &OutputFormat,
 ) -> Result<(), WorldForgeError> {
+    let scenario = worldforge_world::Scenario::from_file(&path.join("scenario.toml"))?;
+    let ticks = ticks.unwrap_or(scenario.duration_ticks);
+    let seed = seed.unwrap_or(scenario.seed);
     println!("World Forge Simulation");
     println!("======================");
     println!("  World:  {}", path.display());
@@ -133,7 +141,12 @@ pub fn run(
     }
 
     // Save replay
-    let replay = runtime.build_replay(&result);
+    let replay = runtime.take_replay().ok_or_else(|| {
+        WorldForgeError::new(
+            worldforge_core::ErrorCode::RuntimeStateMismatch,
+            "runtime completed without a replay artifact",
+        )
+    })?;
     let replay_path = path.join("last.replay");
     replay.save(&replay_path)?;
     println!();
@@ -152,6 +165,18 @@ pub fn run(
 }
 
 pub fn test_world(path: &Path, runs: u32, ticks: u64) -> Result<(), WorldForgeError> {
+    if runs == 0 {
+        return Err(WorldForgeError::new(
+            worldforge_core::ErrorCode::RuntimeInitFailed,
+            "runs must be greater than zero",
+        ));
+    }
+    if ticks == 0 {
+        return Err(WorldForgeError::new(
+            worldforge_core::ErrorCode::ScenarioInvalid,
+            "ticks must be greater than zero",
+        ));
+    }
     println!("World Forge Determinism Test");
     println!("============================");
     println!("  World:  {}", path.display());
@@ -404,47 +429,25 @@ fn print_check(name: &str, passed: bool) {
 
 pub fn export(
     path: &Path,
-    ticks: u64,
-    seed: u64,
+    ticks: Option<u64>,
+    seed: Option<u64>,
     output: Option<&Path>,
 ) -> Result<(), WorldForgeError> {
-    let mut runtime = worldforge_runtime::SimulationRuntime::load(path, seed, Some(ticks))?;
-    let result = runtime.run()?;
-
-    let export_data = serde_json::json!({
-        "meta": {
-            "world": path.display().to_string(),
-            "seed": seed,
-            "ticks": ticks,
-            "engine_version": EngineVersion::current().to_string(),
-            "world_fingerprint": result.world_fingerprint.to_string(),
-            "initial_state": result.initial_state_fingerprint.to_string(),
-            "final_state": result.final_state_fingerprint.to_string(),
-            "event_chain_root": result.proof.event_chain_root.to_string(),
-        },
-        "summary": {
-            "total_events": result.event_count,
-            "shortage_events": result.shortage_count,
-            "objectives": result.objective_results.iter().map(|o| {
-                serde_json::json!({
-                    "name": o.name,
-                    "status": format!("{:?}", o.status),
-                })
-            }).collect::<Vec<_>>(),
-        },
-        "proof": {
-            "event_chain_root": result.proof.event_chain_root.to_string(),
-            "initial_fingerprint": result.initial_state_fingerprint.to_string(),
-            "final_fingerprint": result.final_state_fingerprint.to_string(),
-        },
-    });
+    let scenario = worldforge_world::Scenario::from_file(&path.join("scenario.toml"))?;
+    let ticks = ticks.unwrap_or(scenario.duration_ticks);
+    let seed = seed.unwrap_or(scenario.seed);
+    let export_data = simulation_export(path, ticks, seed)?;
 
     let json = serde_json::to_string_pretty(&export_data).unwrap_or_default();
 
     match output {
         Some(out_path) => {
-            std::fs::write(out_path, &json)
-                .map_err(|e| WorldForgeError::new(worldforge_core::ErrorCode::PackageBuildFailed, e.to_string()))?;
+            std::fs::write(out_path, &json).map_err(|e| {
+                WorldForgeError::new(
+                    worldforge_core::ErrorCode::PackageBuildFailed,
+                    e.to_string(),
+                )
+            })?;
             println!("Exported to: {}", out_path.display());
         }
         None => {
@@ -455,11 +458,162 @@ pub fn export(
     Ok(())
 }
 
-pub fn benchmark(
+/// Run a world and produce the canonical dashboard/export document.
+pub fn simulation_export(
     path: &Path,
     ticks: u64,
-    reps: u32,
-) -> Result<(), WorldForgeError> {
+    seed: u64,
+) -> Result<serde_json::Value, WorldForgeError> {
+    let manifest = WorldManifest::from_file(&path.join("world.toml"))?;
+    let mut runtime = worldforge_runtime::SimulationRuntime::load(path, seed, Some(ticks))?;
+    let result = runtime.run()?;
+    let replay = runtime.replay().ok_or_else(|| {
+        WorldForgeError::new(
+            worldforge_core::ErrorCode::RuntimeStateMismatch,
+            "runtime completed without a replay artifact",
+        )
+    })?;
+
+    let mut event_type_counts = std::collections::BTreeMap::from([
+        ("production", 0usize),
+        ("transfer", 0usize),
+        ("shortage", 0usize),
+        ("price", 0usize),
+        ("system", 0usize),
+    ]);
+    let events = replay
+        .events
+        .iter()
+        .map(|event| {
+            let (event_type, entity, resource, amount) = match &event.event_type {
+                EventType::ProductionCompleted {
+                    entity,
+                    resource,
+                    amount,
+                } => (
+                    "production",
+                    entity.clone(),
+                    resource.clone(),
+                    amount.to_f64_lossy(),
+                ),
+                EventType::ResourceTransferred {
+                    from,
+                    to,
+                    resource,
+                    amount,
+                } => (
+                    "transfer",
+                    format!("{from} → {to}"),
+                    resource.clone(),
+                    amount.to_f64_lossy(),
+                ),
+                EventType::InventoryShortage {
+                    entity,
+                    resource,
+                    needed,
+                    ..
+                } => (
+                    "shortage",
+                    entity.clone(),
+                    resource.clone(),
+                    needed.to_f64_lossy(),
+                ),
+                EventType::PriceChanged {
+                    resource,
+                    new_price,
+                    ..
+                } => (
+                    "price",
+                    "market".to_string(),
+                    resource.clone(),
+                    new_price.to_f64_lossy(),
+                ),
+                EventType::CapacityChanged {
+                    entity,
+                    new_capacity,
+                    ..
+                } => (
+                    "system",
+                    entity.clone(),
+                    "capacity".to_string(),
+                    new_capacity.to_f64_lossy(),
+                ),
+                EventType::ObjectiveUpdated { objective, .. } => {
+                    ("system", "objective".to_string(), objective.clone(), 0.0)
+                }
+                EventType::SimulationDegraded { reason } => {
+                    ("system", "runtime".to_string(), reason.clone(), 0.0)
+                }
+            };
+            *event_type_counts.entry(event_type).or_default() += 1;
+            serde_json::json!({
+                "tick": event.tick.value(),
+                "type": event_type,
+                "entity": entity,
+                "resource": resource,
+                "amount": amount,
+                "summary": event.summary(),
+            })
+        })
+        .collect::<Vec<_>>();
+
+    let resources = result
+        .snapshots
+        .first()
+        .map(|snapshot| snapshot.levels.keys().cloned().collect::<Vec<_>>())
+        .unwrap_or_default();
+    let entities = result
+        .entities
+        .iter()
+        .map(|entity| entity.name.clone())
+        .collect::<Vec<_>>();
+
+    let world_slug = path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or(&manifest.name);
+
+    Ok(serde_json::json!({
+        "world": world_slug,
+        "title": manifest.name,
+        "description": manifest.description,
+        "seed": seed,
+        "ticks": ticks,
+        "totalEvents": result.event_count,
+        "shortageEvents": result.shortage_count,
+        "resources": resources,
+        "entities": entities,
+        "links": result.links,
+        "snapshots": result.snapshots,
+        "events": events,
+        "eventTypeCounts": event_type_counts,
+        "objectives": result.objective_results.iter().map(|objective| {
+            serde_json::json!({
+                "name": objective.name,
+                "status": format!("{:?}", objective.status),
+            })
+        }).collect::<Vec<_>>(),
+        "fingerprints": {
+            "world": result.world_fingerprint.to_string(),
+            "scenario": result.scenario_fingerprint.to_string(),
+            "initial": result.initial_state_fingerprint.to_string(),
+            "final": result.final_state_fingerprint.to_string(),
+            "eventChain": result.proof.event_chain_root.to_string(),
+        },
+        "meta": {
+            "engineVersion": EngineVersion::current().to_string(),
+            "runId": result.proof.run_id,
+        },
+    }))
+}
+
+pub fn benchmark(path: &Path, ticks: u64, reps: u32) -> Result<(), WorldForgeError> {
+    if reps == 0 {
+        return Err(WorldForgeError::new(
+            worldforge_core::ErrorCode::RuntimeInitFailed,
+            "reps must be greater than zero",
+        ));
+    }
     println!("World Forge Benchmark");
     println!("=====================");
     println!("  World:  {}", path.display());

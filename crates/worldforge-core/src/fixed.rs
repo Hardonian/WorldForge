@@ -129,26 +129,26 @@ impl fmt::Display for Fixed64 {
 impl Add for Fixed64 {
     type Output = Self;
     fn add(self, rhs: Self) -> Self {
-        Self(self.0 + rhs.0)
+        Self(self.0.saturating_add(rhs.0))
     }
 }
 
 impl AddAssign for Fixed64 {
     fn add_assign(&mut self, rhs: Self) {
-        self.0 += rhs.0;
+        self.0 = self.0.saturating_add(rhs.0);
     }
 }
 
 impl Sub for Fixed64 {
     type Output = Self;
     fn sub(self, rhs: Self) -> Self {
-        Self(self.0 - rhs.0)
+        Self(self.0.saturating_sub(rhs.0))
     }
 }
 
 impl SubAssign for Fixed64 {
     fn sub_assign(&mut self, rhs: Self) {
-        self.0 -= rhs.0;
+        self.0 = self.0.saturating_sub(rhs.0);
     }
 }
 
@@ -157,7 +157,7 @@ impl Mul for Fixed64 {
     fn mul(self, rhs: Self) -> Self {
         // Use i128 intermediate to prevent overflow
         let result = (self.0 as i128 * rhs.0 as i128) >> FRAC_BITS;
-        Self(result as i64)
+        Self(clamp_i128(result))
     }
 }
 
@@ -166,14 +166,24 @@ impl Div for Fixed64 {
     fn div(self, rhs: Self) -> Self {
         assert!(rhs.0 != 0, "division by zero in Fixed64");
         let result = ((self.0 as i128) << FRAC_BITS) / rhs.0 as i128;
-        Self(result as i64)
+        Self(clamp_i128(result))
     }
 }
 
 impl Neg for Fixed64 {
     type Output = Self;
     fn neg(self) -> Self {
-        Self(-self.0)
+        Self(self.0.saturating_neg())
+    }
+}
+
+const fn clamp_i128(value: i128) -> i64 {
+    if value > i64::MAX as i128 {
+        i64::MAX
+    } else if value < i64::MIN as i128 {
+        i64::MIN
+    } else {
+        value as i64
     }
 }
 
@@ -259,5 +269,13 @@ mod tests {
         assert!(Fixed64::ZERO.is_zero());
         assert!(!Fixed64::ONE.is_zero());
         assert_eq!(Fixed64::ONE.to_int(), 1);
+    }
+
+    #[test]
+    fn arithmetic_saturates_in_all_build_profiles() {
+        assert_eq!(Fixed64::MAX + Fixed64::ONE, Fixed64::MAX);
+        assert_eq!(Fixed64::MIN - Fixed64::ONE, Fixed64::MIN);
+        assert_eq!(Fixed64::MAX * Fixed64::from_int(2), Fixed64::MAX);
+        assert_eq!(-Fixed64::MIN, Fixed64::MAX);
     }
 }

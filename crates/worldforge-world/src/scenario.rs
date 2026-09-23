@@ -88,6 +88,10 @@ impl Scenario {
                     validate_resource(resource)?;
                     validate_non_negative(*target, "objective target")?;
                 }
+                ObjectiveType::ReachInventoryTarget { resource, target } => {
+                    validate_resource(resource)?;
+                    validate_non_negative(*target, "objective target")?;
+                }
                 ObjectiveType::SurviveUntilTick { tick } => {
                     if *tick >= self.duration_ticks {
                         return Err(WorldForgeError::new(
@@ -123,10 +127,20 @@ impl Scenario {
         for event in &self.events {
             match &event.event_type {
                 ScheduledEventType::CapacityChange { target, value } => {
-                    if !entities.entities.iter().any(|entity| entity.name == *target) {
+                    let target_entity = entities
+                        .entities
+                        .iter()
+                        .find(|entity| entity.name == *target);
+                    if target_entity.is_none() {
                         return Err(WorldForgeError::new(
                             ErrorCode::ScenarioInvalid,
                             format!("capacity_change target '{target}' does not exist"),
+                        ));
+                    }
+                    if target_entity.is_some_and(|entity| entity.production.is_none()) {
+                        return Err(WorldForgeError::new(
+                            ErrorCode::ScenarioInvalid,
+                            format!("capacity_change target '{target}' has no production rule"),
                         ));
                     }
                     validate_non_negative(*value, "capacity_change value")?;

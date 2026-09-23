@@ -26,6 +26,8 @@ pub enum ObjectiveType {
     AvoidShortage { resource: String },
     #[serde(rename = "reach_production_target")]
     ReachProductionTarget { resource: String, target: f64 },
+    #[serde(rename = "reach_inventory_target")]
+    ReachInventoryTarget { resource: String, target: f64 },
     #[serde(rename = "survive_until_tick")]
     SurviveUntilTick { tick: u64 },
 }
@@ -74,7 +76,15 @@ impl Objective {
                 let target_fixed = Fixed64::from_f64_lossy(*target);
                 if amount >= target_fixed {
                     self.status = ObjectiveStatus::Passed;
-                } else {
+                } else if self.status != ObjectiveStatus::Passed {
+                    self.status = ObjectiveStatus::Pending;
+                }
+            }
+            ObjectiveType::ReachInventoryTarget { resource, target } => {
+                let amount = get_inventory(resource);
+                if amount >= Fixed64::from_f64_lossy(*target) {
+                    self.status = ObjectiveStatus::Passed;
+                } else if self.status != ObjectiveStatus::Passed {
                     self.status = ObjectiveStatus::Pending;
                 }
             }
@@ -99,6 +109,9 @@ impl Objective {
             }
             ObjectiveType::ReachProductionTarget { resource, target } => {
                 format!("produce {} {} total", target, resource)
+            }
+            ObjectiveType::ReachInventoryTarget { resource, target } => {
+                format!("reach {} ≥ {}", resource, target)
             }
             ObjectiveType::SurviveUntilTick { tick } => {
                 format!("survive until tick {}", tick)
@@ -129,5 +142,21 @@ mod tests {
         // Not enough
         obj.evaluate(&|_| Fixed64::from_int(10), 0);
         assert_eq!(obj.status, ObjectiveStatus::Failed);
+    }
+
+    #[test]
+    fn reach_inventory_target_objective() {
+        let mut objective = Objective {
+            objective_type: ObjectiveType::ReachInventoryTarget {
+                resource: "population".to_string(),
+                target: 500.0,
+            },
+            status: ObjectiveStatus::Pending,
+            ever_failed: false,
+        };
+        objective.evaluate(&|_| Fixed64::from_int(499), 0);
+        assert_eq!(objective.status, ObjectiveStatus::Pending);
+        objective.evaluate(&|_| Fixed64::from_int(500), 1);
+        assert_eq!(objective.status, ObjectiveStatus::Passed);
     }
 }

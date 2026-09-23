@@ -31,7 +31,7 @@ impl Tick {
 
     /// Advance to the next tick.
     pub const fn next(&self) -> Self {
-        Self(self.0 + 1)
+        Self(self.0.saturating_add(1))
     }
 
     /// Check if this tick has reached or exceeded a target.
@@ -54,14 +54,14 @@ impl fmt::Display for Tick {
 impl Add<u64> for Tick {
     type Output = Tick;
     fn add(self, rhs: u64) -> Self::Output {
-        Tick(self.0 + rhs)
+        Tick(self.0.saturating_add(rhs))
     }
 }
 
 impl Sub<Tick> for Tick {
     type Output = u64;
     fn sub(self, rhs: Tick) -> Self::Output {
-        self.0 - rhs.0
+        self.0.saturating_sub(rhs.0)
     }
 }
 

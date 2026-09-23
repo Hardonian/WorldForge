@@ -9,8 +9,8 @@
 //! - Package fingerprinting
 
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
-use worldforge_core::{EntityId, Fixed64, Tick};
 use worldforge_core::hash::{Fingerprint, FingerprintBuilder};
+use worldforge_core::{EntityId, Fixed64, Tick};
 use worldforge_ecs::SimulationWorld;
 use worldforge_world::{Inventory, ProductionRule};
 
@@ -32,7 +32,7 @@ fn bench_fixed64_arithmetic(c: &mut Criterion) {
         bencher.iter(|| black_box(a) / black_box(b))
     });
 
-    let frac = Fixed64::from_f64_lossy(3.14159);
+    let frac = Fixed64::from_f64_lossy(std::f64::consts::PI);
     group.bench_function("mul_fractional", |bencher| {
         bencher.iter(|| black_box(frac) * black_box(frac))
     });
@@ -98,7 +98,7 @@ fn bench_ecs_operations(c: &mut Criterion) {
             let id = EntityId::deterministic(42, i);
             world.spawn(id);
             let mut inv = Inventory::new();
-            inv.set("ore", Fixed64::from_int(i as i64));
+            inv.set("ore", Fixed64::from_int(i as i32));
             world.insert_component(id, inv);
         }
         bencher.iter(|| black_box(world.fingerprint()))

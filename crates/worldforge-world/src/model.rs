@@ -38,7 +38,9 @@ pub struct ProductionRule {
     pub outputs: Vec<(String, Fixed64)>,
     /// Capacity multiplier (1.0 = full capacity).
     pub capacity: Fixed64,
-    /// Energy cost per tick.
+    /// Normalized energy-cost metadata. Physical energy or power consumption
+    /// must also be declared explicitly in `inputs` so resource accounting
+    /// remains unambiguous across worlds.
     pub energy_cost: Fixed64,
 }
 
