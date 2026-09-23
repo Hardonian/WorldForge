@@ -12,5 +12,6 @@ builds reproducible archives. `worldforge-mod-api` and
 headless operator surface.
 
 Format versions (world, replay, package, WIT) evolve separately from the engine
-version. World inheritance is a manifest contract using `extends`; only local
-content is executed today and no remote resolver is present.
+version. World inheritance uses `extends` and resolves slug-safe sibling
+packages inside the same local catalog. Remote registries remain outside the
+0.2 scope. Effective fingerprints recursively commit to every resolved base.

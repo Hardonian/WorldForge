@@ -604,7 +604,7 @@ fn save_play_session(
     let save = with_play_session(state, &request.session_id, |session| {
         let progress = session.runtime.current_progress();
         let fingerprint =
-            worldforge_package::fingerprint_world(&state.worlds_dir.join(&session.world))?;
+            worldforge_package::fingerprint_resolved_world(&state.worlds_dir.join(&session.world))?;
         Ok(SaveGame {
             format_version: 1,
             id: id.clone(),
@@ -661,7 +661,7 @@ fn load_save(state: &ServerState, id: &str) -> Result<Value, WorldForgeError> {
         ));
     }
     let world_path = resolve_world(&state.worlds_dir, &save.world)?;
-    let current_fingerprint = worldforge_package::fingerprint_world(&world_path)?;
+    let current_fingerprint = worldforge_package::fingerprint_resolved_world(&world_path)?;
     if current_fingerprint.to_string() != save.world_fingerprint {
         return Err(WorldForgeError::new(
             ErrorCode::ReplayFingerprintMismatch,
@@ -1390,6 +1390,7 @@ fn write_toml_file<T: Serialize>(path: &Path, value: &T) -> Result<(), WorldForg
 }
 
 fn catalog(worlds_dir: &Path) -> Result<Value, WorldForgeError> {
+    let catalog_root = std::fs::canonicalize(worlds_dir).map_err(io_error)?;
     let mut directories = std::fs::read_dir(worlds_dir)
         .map_err(io_error)?
         .filter_map(Result::ok)
@@ -1397,10 +1398,18 @@ fn catalog(worlds_dir: &Path) -> Result<Value, WorldForgeError> {
         .collect::<Vec<_>>();
     directories.sort_by_key(|entry| entry.file_name());
 
-    let worlds = directories
-        .into_iter()
-        .filter_map(|entry| catalog_entry(&entry.path()).transpose())
-        .collect::<Result<Vec<_>, _>>()?;
+    let mut worlds = Vec::new();
+    for entry in directories {
+        let Ok(path) = std::fs::canonicalize(entry.path()) else {
+            continue;
+        };
+        if path.parent() != Some(catalog_root.as_path()) {
+            continue;
+        }
+        if let Some(world) = catalog_entry(&path)? {
+            worlds.push(world);
+        }
+    }
     Ok(Value::Array(worlds))
 }
 
@@ -1411,9 +1420,10 @@ fn catalog_entry(path: &Path) -> Result<Option<Value>, WorldForgeError> {
     {
         return Ok(None);
     }
-    let manifest = WorldManifest::from_file(&path.join("world.toml"))?;
-    let scenario = Scenario::from_file(&path.join("scenario.toml"))?;
-    let entities = EntitiesConfig::from_file(&path.join("entities.toml"))?;
+    let resolved = worldforge_package::resolve_world(path)?;
+    let manifest = resolved.manifest;
+    let scenario = resolved.scenario;
+    let entities = resolved.entities;
     let slug = path
         .file_name()
         .and_then(|name| name.to_str())
@@ -1442,6 +1452,13 @@ fn catalog_entry(path: &Path) -> Result<Option<Value>, WorldForgeError> {
         "entities": entities.entities.iter().map(|entity| &entity.name).collect::<Vec<_>>(),
         "resources": resources,
         "links": entities.links,
+        "dependencies": resolved.dependencies.iter().map(|dependency| json!({
+            "reference": dependency.reference,
+            "name": dependency.name,
+            "version": dependency.version,
+            "fingerprint": dependency.fingerprint.to_string(),
+        })).collect::<Vec<_>>(),
+        "effectiveFingerprint": resolved.fingerprint.to_string(),
     })))
 }
 
@@ -1501,7 +1518,14 @@ fn resolve_world(worlds_dir: &Path, world: &str) -> Result<PathBuf, WorldForgeEr
             format!("world '{world}' does not exist"),
         ));
     }
-    Ok(world_path)
+    let catalog_root = std::fs::canonicalize(worlds_dir).map_err(io_error)?;
+    let canonical = std::fs::canonicalize(&world_path).map_err(io_error)?;
+    if canonical.parent() != Some(catalog_root.as_path()) {
+        return Err(invalid_request(
+            "world must resolve inside the configured catalog",
+        ));
+    }
+    Ok(canonical)
 }
 
 fn validate_ticks(ticks: u64) -> Result<(), WorldForgeError> {
@@ -1729,6 +1753,14 @@ mod tests {
         assert_eq!(supply_chain["entityCount"], 5);
         assert_eq!(supply_chain["defaultTicks"], 1000);
         assert!(supply_chain["resources"].as_array().unwrap().len() >= 4);
+
+        let recovery = worlds
+            .iter()
+            .find(|world| world["id"] == "supply-chain-recovery")
+            .unwrap();
+        assert_eq!(recovery["entityCount"], 7);
+        assert_eq!(recovery["dependencies"].as_array().unwrap().len(), 1);
+        assert!(recovery["effectiveFingerprint"].is_string());
     }
 
     #[test]

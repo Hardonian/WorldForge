@@ -12,5 +12,6 @@ worldforge-world = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 toml = { workspace = true }
+semver = { workspace = true }
 tar = { workspace = true }
 tracing = { workspace = true }

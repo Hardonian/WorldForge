@@ -1,0 +1,50 @@
+world = "supply-chain-recovery"
+seed = 4242
+duration_ticks = 600
+
+[[events]]
+tick = 150
+type = "capacity_change"
+target = "factory"
+value = 0.4
+
+[[events]]
+tick = 220
+type = "capacity_change"
+target = "steel-mill"
+value = 0.65
+
+[[events]]
+tick = 320
+type = "capacity_change"
+target = "factory"
+value = 1.15
+
+[[events]]
+tick = 380
+type = "capacity_change"
+target = "steel-mill"
+value = 1.1
+
+[[objectives]]
+type = "maintain_inventory"
+resource = "goods"
+minimum = 25.0
+
+[[objectives]]
+type = "avoid_shortage"
+resource = "goods"
+
+[[objectives]]
+type = "reach_production_target"
+resource = "goods"
+target = 1000.0
+
+[[objectives]]
+type = "reach_inventory_target"
+resource = "goods"
+target = 650.0
+
+[[objectives]]
+type = "survive_until_tick"
+tick = 500

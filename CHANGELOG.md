@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.2.0] - 2026-09-23
+
+### Local world inheritance
+
+- Added recursive `extends` resolution for sibling world packages with deterministic parent-order and child-last overlays.
+- Added entity replacement by name and supply-link replacement by `(from, to, resource)` identity while allowing derived fragments to reference inherited entities.
+- Added cycle, depth, duplicate dependency, traversal, remote-reference, and symlink-escape rejection.
+- Added generated `worldforge.lock` package entries that commit to exact direct dependency versions and effective fingerprints.
+- Made runtime proofs, replay verification, durable saves, dashboard catalogs, exports, validation, and package fingerprints use the complete inherited world graph.
+- Added the derived Supply Chain Recovery example and inheritance regression coverage.
+
 ## 0.1.0-beta
 
 ### Simulation Studio

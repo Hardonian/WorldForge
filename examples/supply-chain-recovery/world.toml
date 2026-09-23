@@ -1,0 +1,4 @@
+name = "supply-chain-recovery"
+description = "A derived supply network with emergency steelmaking, relief storage, and staged industrial recovery"
+version = "0.2.0"
+extends = ["supply-chain"]

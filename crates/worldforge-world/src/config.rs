@@ -98,7 +98,6 @@ impl EntitiesConfig {
     /// Validate a local inheritance fragment. Links may reference entities
     /// supplied by a base world, and an entirely empty fragment is valid.
     pub fn validate_fragment(&self) -> Result<(), WorldForgeError> {
-
         let mut names = BTreeSet::new();
         for entity in &self.entities {
             if entity.name.trim().is_empty()
@@ -154,11 +153,7 @@ impl EntitiesConfig {
                 return Err(schema_error("link resource must be non-empty"));
             }
             validate_number(link.max_per_tick, "link max_per_tick", false)?;
-            if !link_keys.insert((
-                link.from.as_str(),
-                link.to.as_str(),
-                link.resource.as_str(),
-            )) {
+            if !link_keys.insert((link.from.as_str(), link.to.as_str(), link.resource.as_str())) {
                 return Err(schema_error(format!(
                     "duplicate link '{} -> {}' for resource '{}'",
                     link.from, link.to, link.resource

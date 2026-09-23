@@ -44,10 +44,10 @@ pub fn build_package(world_dir: &Path, output: &Path) -> Result<PackageInfo, Wor
     let mut files: Vec<(String, Vec<u8>)> = Vec::new();
     collect_files(world_dir, world_dir, &mut files)?;
     if !resolved.dependencies.is_empty() {
-        files.push((
-            resolver::LOCK_FILE.to_string(),
+        resolver::upsert_lock(
+            &mut files,
             resolver::dependency_lock_bytes(&resolved.dependencies)?,
-        ));
+        );
     }
     files.sort_by(|a, b| a.0.cmp(&b.0)); // Deterministic ordering
 
@@ -134,6 +134,8 @@ pub fn inspect_package(package_path: &Path) -> Result<PackageInfo, WorldForgeErr
     let mut content_builder = FingerprintBuilder::new();
     let mut name = String::from("unknown");
     let mut version = String::from("0.0.0");
+    let mut dependency_references = Vec::new();
+    let mut dependency_lock = None;
 
     let mut previous_path: Option<String> = None;
     let mut manifest_seen = false;
@@ -193,7 +195,11 @@ pub fn inspect_package(package_path: &Path) -> Result<PackageInfo, WorldForgeErr
             manifest.validate()?;
             name = manifest.name;
             version = manifest.version;
+            dependency_references = manifest.extends;
             manifest_seen = true;
+        }
+        if path == resolver::LOCK_FILE {
+            dependency_lock = Some(data.clone());
         }
 
         let file_fp = Fingerprint::hash(&data);
@@ -214,6 +220,7 @@ pub fn inspect_package(package_path: &Path) -> Result<PackageInfo, WorldForgeErr
             "package does not contain world.toml",
         ));
     }
+    resolver::validate_archive_lock(&dependency_references, dependency_lock.as_deref())?;
 
     Ok(PackageInfo {
         name,
@@ -319,12 +326,7 @@ mod tests {
         path
     }
 
-    fn write_world(
-        directory: &Path,
-        manifest: &str,
-        scenario: &str,
-        entities: &str,
-    ) {
+    fn write_world(directory: &Path, manifest: &str, scenario: &str, entities: &str) {
         fs::create_dir_all(directory).unwrap();
         fs::write(directory.join("world.toml"), manifest).unwrap();
         fs::write(directory.join("scenario.toml"), scenario).unwrap();
@@ -390,8 +392,32 @@ max_per_tick = 1.0
         let archive = catalog.join("derived-world.world");
         let built = build_package(&derived, &archive).unwrap();
         assert_eq!(built.fingerprint, first_fingerprint);
-        assert!(built.files.iter().any(|file| file.path == "worldforge.lock"));
-        assert_eq!(inspect_package(&archive).unwrap().fingerprint, built.fingerprint);
+        assert!(built
+            .files
+            .iter()
+            .any(|file| file.path == "worldforge.lock"));
+        assert_eq!(
+            inspect_package(&archive).unwrap().fingerprint,
+            built.fingerprint
+        );
+
+        let lock = resolver::dependency_lock_bytes(&resolved.dependencies).unwrap();
+        resolver::validate_archive_lock(&["base-world".to_string()], Some(&lock)).unwrap();
+        assert!(resolver::validate_archive_lock(&["base-world".to_string()], None).is_err());
+        fs::write(derived.join(resolver::LOCK_FILE), lock).unwrap();
+        assert_eq!(
+            resolve_world(&derived).unwrap().fingerprint,
+            first_fingerprint
+        );
+        let locked_archive = catalog.join("derived-world-locked.world");
+        let locked_package = build_package(&derived, &locked_archive).unwrap();
+        assert_eq!(locked_package.file_count, 4);
+        assert_eq!(locked_package.fingerprint, first_fingerprint);
+
+        fs::write(derived.join(resolver::LOCK_FILE), "format_version = 99\n").unwrap();
+        let stale_lock = resolve_world(&derived).unwrap_err();
+        assert_eq!(stale_lock.code, ErrorCode::PackageInvalid);
+        fs::remove_file(derived.join(resolver::LOCK_FILE)).unwrap();
 
         let updated = fs::read_to_string(base.join("entities.toml"))
             .unwrap()
@@ -425,11 +451,25 @@ max_per_tick = 1.0
         assert_eq!(cycle.code, ErrorCode::PackageDependencyMissing);
         assert!(cycle.message.contains("cycle"));
 
-        fs::write(a.join("world.toml"), "name = \"a\"\nextends = [\"../b\"]\n")
-            .unwrap();
+        fs::write(a.join("world.toml"), "name = \"a\"\nextends = [\"../b\"]\n").unwrap();
         let traversal = resolve_world(&a).unwrap_err();
         assert_eq!(traversal.code, ErrorCode::PackageDependencyMissing);
         assert!(traversal.message.contains("local world id"));
+
+        fs::write(
+            a.join("world.toml"),
+            "name = \"a\"\nextends = [\"b\", \"b\"]\n",
+        )
+        .unwrap();
+        fs::write(b.join("world.toml"), "name = \"b\"\n").unwrap();
+        fs::write(
+            b.join("entities.toml"),
+            "[[entities]]\nname = \"base\"\nentity_type = \"storage\"\nregion = \"base\"\n",
+        )
+        .unwrap();
+        let duplicate = resolve_world(&a).unwrap_err();
+        assert_eq!(duplicate.code, ErrorCode::WorldManifestInvalid);
+        assert!(duplicate.message.contains("duplicate"));
         fs::remove_dir_all(catalog).unwrap();
     }
 }

@@ -1,0 +1,48 @@
+# This file is an inheritance fragment. The source, mill, factory, warehouse,
+# market, and their existing links come from `supply-chain`.
+
+[[entities]]
+name = "emergency-smelter"
+entity_type = "contingency-processor"
+region = "industrial-zone"
+
+[entities.initial_inventory]
+ore = 450.0
+energy = 1400.0
+steel = 50.0
+
+[entities.production]
+energy_cost = 1.0
+
+[entities.production.inputs]
+ore = 3.0
+energy = 1.0
+
+[entities.production.outputs]
+steel = 2.0
+
+[[entities]]
+name = "relief-depot"
+entity_type = "strategic-storage"
+region = "distribution-zone"
+
+[entities.initial_inventory]
+goods = 250.0
+
+[[links]]
+from = "emergency-smelter"
+to = "factory"
+resource = "steel"
+max_per_tick = 2.0
+
+[[links]]
+from = "factory"
+to = "relief-depot"
+resource = "goods"
+max_per_tick = 3.0
+
+[[links]]
+from = "relief-depot"
+to = "city-market"
+resource = "goods"
+max_per_tick = 3.0

@@ -22,8 +22,14 @@
     },
     "extends": {
       "type": "array",
-      "description": "Base world packages this world extends",
-      "items": { "type": "string" }
+      "description": "Slug-safe sibling world directory IDs, applied in declaration order",
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128,
+        "pattern": "^[a-z0-9_](?:[a-z0-9_-]*[a-z0-9_])?$"
+      }
     },
     "mods": {
       "type": "array",

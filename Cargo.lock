@@ -2024,7 +2024,7 @@ dependencies = [
 
 [[package]]
 name = "worldforge-agent"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "serde",
  "worldforge-core",
@@ -2032,7 +2032,7 @@ dependencies = [
 
 [[package]]
 name = "worldforge-bench"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "criterion",
  "worldforge-core",
@@ -2046,7 +2046,7 @@ dependencies = [
 
 [[package]]
 name = "worldforge-cli"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "clap",
  "serde",
@@ -2070,7 +2070,7 @@ dependencies = [
 
 [[package]]
 name = "worldforge-core"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "blake3",
  "chrono",
@@ -2087,7 +2087,7 @@ dependencies = [
 
 [[package]]
 name = "worldforge-economy"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "serde",
  "tracing",
@@ -2098,7 +2098,7 @@ dependencies = [
 
 [[package]]
 name = "worldforge-ecs"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "blake3",
  "serde",
@@ -2109,7 +2109,7 @@ dependencies = [
 
 [[package]]
 name = "worldforge-mod-api"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -2118,7 +2118,7 @@ dependencies = [
 
 [[package]]
 name = "worldforge-mod-runtime"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -2130,8 +2130,9 @@ dependencies = [
 
 [[package]]
 name = "worldforge-package"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
+ "semver",
  "serde",
  "serde_json",
  "tar",
@@ -2143,7 +2144,7 @@ dependencies = [
 
 [[package]]
 name = "worldforge-proof"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "ciborium",
  "serde",
@@ -2153,7 +2154,7 @@ dependencies = [
 
 [[package]]
 name = "worldforge-replay"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "chrono",
  "ciborium",
@@ -2166,7 +2167,7 @@ dependencies = [
 
 [[package]]
 name = "worldforge-runtime"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "chrono",
  "serde",
@@ -2184,7 +2185,7 @@ dependencies = [
 
 [[package]]
 name = "worldforge-world"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "semver",
  "serde",

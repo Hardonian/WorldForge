@@ -14,7 +14,7 @@ pub struct EngineVersion {
 impl EngineVersion {
     pub fn current() -> Self {
         Self {
-            version: semver::Version::new(0, 1, 0),
+            version: semver::Version::new(0, 2, 0),
         }
     }
 }
@@ -73,6 +73,7 @@ mod tests {
 
     #[test]
     fn version_compatibility() {
+        assert_eq!(EngineVersion::current().to_string(), "0.2.0");
         let a = FormatVersion::new("world", 0, 1, 0);
         let b = FormatVersion::new("world", 0, 2, 0);
         assert!(a.is_compatible_with(&b)); // Same major

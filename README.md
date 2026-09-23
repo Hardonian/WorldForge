@@ -6,7 +6,7 @@ World Forge is a simulation operating system for building games, simulations, wo
 
 ## Status
 
-**Beta release candidate.** The deterministic runtime, packaging toolchain, replay verification, mod sandbox, CLI, and local Simulation Studio are implemented and covered by the workspace verification suite. The beta is local-first: the dashboard binds to localhost by default and runs simulations on the same machine.
+**0.2.0 development milestone.** The deterministic runtime, local world inheritance, packaging toolchain, replay verification, mod sandbox, CLI, and local Simulation Studio are implemented and covered by the workspace verification suite. The beta is local-first: the dashboard binds to localhost by default and runs simulations on the same machine.
 
 | Feature | Status | Notes |
 |---------|--------|-------|
@@ -20,6 +20,7 @@ World Forge is a simulation operating system for building games, simulations, wo
 | Replay artifacts | ✅ Implemented | CBOR-serialized with tamper detection |
 | Proof chain | ✅ Implemented | Event hash chains with verification |
 | Package system (.world) | ✅ Implemented | Deterministic tar with content fingerprinting |
+| Local world inheritance | ✅ Implemented | Recursive sibling resolution, deterministic overlays, dependency locks, cycle and traversal defense |
 | Agent framework | ✅ Implemented | Rule-based and utility-based policies |
 | Capability-based mod API | ✅ Implemented | Deny-by-default capability system |
 | WASM mod runtime | ✅ Implemented | Wasmtime core-Wasm sandbox, fuel/memory limits, capability-gated host ABI |
@@ -190,6 +191,19 @@ For other tools, export the same canonical document directly:
 ```bash
 cargo run -p worldforge-cli -- export examples/ecosystem --ticks 1000 --seed 42 --output ecosystem.json
 ```
+
+## World inheritance
+
+Derived worlds can extend one or more sibling packages without copying their entities and links:
+
+```toml
+# examples/supply-chain-recovery/world.toml
+name = "supply-chain-recovery"
+version = "0.2.0"
+extends = ["supply-chain"]
+```
+
+Parents apply in declaration order and the derived `entities.toml` fragment applies last. Runtime, replay, save, export, and package fingerprints commit to the complete resolved graph. Packaged derived worlds contain a generated `worldforge.lock` with exact dependency fingerprints. See [local world inheritance](docs/inheritance.md).
 
 ## License
 

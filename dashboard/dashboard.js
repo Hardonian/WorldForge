@@ -11,7 +11,7 @@ const TYPE_COLORS = {
 const WORLD_SYMBOLS = {
     'supply-chain': 'SC', ecosystem: 'EC', 'micro-city': 'MC',
     'freight-network': 'FN', 'stress-test': 'ST', 'minimal-world': 'MW',
-    'coastal-resilience': 'CR',
+    'coastal-resilience': 'CR', 'supply-chain-recovery': 'SR',
 };
 
 const THEME_LABELS = {
@@ -25,6 +25,7 @@ function getWorldFlagSvg(worldId, size = 20) {
     const s = size;
     const flags = {
         'supply-chain': `<svg viewBox="0 0 24 24" width="${s}" height="${s}" class="world-flag-svg" aria-hidden="true"><rect width="24" height="24" rx="4" fill="#0b1322"/><path d="M4 4 L20 4 L20 16 L12 21 L4 16 Z" fill="none" stroke="#67a9ff" stroke-width="1.2"/><circle cx="12" cy="11" r="4.5" fill="none" stroke="#46d29a" stroke-width="1.4" stroke-dasharray="3 1.5"/><circle cx="12" cy="11" r="1.5" fill="#42d3ea"/><path d="M8.5 16.5 L12 19 L15.5 16.5" fill="none" stroke="#f1b96b" stroke-width="1.5" stroke-linecap="round"/></svg>`,
+        'supply-chain-recovery': `<svg viewBox="0 0 24 24" width="${s}" height="${s}" class="world-flag-svg" aria-hidden="true"><rect width="24" height="24" rx="4" fill="#09150f"/><path d="M5 7h9l-2 3 2 3H5z" fill="none" stroke="#46d29a" stroke-width="1.3"/><path d="M5 4v16M8 18h10" fill="none" stroke="#67a9ff" stroke-width="1.3" stroke-linecap="round"/><path d="m15 14 2 2 3-4" fill="none" stroke="#f1b96b" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
         'coastal-resilience': `<svg viewBox="0 0 24 24" width="${s}" height="${s}" class="world-flag-svg" aria-hidden="true"><rect width="24" height="24" rx="4" fill="#04121d"/><path d="M12 3 L19 7 L19 14 C19 18 12 21 12 21 C12 21 5 18 5 14 L5 7 Z" fill="none" stroke="#0ea5e9" stroke-width="1.2"/><path d="M7 13 Q9.5 10 12 12.5 Q14.5 15 17 12" fill="none" stroke="#38bdf8" stroke-width="1.6" stroke-linecap="round"/><circle cx="12" cy="7.5" r="1.6" fill="#e0f2fe"/></svg>`,
         'ecosystem': `<svg viewBox="0 0 24 24" width="${s}" height="${s}" class="world-flag-svg" aria-hidden="true"><rect width="24" height="24" rx="4" fill="#04160c"/><circle cx="12" cy="12" r="8" fill="none" stroke="#10b981" stroke-width="1.2"/><path d="M12 17 C12 12.5 8 10.5 8 7.5 C11 7.5 12 10.5 12 10.5 C12 10.5 13 7.5 16 7.5 C16 10.5 12 12.5 12 17 Z" fill="#46d29a"/><circle cx="12" cy="5.5" r="1.5" fill="#facc15"/></svg>`,
         'micro-city': `<svg viewBox="0 0 24 24" width="${s}" height="${s}" class="world-flag-svg" aria-hidden="true"><rect width="24" height="24" rx="4" fill="#140c06"/><path d="M5 19 L5 12 L9 9 L15 9 L19 13 L19 19 Z" fill="none" stroke="#f59e0b" stroke-width="1.2"/><rect x="6.5" y="11" width="3" height="8" fill="#fbbf24" fill-opacity="0.6"/><rect x="10.5" y="6" width="3" height="13" fill="#fbbf24"/><rect x="14.5" y="10" width="3" height="9" fill="#fbbf24" fill-opacity="0.6"/><circle cx="12" cy="4.5" r="1.2" fill="#fef08a"/></svg>`,
@@ -270,7 +271,8 @@ function renderWorldNavigation() {
         const title = document.createElement('strong');
         title.textContent = world.title;
         const details = document.createElement('small');
-        details.textContent = `${world.entityCount} entities · ${world.resourceCount} resources`;
+        const baseCount = world.dependencies?.length || 0;
+        details.textContent = `${world.entityCount} entities · ${world.resourceCount} resources${baseCount ? ` · ${baseCount} base` : ''}`;
         copy.append(title, details);
         const arrow = document.createElement('span');
         arrow.className = 'nav-arrow';
@@ -375,7 +377,8 @@ function selectWorld(worldId, options = {}) {
     });
     dom.worldTitle.textContent = world.title;
     dom.worldDesc.textContent = world.description || 'A packaged deterministic simulation world.';
-    dom.worldMeta.textContent = `v${world.version} · ${world.entityCount} entities · ${world.resourceCount} resources`;
+    const baseCount = world.dependencies?.length || 0;
+    dom.worldMeta.textContent = `v${world.version} · ${world.entityCount} entities · ${world.resourceCount} resources${baseCount ? ` · ${baseCount} inherited base` : ''}`;
     const flagBadge = el('world-flag-badge');
     if (flagBadge) flagBadge.innerHTML = getWorldFlagSvg(worldId, 18);
     if (options.useDefaults) {

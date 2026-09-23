@@ -7,7 +7,7 @@
   "properties": {
     "entities": {
       "type": "array",
-      "minItems": 1,
+      "description": "Entity definitions; derived-world fragments may be empty and inherit all entities",
       "items": {
         "type": "object",
         "required": ["name", "entity_type", "region"],

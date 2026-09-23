@@ -238,7 +238,8 @@ impl SimulationRuntime {
             ));
         }
 
-        let scenario_path = world_path.join("scenario.toml");
+        let resolved_world_path = resolved.path.clone();
+        let scenario_path = resolved_world_path.join("scenario.toml");
         let mut scenario = resolved.scenario;
         let entities_config = resolved.entities;
         scenario.seed = seed;
@@ -420,7 +421,7 @@ impl SimulationRuntime {
         let objectives = scenario.objectives.clone();
 
         Ok(Self {
-            world_path: world_path.to_path_buf(),
+            world_path: resolved_world_path,
             world: ecs_world,
             scenario,
             state: RunState::Validated,
@@ -1056,6 +1057,24 @@ mod tests {
         let result = runtime.run().unwrap();
         assert_eq!(result.total_ticks, 10);
         assert_eq!(result.snapshots.len(), 11);
+    }
+
+    #[test]
+    fn inherited_world_runs_with_effective_content_and_fingerprint() {
+        let path = example("supply-chain-recovery");
+        let resolved = worldforge_package::resolve_world(&path).unwrap();
+        assert_eq!(resolved.dependencies.len(), 1);
+        assert_eq!(resolved.entities.entities.len(), 7);
+
+        let mut runtime = SimulationRuntime::load(&path, 4242, Some(25)).unwrap();
+        let result = runtime.run().unwrap();
+        assert_eq!(result.entities.len(), 7);
+        assert_eq!(result.world_fingerprint, resolved.fingerprint);
+        assert!(result.entities.iter().any(|entity| entity.name == "mine"));
+        assert!(result
+            .entities
+            .iter()
+            .any(|entity| entity.name == "emergency-smelter"));
     }
 
     #[test]

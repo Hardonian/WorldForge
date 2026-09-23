@@ -98,23 +98,15 @@ fn resolve_internal(
             .filter_map(|entry| entry.file_name())
             .map(|entry| entry.to_string_lossy().into_owned())
             .collect::<Vec<_>>();
-        cycle.push(
-            canonical
-                .file_name()
-                .map_or_else(|| "?".to_string(), |name| name.to_string_lossy().into_owned()),
-        );
+        cycle.push(canonical.file_name().map_or_else(
+            || "?".to_string(),
+            |name| name.to_string_lossy().into_owned(),
+        ));
         return Err(WorldForgeError::new(
             ErrorCode::PackageDependencyMissing,
             format!("world inheritance cycle: {}", cycle.join(" -> ")),
         ));
     }
-    if canonical.join(LOCK_FILE).exists() {
-        return Err(WorldForgeError::new(
-            ErrorCode::PackageInvalid,
-            format!("{LOCK_FILE} is generated during packaging and cannot be a source file"),
-        ));
-    }
-
     stack.push(canonical.clone());
     let result = (|| {
         let manifest = WorldManifest::from_file(&canonical.join("world.toml"))?;
@@ -161,6 +153,7 @@ fn resolve_internal(
         entities.validate()?;
         scenario.validate_against(&manifest, &entities)?;
         extend_unique(&mut effective_mods, manifest.mods.clone());
+        validate_existing_lock(&canonical, &dependencies)?;
         let fingerprint = fingerprint_with_dependencies(&canonical, &dependencies)?;
 
         Ok(ResolvedWorld {
@@ -235,13 +228,113 @@ fn fingerprint_with_dependencies(
     let mut files = Vec::new();
     collect_files(world_dir, world_dir, &mut files)?;
     if !dependencies.is_empty() {
-        files.push((
-            LOCK_FILE.to_string(),
-            dependency_lock_bytes(dependencies)?,
-        ));
+        upsert_lock(&mut files, dependency_lock_bytes(dependencies)?);
     }
     files.sort_by(|left, right| left.0.cmp(&right.0));
     Ok(fingerprint_files(&files))
+}
+
+fn validate_existing_lock(
+    world_dir: &Path,
+    dependencies: &[ResolvedDependency],
+) -> Result<(), WorldForgeError> {
+    let lock_path = world_dir.join(LOCK_FILE);
+    if !lock_path.exists() {
+        return Ok(());
+    }
+    if dependencies.is_empty() {
+        return Err(WorldForgeError::new(
+            ErrorCode::PackageInvalid,
+            format!("{LOCK_FILE} exists but the manifest has no dependencies"),
+        ));
+    }
+    let actual = std::fs::read(&lock_path).map_err(|error| {
+        WorldForgeError::new(
+            ErrorCode::PackageInvalid,
+            format!("cannot read {}: {error}", lock_path.display()),
+        )
+    })?;
+    let expected = dependency_lock_bytes(dependencies)?;
+    if actual != expected {
+        return Err(WorldForgeError::new(
+            ErrorCode::PackageInvalid,
+            format!(
+                "{LOCK_FILE} does not match the resolved dependency graph; rebuild the package"
+            ),
+        ));
+    }
+    Ok(())
+}
+
+pub(crate) fn upsert_lock(files: &mut Vec<(String, Vec<u8>)>, bytes: Vec<u8>) {
+    if let Some((_, existing)) = files.iter_mut().find(|(path, _)| path == LOCK_FILE) {
+        *existing = bytes;
+    } else {
+        files.push((LOCK_FILE.to_string(), bytes));
+    }
+}
+
+pub(crate) fn validate_archive_lock(
+    references: &[String],
+    lock_bytes: Option<&[u8]>,
+) -> Result<(), WorldForgeError> {
+    if references.is_empty() {
+        if lock_bytes.is_some() {
+            return Err(WorldForgeError::new(
+                ErrorCode::PackageInvalid,
+                format!("package contains {LOCK_FILE} without manifest dependencies"),
+            ));
+        }
+        return Ok(());
+    }
+    let bytes = lock_bytes.ok_or_else(|| {
+        WorldForgeError::new(
+            ErrorCode::PackageInvalid,
+            format!("derived package is missing {LOCK_FILE}"),
+        )
+    })?;
+    let content = std::str::from_utf8(bytes)
+        .map_err(|error| WorldForgeError::new(ErrorCode::PackageInvalid, error.to_string()))?;
+    let lock: WorldLock = toml::from_str(content).map_err(|error| {
+        WorldForgeError::new(
+            ErrorCode::PackageInvalid,
+            format!("invalid {LOCK_FILE}: {error}"),
+        )
+    })?;
+    if lock.format_version != 1 {
+        return Err(WorldForgeError::new(
+            ErrorCode::PackageInvalid,
+            format!("unsupported {LOCK_FILE} format {}", lock.format_version),
+        ));
+    }
+    if lock.dependencies.len() != references.len() {
+        return Err(WorldForgeError::new(
+            ErrorCode::PackageInvalid,
+            format!("{LOCK_FILE} dependency count does not match world.toml"),
+        ));
+    }
+    for (dependency, reference) in lock.dependencies.iter().zip(references) {
+        if dependency.reference != *reference {
+            return Err(WorldForgeError::new(
+                ErrorCode::PackageInvalid,
+                format!("{LOCK_FILE} dependency order does not match world.toml"),
+            ));
+        }
+        if dependency.name.trim().is_empty()
+            || semver::Version::parse(&dependency.version).is_err()
+            || dependency.fingerprint.len() != 64
+            || !dependency
+                .fingerprint
+                .bytes()
+                .all(|byte| byte.is_ascii_hexdigit())
+        {
+            return Err(WorldForgeError::new(
+                ErrorCode::PackageInvalid,
+                format!("{LOCK_FILE} contains invalid metadata for '{reference}'"),
+            ));
+        }
+    }
+    Ok(())
 }
 
 fn io_dependency_error(error: std::io::Error) -> WorldForgeError {

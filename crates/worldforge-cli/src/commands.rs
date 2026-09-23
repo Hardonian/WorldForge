@@ -4,7 +4,7 @@ use std::path::Path;
 use worldforge_core::error::WorldForgeError;
 use worldforge_core::hash::Fingerprint;
 use worldforge_core::version::EngineVersion;
-use worldforge_world::{EventType, WorldManifest};
+use worldforge_world::EventType;
 
 use super::OutputFormat;
 
@@ -74,13 +74,27 @@ pub fn doctor() -> Result<(), WorldForgeError> {
 
 pub fn validate(path: &Path) -> Result<(), WorldForgeError> {
     println!("Validating: {}", path.display());
-    worldforge_package::validate_world(path)?;
+    let resolved = worldforge_package::resolve_world(path)?;
     println!("  ✓ world.toml valid");
     println!("  ✓ scenario.toml valid");
     println!("  ✓ entities.toml valid");
+    if !resolved.dependencies.is_empty() {
+        println!(
+            "  ✓ {} local dependencies resolved",
+            resolved.dependencies.len()
+        );
+        for dependency in &resolved.dependencies {
+            println!(
+                "    {} → {}@{} [{}]",
+                dependency.reference,
+                dependency.name,
+                dependency.version,
+                dependency.fingerprint.to_short_hex()
+            );
+        }
+    }
 
-    let fp = worldforge_package::fingerprint_world(path)?;
-    println!("  Fingerprint: {}", fp.to_short_hex());
+    println!("  Fingerprint: {}", resolved.fingerprint.to_short_hex());
     println!();
     println!("Validation passed.");
     Ok(())
@@ -325,7 +339,7 @@ pub fn package_inspect(file: &Path) -> Result<(), WorldForgeError> {
 
 pub fn package_fingerprint(path: &Path) -> Result<(), WorldForgeError> {
     let fingerprint = if path.is_dir() {
-        worldforge_package::fingerprint_world(path)?
+        worldforge_package::fingerprint_resolved_world(path)?
     } else {
         worldforge_package::inspect_package(path)?.fingerprint
     };
@@ -410,7 +424,7 @@ pub fn replay_run(file: &Path) -> Result<(), WorldForgeError> {
     }
 
     let world_path = Path::new(&replay.world_path);
-    let current_world = worldforge_package::fingerprint_world(world_path)?;
+    let current_world = worldforge_package::fingerprint_resolved_world(world_path)?;
     if current_world != replay.world_fingerprint {
         return Err(WorldForgeError::new(
             worldforge_core::error::ErrorCode::ReplayFingerprintMismatch,
@@ -506,7 +520,9 @@ fn simulation_export_with_event_limit(
     seed: u64,
     max_events: Option<usize>,
 ) -> Result<serde_json::Value, WorldForgeError> {
-    let manifest = WorldManifest::from_file(&path.join("world.toml"))?;
+    let resolved = worldforge_package::resolve_world(path)?;
+    let manifest = resolved.manifest;
+    let dependencies = resolved.dependencies;
     let mut runtime = match max_events {
         Some(limit) => {
             worldforge_runtime::SimulationRuntime::load_bounded(path, seed, Some(ticks), limit)?
@@ -617,6 +633,12 @@ fn simulation_export_with_event_limit(
         "world": world_slug,
         "title": manifest.name,
         "description": manifest.description,
+        "dependencies": dependencies.iter().map(|dependency| serde_json::json!({
+            "reference": dependency.reference,
+            "name": dependency.name,
+            "version": dependency.version,
+            "fingerprint": dependency.fingerprint.to_string(),
+        })).collect::<Vec<_>>(),
         "seed": seed,
         "ticks": ticks,
         "totalEvents": result.event_count,
