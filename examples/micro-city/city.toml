@@ -1,0 +1,318 @@
+treasury = "city-hall"
+population_resource = "population"
+population_growth_per_tick = 1.5
+
+[population_needs]
+food = 0.12
+clean_water = 0.16
+power = 0.10
+
+[[districts]]
+id = "civic-core"
+name = "Civic Core"
+description = "Dense institutions, culture, and knowledge infrastructure."
+slots = 10
+
+[[districts]]
+id = "river-ward"
+name = "River Ward"
+description = "Water-rich productive land with ecological leverage."
+slots = 12
+
+[[districts]]
+id = "sun-belt"
+name = "Sun Belt"
+description = "Open terrain tuned for food and distributed energy."
+slots = 14
+
+[[districts]]
+id = "old-grid"
+name = "Old Grid"
+description = "Adaptable industrial fabric with powerful maker synergies."
+slots = 12
+
+[[buildings]]
+id = "courtyard-homes"
+name = "Courtyard Homes"
+description = "Human-scale housing that turns civic services into steady growth."
+category = "residential"
+tags = ["housing", "community"]
+allowed_districts = ["civic-core", "river-ward", "old-grid"]
+footprint = 2
+max_count = 8
+housing = 90
+jobs = 8
+wellbeing = 4.0
+[buildings.cost]
+credits = 650.0
+materials = 90.0
+[buildings.upkeep]
+food = 1.2
+clean_water = 1.6
+power = 1.0
+[buildings.outputs]
+credits = 5.0
+
+[[buildings]]
+id = "civic-lab"
+name = "Civic Lab"
+description = "Residents turn live city problems into research and new institutions."
+category = "knowledge"
+tags = ["science", "civic"]
+allowed_districts = ["civic-core", "old-grid"]
+footprint = 2
+max_count = 5
+jobs = 35
+wellbeing = 2.0
+[buildings.cost]
+credits = 900.0
+materials = 120.0
+[buildings.upkeep]
+credits = 2.0
+power = 2.0
+[buildings.outputs]
+research = 4.0
+[[buildings.synergies]]
+with_tag = "culture"
+output_multiplier = 1.35
+
+[[buildings]]
+id = "maker-cooperative"
+name = "Maker Cooperative"
+description = "A flexible local industry that finances expansion without erasing place."
+category = "industry"
+tags = ["maker", "community"]
+allowed_districts = ["old-grid", "civic-core"]
+footprint = 2
+max_count = 6
+jobs = 55
+wellbeing = 1.0
+[buildings.cost]
+credits = 700.0
+materials = 100.0
+[buildings.upkeep]
+power = 2.5
+materials = 0.5
+[buildings.outputs]
+credits = 12.0
+materials = 1.0
+[[buildings.synergies]]
+with_tag = "science"
+output_multiplier = 1.25
+
+[[buildings]]
+id = "solar-canopy"
+name = "Solar Canopy"
+description = "Public shade, clean power, and a platform for a distributed grid."
+category = "energy"
+tags = ["energy", "green"]
+allowed_districts = ["sun-belt", "river-ward", "civic-core"]
+footprint = 1
+max_count = 12
+jobs = 10
+wellbeing = 1.0
+requires_technologies = ["solar-weave"]
+[buildings.cost]
+credits = 520.0
+materials = 70.0
+[buildings.outputs]
+power = 10.0
+
+[[buildings]]
+id = "vertical-farm"
+name = "Vertical Farm"
+description = "Closed-loop food production whose best yields emerge beside clean energy."
+category = "food"
+tags = ["food", "green"]
+allowed_districts = ["sun-belt", "old-grid", "river-ward"]
+footprint = 2
+max_count = 8
+jobs = 28
+wellbeing = 2.0
+requires_technologies = ["agroponics"]
+[buildings.cost]
+credits = 780.0
+materials = 110.0
+[buildings.upkeep]
+clean_water = 1.0
+power = 2.0
+[buildings.outputs]
+food = 8.0
+[[buildings.synergies]]
+with_tag = "energy"
+output_multiplier = 1.4
+
+[[buildings]]
+id = "water-garden"
+name = "Living Water Garden"
+description = "Wetland infrastructure that cleans water while creating public space."
+category = "water"
+tags = ["water", "green", "culture"]
+allowed_districts = ["river-ward"]
+footprint = 2
+max_count = 6
+jobs = 18
+wellbeing = 5.0
+requires_technologies = ["circular-water"]
+[buildings.cost]
+credits = 720.0
+materials = 80.0
+[buildings.upkeep]
+power = 1.0
+[buildings.outputs]
+clean_water = 9.0
+
+[[buildings]]
+id = "arcology-spine"
+name = "Arcology Spine"
+description = "High-capacity housing whose modular public floors evolve with the city."
+category = "residential"
+tags = ["housing", "science"]
+allowed_districts = ["civic-core", "old-grid"]
+footprint = 3
+max_count = 4
+housing = 260
+jobs = 35
+wellbeing = 3.0
+requires_technologies = ["modular-habitat"]
+[buildings.cost]
+credits = 1800.0
+materials = 240.0
+[buildings.upkeep]
+food = 2.4
+clean_water = 3.2
+power = 2.8
+[buildings.outputs]
+credits = 15.0
+[[buildings.synergies]]
+with_tag = "culture"
+output_multiplier = 1.2
+
+[[buildings]]
+id = "story-forum"
+name = "Story Forum"
+description = "A civic venue where collective memory converts into wellbeing and insight."
+category = "culture"
+tags = ["culture", "community"]
+allowed_districts = ["civic-core", "river-ward", "old-grid"]
+footprint = 1
+max_count = 5
+jobs = 16
+wellbeing = 10.0
+requires_technologies = ["participatory-media"]
+[buildings.cost]
+credits = 600.0
+materials = 55.0
+[buildings.upkeep]
+credits = 1.0
+power = 0.5
+[buildings.outputs]
+research = 1.5
+
+[[technologies]]
+id = "civic-science"
+name = "Civic Science"
+description = "Treat every district as a living laboratory shared by its residents."
+branch = "knowledge"
+[technologies.cost]
+research = 45.0
+[technologies.effects.resource_multipliers]
+research = 1.2
+
+[[technologies]]
+id = "participatory-media"
+name = "Participatory Media"
+description = "Turn public storytelling into a source of coordination and discovery."
+branch = "knowledge"
+prerequisites = ["civic-science"]
+[technologies.cost]
+research = 80.0
+[technologies.effects]
+wellbeing_bonus = 6.0
+
+[[technologies]]
+id = "modular-habitat"
+name = "Modular Habitat"
+description = "Housing becomes an adaptable platform rather than a fixed product."
+branch = "habitat"
+prerequisites = ["civic-science"]
+[technologies.cost]
+research = 95.0
+[technologies.effects]
+housing_multiplier = 1.2
+
+[[technologies]]
+id = "circular-water"
+name = "Circular Water"
+description = "Waste streams become designed inputs for living infrastructure."
+branch = "ecology"
+[technologies.cost]
+research = 55.0
+[technologies.effects.resource_multipliers]
+clean_water = 1.3
+
+[[technologies]]
+id = "agroponics"
+name = "Agroponics"
+description = "Fuse food production, water cycling, and dense urban form."
+branch = "ecology"
+prerequisites = ["circular-water"]
+[technologies.cost]
+research = 75.0
+[technologies.effects.resource_multipliers]
+food = 1.25
+
+[[technologies]]
+id = "solar-weave"
+name = "Solar Weave"
+description = "Distribute generation through roofs, streets, and public shade."
+branch = "energy"
+[technologies.cost]
+research = 50.0
+[technologies.effects.resource_multipliers]
+power = 1.25
+
+[[technologies]]
+id = "autonomous-grid"
+name = "Autonomous Grid"
+description = "Delegate energy allocation to adaptive machine coordination."
+branch = "energy"
+prerequisites = ["solar-weave"]
+excludes = ["human-scale-grid"]
+[technologies.cost]
+research = 110.0
+[technologies.effects]
+jobs_multiplier = 0.8
+[technologies.effects.resource_multipliers]
+power = 1.55
+
+[[technologies]]
+id = "human-scale-grid"
+name = "Human-scale Grid"
+description = "Make energy stewardship a neighborhood institution and source of work."
+branch = "energy"
+prerequisites = ["solar-weave"]
+excludes = ["autonomous-grid"]
+[technologies.cost]
+research = 110.0
+[technologies.effects]
+jobs_multiplier = 1.25
+wellbeing_bonus = 5.0
+
+[[technologies]]
+id = "regenerative-city"
+name = "Regenerative City"
+description = "A synthesis where civic knowledge, water, food, and energy reinforce one another."
+branch = "synthesis"
+prerequisites = ["participatory-media", "agroponics", "solar-weave"]
+[technologies.cost]
+research = 220.0
+[technologies.effects]
+housing_multiplier = 1.15
+jobs_multiplier = 1.15
+wellbeing_bonus = 15.0
+[technologies.effects.resource_multipliers]
+research = 1.25
+food = 1.25
+clean_water = 1.25
+power = 1.25

@@ -16,6 +16,8 @@ World Forge is a simulation operating system for building games, simulations, wo
 | Purpose-built ECS | ✅ Implemented | BTreeMap-backed, deterministic iteration |
 | World manifest + scenarios | ✅ Implemented | TOML-based with schema validation |
 | Resource economy | ✅ Implemented | Production, transfer, conservation, prices |
+| City construction | ✅ Implemented | District slots, costs, upkeep, yields, housing, jobs, wellbeing, population growth, co-location synergies |
+| Research trees | ✅ Implemented | Data-driven branches, prerequisites, exclusions, unlocks, and systemic multipliers |
 | Objective system | ✅ Implemented | Evaluate pass/fail conditions per scenario |
 | Replay artifacts | ✅ Implemented | CBOR-serialized with tamper detection |
 | Proof chain | ✅ Implemented | Event hash chains with verification |
@@ -77,7 +79,7 @@ worldforge-bench       Criterion simulation and stress benchmarks
 
 1. **Determinism is non-negotiable.** `Fixed64` replaces all floating-point in simulation. `ChaCha8Rng` with explicit seeding. `BTreeMap` for all iteration. No threading in the simulation loop.
 
-2. **Worlds are packages.** A world is a directory containing `world.toml`, `scenario.toml`, `entities.toml`, and optionally mods. Package into `.world` archives with reproducible content fingerprints.
+2. **Worlds are packages.** A world is a directory containing `world.toml`, `scenario.toml`, `entities.toml`, and optionally `city.toml` and mods. Package into `.world` archives with reproducible content fingerprints.
 
 3. **No fake features.** Validation is typed and referential: malformed values, duplicate entities, dangling links, mismatched scenarios, and invalid event targets fail before execution.
 
@@ -100,6 +102,12 @@ The `examples/supply-chain` directory demonstrates a complete simulation:
 ```bash
 cargo run -p worldforge-cli -- run examples/supply-chain --seed 42 --ticks 1000
 ```
+
+## Playable city and research layer
+
+`examples/micro-city` is now a player-directed city rather than a passive scenario. Its four districts have finite land budgets; eight building types consume construction resources and ongoing upkeep; tagged neighbors create local production synergies; housing supports population growth; and jobs and wellbeing respond to the built form.
+
+Nine technologies span knowledge, habitat, ecology, energy, and synthesis. Paths cross-link, unlock new buildings, transform resource yields, and include an exclusive choice between autonomous and human-scale power systems. Construction, research, and capacity choices are deterministic events preserved by saves, replay re-execution, state fingerprints, and the proof chain. See [city systems and research](docs/city-systems.md).
 
 ## Verification
 
@@ -170,6 +178,7 @@ WIT interfaces for the Component Model are defined in `wit/worldforge/`. The exe
 - A fully engine-backed Play Mode with play, pause, single-step, speed control, restart, live topology, resources, objectives, and event feed
 - Crash-safe local save slots with deterministic resume reconstruction and world-fingerprint compatibility checks
 - Deterministic production-capacity decisions recorded inside the replay proof chain
+- A playable district construction layer and branching research constellation with atomic actions, affordability/slot feedback, and deterministic save/replay restoration
 - Responsive resource, topology, and event visualizations
 - Exact whole-run resource extrema, measurable objective progress, resilience scoring, and operational insights
 - Filterable event audit trails and objective status

@@ -45,6 +45,7 @@ pub fn doctor() -> Result<(), WorldForgeError> {
         "schemas/world.schema.json",
         "schemas/scenario.schema.json",
         "schemas/entities.schema.json",
+        "schemas/city.schema.json",
     ];
     for schema in &schemas {
         let exists = Path::new(schema).exists();
@@ -443,10 +444,64 @@ pub fn replay_run(file: &Path) -> Result<(), WorldForgeError> {
         replay.seed,
         Some(replay.total_ticks),
     )?;
-    let result = runtime.run()?;
-    if result.initial_state_fingerprint != replay.initial_state_fingerprint
-        || result.final_state_fingerprint != replay.final_state_fingerprint
-        || result.proof.event_chain_root != replay.event_chain_root
+    let initial_state = runtime.current_progress().state_fingerprint;
+    let player_actions = replay
+        .events
+        .iter()
+        .filter(|event| {
+            matches!(
+                event.event_type,
+                EventType::PlayerCapacityChanged { .. }
+                    | EventType::BuildingConstructed { .. }
+                    | EventType::TechnologyUnlocked { .. }
+            )
+        })
+        .collect::<Vec<_>>();
+    for action in player_actions {
+        let current_tick = runtime.current_progress().current_tick;
+        let action_tick = action.tick.value();
+        if action_tick < current_tick || action_tick > replay.total_ticks {
+            return Err(WorldForgeError::new(
+                worldforge_core::error::ErrorCode::ReplayFormatInvalid,
+                "replay player actions are not in deterministic tick order",
+            ));
+        }
+        if action_tick > current_tick {
+            runtime.step(action_tick - current_tick)?;
+        }
+        match &action.event_type {
+            EventType::PlayerCapacityChanged {
+                entity,
+                new_capacity,
+                ..
+            } => {
+                runtime.set_capacity(entity, new_capacity.to_f64_lossy())?;
+            }
+            EventType::BuildingConstructed {
+                building, district, ..
+            } => {
+                runtime.construct_building(building, district)?;
+            }
+            EventType::TechnologyUnlocked { technology, .. } => {
+                runtime.research_technology(technology)?;
+            }
+            _ => unreachable!("filtered player action"),
+        }
+    }
+    let current_tick = runtime.current_progress().current_tick;
+    if current_tick < replay.total_ticks {
+        runtime.step(replay.total_ticks - current_tick)?;
+    }
+    let progress = runtime.current_progress();
+    let regenerated = runtime.replay().ok_or_else(|| {
+        WorldForgeError::new(
+            worldforge_core::error::ErrorCode::RuntimeStateMismatch,
+            "replay re-execution did not complete",
+        )
+    })?;
+    if initial_state != replay.initial_state_fingerprint
+        || progress.state_fingerprint != replay.final_state_fingerprint
+        || regenerated.event_chain_root != replay.event_chain_root
     {
         return Err(WorldForgeError::new(
             worldforge_core::error::ErrorCode::ReplayFingerprintMismatch,
@@ -454,7 +509,7 @@ pub fn replay_run(file: &Path) -> Result<(), WorldForgeError> {
         ));
     }
     println!("Replay re-execution passed ✓");
-    println!("  Final state: {}", result.final_state_fingerprint);
+    println!("  Final state: {}", progress.state_fingerprint);
     Ok(())
 }
 
@@ -536,6 +591,8 @@ fn simulation_export_with_event_limit(
         ("shortage", result.event_type_counts.shortage),
         ("price", result.event_type_counts.price),
         ("system", result.event_type_counts.system),
+        ("construction", result.event_type_counts.construction),
+        ("research", result.event_type_counts.research),
     ]);
     let retained_events = runtime.retained_events();
     let event_start = result.event_count.saturating_sub(retained_events.len());
@@ -595,6 +652,35 @@ fn simulation_export_with_event_limit(
                     "capacity".to_string(),
                     new_capacity.to_f64_lossy(),
                 ),
+                EventType::PlayerCapacityChanged {
+                    entity,
+                    new_capacity,
+                    ..
+                } => (
+                    "system",
+                    entity.clone(),
+                    "capacity".to_string(),
+                    new_capacity.to_f64_lossy(),
+                ),
+                EventType::BuildingConstructed {
+                    building,
+                    district,
+                    count,
+                } => (
+                    "construction",
+                    district.clone(),
+                    building.clone(),
+                    f64::from(*count),
+                ),
+                EventType::TechnologyUnlocked { technology, branch } => {
+                    ("research", branch.clone(), technology.clone(), 0.0)
+                }
+                EventType::PopulationChanged { population, .. } => (
+                    "system",
+                    "city".to_string(),
+                    "population".to_string(),
+                    population.to_f64_lossy(),
+                ),
                 EventType::ObjectiveUpdated { objective, .. } => {
                     ("system", "objective".to_string(), objective.clone(), 0.0)
                 }
@@ -646,6 +732,7 @@ fn simulation_export_with_event_limit(
         "resources": resources,
         "entities": entities,
         "links": result.links,
+        "city": result.city,
         "snapshots": result.snapshots,
         "events": events,
         "eventsTruncated": event_start > 0,
@@ -731,4 +818,32 @@ pub fn benchmark(path: &Path, ticks: u64, reps: u32) -> Result<(), WorldForgeErr
     println!("  Avg events/run:  {}", avg_events);
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn replay_run_reexecutes_city_and_capacity_decisions() {
+        let world = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../..")
+            .join("examples/micro-city");
+        let mut runtime = worldforge_runtime::SimulationRuntime::load(&world, 99, Some(8)).unwrap();
+        runtime.research_technology("solar-weave").unwrap();
+        runtime
+            .construct_building("solar-canopy", "sun-belt")
+            .unwrap();
+        runtime.set_capacity("coal-plant", 0.75).unwrap();
+        runtime.step(8).unwrap();
+        let replay = runtime.take_replay().unwrap();
+        let path = std::env::temp_dir().join(format!(
+            "worldforge-city-replay-{}.replay",
+            uuid::Uuid::new_v4().simple()
+        ));
+        replay.save(&path).unwrap();
+        let result = replay_run(&path);
+        std::fs::remove_file(path).unwrap();
+        result.unwrap();
+    }
 }

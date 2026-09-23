@@ -6,6 +6,7 @@
 //! production rules, objectives, events, and scenarios. Also handles
 //! manifest parsing and scenario validation.
 
+pub mod city;
 pub mod config;
 pub mod event;
 pub mod manifest;
@@ -13,6 +14,10 @@ pub mod model;
 pub mod objective;
 pub mod scenario;
 
+pub use city::{
+    BuildingDefinition, BuildingSynergy, CityConfig, DistrictDefinition, TechnologyDefinition,
+    TechnologyEffects,
+};
 pub use config::{EntitiesConfig, EntityConfig, LinkConfig, ProductionConfig};
 pub use event::{EventType, ScheduledEvent, ScheduledEventType, SimulationEvent};
 pub use manifest::WorldManifest;

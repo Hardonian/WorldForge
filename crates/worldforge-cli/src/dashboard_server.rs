@@ -13,8 +13,9 @@ use serde_json::{json, Value};
 use worldforge_core::{EngineVersion, ErrorCode, WorldForgeError};
 use worldforge_runtime::{RunProgress, SimulationRuntime};
 use worldforge_world::{
-    EntitiesConfig, EntityConfig, EventType, LinkConfig, Objective, ObjectiveStatus, ObjectiveType,
-    ProductionConfig, Scenario, ScheduledEvent, ScheduledEventType, SimulationEvent, WorldManifest,
+    CityConfig, EntitiesConfig, EntityConfig, EventType, LinkConfig, Objective, ObjectiveStatus,
+    ObjectiveType, ProductionConfig, Scenario, ScheduledEvent, ScheduledEventType, SimulationEvent,
+    WorldManifest,
 };
 
 const INDEX: &str = include_str!("../../../dashboard/index.html");
@@ -22,6 +23,8 @@ const SCRIPT: &str = include_str!("../../../dashboard/dashboard.js");
 const STYLE: &str = include_str!("../../../dashboard/dashboard.css");
 const WORLD_ATLAS: &[u8] = include_bytes!("../../../dashboard/assets/world-atlas.png");
 const TACTICAL_HOLO_BG: &[u8] = include_bytes!("../../../dashboard/assets/tactical-holo-bg.jpg");
+const CLEAN_TACTICAL_BLUEPRINT: &[u8] =
+    include_bytes!("../../../dashboard/assets/clean-tactical-blueprint.jpg");
 const MAX_REQUEST_BYTES: usize = 64 * 1024;
 const MAX_TICKS: u64 = 1_000_000;
 const MAX_BENCHMARK_REPS: u32 = 20;
@@ -60,8 +63,22 @@ struct PlaySession {
 #[serde(rename_all = "camelCase")]
 struct InterventionRecord {
     tick: u64,
-    entity: String,
-    capacity: f64,
+    #[serde(default = "default_capacity_action")]
+    action: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    entity: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    capacity: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    building: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    district: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    technology: Option<String>,
+}
+
+fn default_capacity_action() -> String {
+    "capacity".to_string()
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -105,6 +122,17 @@ struct StepRequest {
 struct InterventionRequest {
     entity: String,
     capacity: f64,
+}
+
+#[derive(Deserialize)]
+struct ConstructRequest {
+    building: String,
+    district: String,
+}
+
+#[derive(Deserialize)]
+struct ResearchRequest {
+    technology: String,
 }
 
 #[derive(Deserialize)]
@@ -262,6 +290,13 @@ fn handle_connection(stream: &mut TcpStream, state: &ServerState) -> Result<(), 
             TACTICAL_HOLO_BG,
             true,
         ),
+        ("GET", "/assets/clean-tactical-blueprint.jpg") => respond(
+            stream,
+            "200 OK",
+            "image/jpeg",
+            CLEAN_TACTICAL_BLUEPRINT,
+            true,
+        ),
         ("GET", "/api/health") => {
             let world_count = catalog(&state.worlds_dir)?.as_array().map_or(0, Vec::len);
             let active_sessions = lock_sessions(state)?.len();
@@ -343,6 +378,24 @@ fn handle_connection(stream: &mut TcpStream, state: &ServerState) -> Result<(), 
             let request: InterventionRequest = parse_json(body)?;
             let id = play_action_id(route, "intervene").unwrap_or_default();
             let response = intervene_play_session(state, id, request)?;
+            respond_json(stream, "200 OK", &response)
+        }
+        ("POST", route)
+            if route.ends_with("/construct") && play_action_id(route, "construct").is_some() =>
+        {
+            require_json_content_type(&header)?;
+            let request: ConstructRequest = parse_json(body)?;
+            let id = play_action_id(route, "construct").unwrap_or_default();
+            let response = construct_in_play_session(state, id, request)?;
+            respond_json(stream, "200 OK", &response)
+        }
+        ("POST", route)
+            if route.ends_with("/research") && play_action_id(route, "research").is_some() =>
+        {
+            require_json_content_type(&header)?;
+            let request: ResearchRequest = parse_json(body)?;
+            let id = play_action_id(route, "research").unwrap_or_default();
+            let response = research_in_play_session(state, id, request)?;
             respond_json(stream, "200 OK", &response)
         }
         ("GET", route)
@@ -505,8 +558,68 @@ fn intervene_play_session(
             .set_capacity(&request.entity, request.capacity)?;
         session.interventions.push(InterventionRecord {
             tick,
-            entity: request.entity,
-            capacity: request.capacity,
+            action: "capacity".to_string(),
+            entity: Some(request.entity),
+            capacity: Some(request.capacity),
+            building: None,
+            district: None,
+            technology: None,
+        });
+        Ok(play_document(
+            id,
+            &session.world,
+            &progress,
+            session.runtime.replay(),
+            false,
+        ))
+    })
+}
+
+fn construct_in_play_session(
+    state: &ServerState,
+    id: &str,
+    request: ConstructRequest,
+) -> Result<Value, WorldForgeError> {
+    with_play_session(state, id, |session| {
+        let tick = session.runtime.current_progress().current_tick;
+        let progress = session
+            .runtime
+            .construct_building(&request.building, &request.district)?;
+        session.interventions.push(InterventionRecord {
+            tick,
+            action: "construct".to_string(),
+            entity: None,
+            capacity: None,
+            building: Some(request.building),
+            district: Some(request.district),
+            technology: None,
+        });
+        Ok(play_document(
+            id,
+            &session.world,
+            &progress,
+            session.runtime.replay(),
+            false,
+        ))
+    })
+}
+
+fn research_in_play_session(
+    state: &ServerState,
+    id: &str,
+    request: ResearchRequest,
+) -> Result<Value, WorldForgeError> {
+    with_play_session(state, id, |session| {
+        let tick = session.runtime.current_progress().current_tick;
+        let progress = session.runtime.research_technology(&request.technology)?;
+        session.interventions.push(InterventionRecord {
+            tick,
+            action: "research".to_string(),
+            entity: None,
+            capacity: None,
+            building: None,
+            district: None,
+            technology: Some(request.technology),
         });
         Ok(play_document(
             id,
@@ -680,7 +793,50 @@ fn load_save(state: &ServerState, id: &str) -> Result<Value, WorldForgeError> {
         if intervention.tick > current_tick {
             runtime.step(intervention.tick - current_tick)?;
         }
-        runtime.set_capacity(&intervention.entity, intervention.capacity)?;
+        match intervention.action.as_str() {
+            "capacity" => runtime.set_capacity(
+                intervention.entity.as_deref().ok_or_else(|| {
+                    WorldForgeError::new(
+                        ErrorCode::ReplayFormatInvalid,
+                        "capacity intervention is missing its entity",
+                    )
+                })?,
+                intervention.capacity.ok_or_else(|| {
+                    WorldForgeError::new(
+                        ErrorCode::ReplayFormatInvalid,
+                        "capacity intervention is missing its value",
+                    )
+                })?,
+            )?,
+            "construct" => runtime.construct_building(
+                intervention.building.as_deref().ok_or_else(|| {
+                    WorldForgeError::new(
+                        ErrorCode::ReplayFormatInvalid,
+                        "construction intervention is missing its building",
+                    )
+                })?,
+                intervention.district.as_deref().ok_or_else(|| {
+                    WorldForgeError::new(
+                        ErrorCode::ReplayFormatInvalid,
+                        "construction intervention is missing its district",
+                    )
+                })?,
+            )?,
+            "research" => runtime.research_technology(
+                intervention.technology.as_deref().ok_or_else(|| {
+                    WorldForgeError::new(
+                        ErrorCode::ReplayFormatInvalid,
+                        "research intervention is missing its technology",
+                    )
+                })?,
+            )?,
+            _ => {
+                return Err(WorldForgeError::new(
+                    ErrorCode::ReplayFormatInvalid,
+                    "save contains an unknown intervention action",
+                ));
+            }
+        };
     }
     let current_tick = runtime.current_progress().current_tick;
     if save.current_tick > current_tick {
@@ -832,13 +988,32 @@ fn validate_save_game(save: &SaveGame, expected_id: &str) -> Result<(), WorldFor
     }
     let mut previous_tick = 0;
     for (index, intervention) in save.interventions.iter().enumerate() {
+        let valid_action = match intervention.action.as_str() {
+            "capacity" => {
+                intervention.entity.as_deref().is_some_and(valid_action_id)
+                    && intervention.capacity.is_some_and(|capacity| {
+                        capacity.is_finite() && (0.0..=2.0).contains(&capacity)
+                    })
+            }
+            "construct" => {
+                intervention
+                    .building
+                    .as_deref()
+                    .is_some_and(valid_action_id)
+                    && intervention
+                        .district
+                        .as_deref()
+                        .is_some_and(valid_action_id)
+            }
+            "research" => intervention
+                .technology
+                .as_deref()
+                .is_some_and(valid_action_id),
+            _ => false,
+        };
         if intervention.tick > save.current_tick
             || (index > 0 && intervention.tick < previous_tick)
-            || intervention.entity.trim().is_empty()
-            || intervention.entity.len() > 128
-            || intervention.entity.chars().any(char::is_control)
-            || !intervention.capacity.is_finite()
-            || !(0.0..=2.0).contains(&intervention.capacity)
+            || !valid_action
         {
             return Err(WorldForgeError::new(
                 ErrorCode::ReplayFormatInvalid,
@@ -848,6 +1023,15 @@ fn validate_save_game(save: &SaveGame, expected_id: &str) -> Result<(), WorldFor
         previous_tick = intervention.tick;
     }
     Ok(())
+}
+
+fn valid_action_id(value: &str) -> bool {
+    !value.is_empty()
+        && value.len() <= 128
+        && !value.chars().any(char::is_control)
+        && value.chars().all(|character| {
+            character.is_ascii_alphanumeric() || character == '-' || character == '_'
+        })
 }
 
 fn save_slot_count(saves_dir: &Path) -> Result<usize, WorldForgeError> {
@@ -989,6 +1173,7 @@ fn play_document(
         "resourceMetrics": progress.resource_metrics,
         "snapshot": progress.snapshot,
         "entityStates": progress.entity_states,
+        "city": progress.city,
         "objectives": progress.objective_results.iter().map(|objective| json!({
             "name": objective.name,
             "status": format!("{:?}", objective.status),
@@ -1060,6 +1245,35 @@ fn event_document(event: &SimulationEvent) -> Value {
             "capacity".to_string(),
             new_capacity.to_f64_lossy(),
         ),
+        EventType::PlayerCapacityChanged {
+            entity,
+            new_capacity,
+            ..
+        } => (
+            "system",
+            entity.clone(),
+            "capacity".to_string(),
+            new_capacity.to_f64_lossy(),
+        ),
+        EventType::BuildingConstructed {
+            building,
+            district,
+            count,
+        } => (
+            "construction",
+            district.clone(),
+            building.clone(),
+            f64::from(*count),
+        ),
+        EventType::TechnologyUnlocked { technology, branch } => {
+            ("research", branch.clone(), technology.clone(), 0.0)
+        }
+        EventType::PopulationChanged { population, .. } => (
+            "system",
+            "city".to_string(),
+            "population".to_string(),
+            population.to_f64_lossy(),
+        ),
         EventType::ObjectiveUpdated { objective, .. } => {
             ("system", "objective".to_string(), objective.clone(), 0.0)
         }
@@ -1100,7 +1314,7 @@ fn create_world(state: &ServerState, request: WorldBuildRequest) -> Result<Value
         ));
     }
 
-    let (manifest, scenario, entities) = build_world_package(
+    let (manifest, scenario, entities, city) = build_world_package(
         title,
         description,
         &request.template,
@@ -1117,6 +1331,9 @@ fn create_world(state: &ServerState, request: WorldBuildRequest) -> Result<Value
         write_toml_file(&temporary.join("world.toml"), &manifest)?;
         write_toml_file(&temporary.join("scenario.toml"), &scenario)?;
         write_toml_file(&temporary.join("entities.toml"), &entities)?;
+        if let Some(city) = &city {
+            write_toml_file(&temporary.join("city.toml"), city)?;
+        }
         worldforge_package::validate_world(&temporary)?;
         std::fs::rename(&temporary, &destination).map_err(|error| {
             if destination.exists() {
@@ -1201,7 +1418,7 @@ fn build_world_package(
     difficulty: &str,
     seed: u64,
     ticks: u64,
-) -> Result<(WorldManifest, Scenario, EntitiesConfig), WorldForgeError> {
+) -> Result<(WorldManifest, Scenario, EntitiesConfig, Option<CityConfig>), WorldForgeError> {
     let (names, resources, region) = match template {
         "industrial" => (
             ["quarry", "refinery", "assembly", "depot", "market"],
@@ -1240,7 +1457,7 @@ fn build_world_package(
     };
     let [raw, processed, final_resource, energy] = resources;
     let energy_supply = ticks as f64 * 2.0 + 100.0;
-    let entities = vec![
+    let mut entities = vec![
         EntityConfig {
             name: names[0].to_string(),
             entity_type: "source".to_string(),
@@ -1301,6 +1518,14 @@ fn build_world_package(
             }),
         },
     ];
+    if template == "city" {
+        entities[4].initial_inventory.extend(resource_amounts([
+            ("credits", 5_000.0),
+            ("materials", 700.0),
+            ("research", 140.0),
+            ("population", 30.0),
+        ]));
+    }
     let links = vec![
         LinkConfig {
             from: names[0].to_string(),
@@ -1364,10 +1589,136 @@ fn build_world_package(
         ],
     };
     let config = EntitiesConfig { entities, links };
+    let city = (template == "city")
+        .then(generated_city_config)
+        .transpose()?;
     manifest.validate()?;
     config.validate()?;
+    if let Some(city) = &city {
+        city.validate(&config)?;
+    }
     scenario.validate_against(&manifest, &config)?;
-    Ok((manifest, scenario, config))
+    Ok((manifest, scenario, config, city))
+}
+
+fn generated_city_config() -> Result<CityConfig, WorldForgeError> {
+    CityConfig::from_toml(
+        r#"
+treasury = "residential-district"
+population_growth_per_tick = 1.0
+[population_needs]
+food = 0.1
+clean-water = 0.1
+power = 0.1
+
+[[districts]]
+id = "metro-core"
+name = "Metro Core"
+slots = 10
+[[districts]]
+id = "green-ring"
+name = "Green Ring"
+slots = 12
+
+[[buildings]]
+id = "mixed-housing"
+name = "Mixed Housing"
+category = "residential"
+allowed_districts = ["metro-core", "green-ring"]
+tags = ["housing", "community"]
+footprint = 2
+housing = 100
+jobs = 10
+wellbeing = 3.0
+[buildings.cost]
+credits = 600.0
+materials = 80.0
+[buildings.upkeep]
+food = 1.0
+clean-water = 1.0
+power = 1.0
+[buildings.outputs]
+credits = 4.0
+
+[[buildings]]
+id = "research-commons"
+name = "Research Commons"
+category = "knowledge"
+allowed_districts = ["metro-core"]
+tags = ["science", "community"]
+footprint = 2
+jobs = 30
+wellbeing = 2.0
+[buildings.cost]
+credits = 800.0
+materials = 100.0
+[buildings.upkeep]
+power = 1.5
+[buildings.outputs]
+research = 3.0
+
+[[buildings]]
+id = "solar-garden"
+name = "Solar Garden"
+category = "energy"
+allowed_districts = ["green-ring"]
+tags = ["energy", "green"]
+requires_technologies = ["distributed-energy"]
+[buildings.cost]
+credits = 500.0
+materials = 60.0
+[buildings.outputs]
+power = 8.0
+
+[[buildings]]
+id = "food-loop"
+name = "Food Loop"
+category = "food"
+allowed_districts = ["green-ring", "metro-core"]
+tags = ["food", "green"]
+requires_technologies = ["circular-systems"]
+[buildings.cost]
+credits = 650.0
+materials = 90.0
+[buildings.upkeep]
+clean-water = 0.8
+power = 1.0
+[buildings.outputs]
+food = 6.0
+[[buildings.synergies]]
+with_tag = "energy"
+output_multiplier = 1.35
+
+[[technologies]]
+id = "civic-learning"
+name = "Civic Learning"
+branch = "knowledge"
+[technologies.cost]
+research = 40.0
+[technologies.effects.resource_multipliers]
+research = 1.2
+
+[[technologies]]
+id = "distributed-energy"
+name = "Distributed Energy"
+branch = "infrastructure"
+prerequisites = ["civic-learning"]
+[technologies.cost]
+research = 65.0
+[technologies.effects.resource_multipliers]
+power = 1.3
+
+[[technologies]]
+id = "circular-systems"
+name = "Circular Systems"
+branch = "ecology"
+prerequisites = ["civic-learning"]
+[technologies.cost]
+research = 65.0
+[technologies.effects.resource_multipliers]
+food = 1.25
+"#,
+    )
 }
 
 fn resource_amounts<const N: usize>(pairs: [(&str, f64); N]) -> BTreeMap<String, f64> {
@@ -1424,6 +1775,7 @@ fn catalog_entry(path: &Path) -> Result<Option<Value>, WorldForgeError> {
     let manifest = resolved.manifest;
     let scenario = resolved.scenario;
     let entities = resolved.entities;
+    let city = resolved.city;
     let slug = path
         .file_name()
         .and_then(|name| name.to_str())
@@ -1449,6 +1801,8 @@ fn catalog_entry(path: &Path) -> Result<Option<Value>, WorldForgeError> {
         "defaultTicks": scenario.duration_ticks,
         "entityCount": entities.entities.len(),
         "resourceCount": resources.len(),
+        "cityBuildingCount": city.as_ref().map_or(0, |city| city.buildings.len()),
+        "technologyCount": city.as_ref().map_or(0, |city| city.technologies.len()),
         "entities": entities.entities.iter().map(|entity| &entity.name).collect::<Vec<_>>(),
         "resources": resources,
         "links": entities.links,
@@ -1866,6 +2220,73 @@ mod tests {
 
         delete_play_session(&state, id).unwrap();
         assert!(inspect_play_session(&state, id).is_err());
+        std::fs::remove_dir_all(saves_dir).unwrap();
+    }
+
+    #[test]
+    fn city_actions_survive_save_and_resume_with_identical_proof() {
+        let (state, saves_dir) = test_state();
+        let created = create_play_session(
+            &state,
+            RunRequest {
+                world: "micro-city".to_string(),
+                seed: 99,
+                ticks: 12,
+            },
+        )
+        .unwrap();
+        let original_id = created["sessionId"].as_str().unwrap();
+        let researched = research_in_play_session(
+            &state,
+            original_id,
+            ResearchRequest {
+                technology: "solar-weave".to_string(),
+            },
+        )
+        .unwrap();
+        assert_eq!(researched["recentEvents"][0]["type"], "research");
+        let built = construct_in_play_session(
+            &state,
+            original_id,
+            ConstructRequest {
+                building: "solar-canopy".to_string(),
+                district: "sun-belt".to_string(),
+            },
+        )
+        .unwrap();
+        assert_eq!(built["recentEvents"][0]["type"], "construction");
+        construct_in_play_session(
+            &state,
+            original_id,
+            ConstructRequest {
+                building: "courtyard-homes".to_string(),
+                district: "civic-core".to_string(),
+            },
+        )
+        .unwrap();
+        step_play_session(&state, original_id, 4).unwrap();
+        let save = save_play_session(
+            &state,
+            SaveRequest {
+                session_id: original_id.to_string(),
+                name: "The solar turn".to_string(),
+                save_id: None,
+            },
+        )
+        .unwrap();
+        let original_final = step_play_session(&state, original_id, 20).unwrap();
+        let resumed = load_save(&state, &save.id).unwrap();
+        assert_eq!(resumed["city"]["housing"], 90);
+        let resumed_id = resumed["sessionId"].as_str().unwrap();
+        let resumed_final = step_play_session(&state, resumed_id, 20).unwrap();
+        assert_eq!(
+            resumed_final["proof"]["eventChain"],
+            original_final["proof"]["eventChain"]
+        );
+        assert_eq!(
+            resumed_final["proof"]["final"],
+            original_final["proof"]["final"]
+        );
         std::fs::remove_dir_all(saves_dir).unwrap();
     }
 

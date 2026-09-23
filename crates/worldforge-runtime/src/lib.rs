@@ -55,6 +55,7 @@ pub struct RunResult {
     pub snapshots: Vec<ResourceSnapshot>,
     pub entities: Vec<RunEntity>,
     pub links: Vec<RunLink>,
+    pub city: Option<CityProgress>,
 }
 
 /// Aggregate event telemetry retained independently of replay capture.
@@ -65,6 +66,8 @@ pub struct RunEventCounts {
     pub shortage: usize,
     pub price: usize,
     pub system: usize,
+    pub construction: usize,
+    pub research: usize,
 }
 
 impl RunEventCounts {
@@ -75,8 +78,12 @@ impl RunEventCounts {
             EventType::InventoryShortage { .. } => self.shortage += 1,
             EventType::PriceChanged { .. } => self.price += 1,
             EventType::CapacityChanged { .. }
+            | EventType::PlayerCapacityChanged { .. }
             | EventType::ObjectiveUpdated { .. }
+            | EventType::PopulationChanged { .. }
             | EventType::SimulationDegraded { .. } => self.system += 1,
+            EventType::BuildingConstructed { .. } => self.construction += 1,
+            EventType::TechnologyUnlocked { .. } => self.research += 1,
         }
     }
 }
@@ -153,6 +160,83 @@ pub struct RunProgress {
     pub recent_events: Vec<SimulationEvent>,
     pub entities: Vec<RunEntity>,
     pub links: Vec<RunLink>,
+    pub city: Option<CityProgress>,
+}
+
+/// Player-facing city layer derived from proof-chained simulation state.
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CityProgress {
+    pub treasury: String,
+    pub population: f64,
+    pub housing: u64,
+    pub jobs: u64,
+    pub wellbeing: f64,
+    pub employment_rate: f64,
+    pub districts: Vec<CityDistrictProgress>,
+    pub buildings: Vec<CityBuildingProgress>,
+    pub technologies: Vec<CityTechnologyProgress>,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CityDistrictProgress {
+    pub id: String,
+    pub name: String,
+    pub description: String,
+    pub slots: u32,
+    pub used_slots: u32,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CityBuildingProgress {
+    pub id: String,
+    pub name: String,
+    pub description: String,
+    pub category: String,
+    pub tags: Vec<String>,
+    pub allowed_districts: Vec<String>,
+    pub footprint: u32,
+    pub count: u32,
+    pub max_count: u32,
+    pub cost: BTreeMap<String, f64>,
+    pub upkeep: BTreeMap<String, f64>,
+    pub outputs: BTreeMap<String, f64>,
+    pub housing: u32,
+    pub jobs: u32,
+    pub wellbeing: f64,
+    pub requires_technologies: Vec<String>,
+    pub unlocked: bool,
+    pub affordable: bool,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CityTechnologyProgress {
+    pub id: String,
+    pub name: String,
+    pub description: String,
+    pub branch: String,
+    pub cost: BTreeMap<String, f64>,
+    pub prerequisites: Vec<String>,
+    pub excludes: Vec<String>,
+    pub researched: bool,
+    pub available: bool,
+    pub affordable: bool,
+}
+
+#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
+struct CityRuntimeState {
+    /// `district/building` -> constructed count. IDs cannot contain `/`.
+    placements: BTreeMap<String, u32>,
+    unlocked_technologies: BTreeSet<String>,
+}
+
+impl worldforge_ecs::Component for CityRuntimeState {
+    fn to_fingerprint_bytes(&self) -> Vec<u8> {
+        worldforge_core::serial::to_cbor(self).unwrap_or_default()
+    }
 }
 
 /// Result of an objective evaluation.
@@ -191,6 +275,8 @@ pub struct SimulationRuntime {
     scenario_fingerprint: Fingerprint,
     run_entities: Vec<RunEntity>,
     run_links: Vec<RunLink>,
+    city_config: Option<CityConfig>,
+    city_treasury_id: Option<EntityId>,
     initial_state_fingerprint: Fingerprint,
     state_fingerprint: Fingerprint,
     shortage_count: usize,
@@ -242,6 +328,7 @@ impl SimulationRuntime {
         let scenario_path = resolved_world_path.join("scenario.toml");
         let mut scenario = resolved.scenario;
         let entities_config = resolved.entities;
+        let city_config = resolved.city;
         scenario.seed = seed;
         if let Some(ticks) = duration_ticks {
             if ticks == 0 {
@@ -359,6 +446,37 @@ impl SimulationRuntime {
             });
         }
 
+        let city_treasury_id = city_config
+            .as_ref()
+            .and_then(|city| entity_id_map.get(&city.treasury).copied());
+        if let (Some(city), Some(treasury_id)) = (&city_config, city_treasury_id) {
+            ecs_world.insert_component(treasury_id, CityRuntimeState::default());
+            let mut track = |resource: &String| {
+                if tracked_resource_set.insert(resource.clone()) {
+                    tracked_resources.push(resource.clone());
+                }
+            };
+            track(&city.population_resource);
+            for resource in city.population_needs.keys() {
+                track(resource);
+            }
+            for building in &city.buildings {
+                for resource in building
+                    .cost
+                    .keys()
+                    .chain(building.upkeep.keys())
+                    .chain(building.outputs.keys())
+                {
+                    track(resource);
+                }
+            }
+            for technology in &city.technologies {
+                for resource in technology.cost.keys() {
+                    track(resource);
+                }
+            }
+        }
+
         tracked_resources.sort();
 
         let mut resource_totals = BTreeMap::new();
@@ -442,6 +560,8 @@ impl SimulationRuntime {
             scenario_fingerprint,
             run_entities,
             run_links,
+            city_config,
+            city_treasury_id,
             initial_state_fingerprint: initial_fp,
             state_fingerprint: initial_fp,
             shortage_count: 0,
@@ -503,6 +623,7 @@ impl SimulationRuntime {
             let mut tick_events = self.apply_scheduled_events(tick_num)?;
 
             run_production(&mut self.world, &self.entity_ids, tick, &mut tick_events);
+            tick_events.extend(self.run_city_economy(tick)?);
             run_transfers(
                 &mut self.world,
                 &self.supply_links,
@@ -630,7 +751,7 @@ impl SimulationRuntime {
         rule.capacity = new_capacity;
         let event = SimulationEvent::new(
             self.world.current_tick(),
-            EventType::CapacityChanged {
+            EventType::PlayerCapacityChanged {
                 entity: entity.to_string(),
                 old_capacity,
                 new_capacity,
@@ -643,6 +764,202 @@ impl SimulationRuntime {
         self.event_type_counts.record(&event);
         self.state_fingerprint = self.world.fingerprint();
         Ok(self.progress_with_events(vec![event]))
+    }
+
+    /// Construct one configured building in a district. Costs, unlocks, slot
+    /// limits, and per-template caps are checked atomically.
+    pub fn construct_building(
+        &mut self,
+        building_id: &str,
+        district_id: &str,
+    ) -> Result<RunProgress, WorldForgeError> {
+        self.ensure_player_action_allowed()?;
+        let city = self.city_config.as_ref().ok_or_else(|| {
+            WorldForgeError::new(
+                ErrorCode::ScenarioInvalid,
+                "this world has no city-building rules",
+            )
+        })?;
+        let building = city
+            .buildings
+            .iter()
+            .find(|building| building.id == building_id)
+            .ok_or_else(|| {
+                WorldForgeError::new(
+                    ErrorCode::ScenarioInvalid,
+                    format!("building '{building_id}' does not exist"),
+                )
+            })?
+            .clone();
+        let district = city
+            .districts
+            .iter()
+            .find(|district| district.id == district_id)
+            .ok_or_else(|| {
+                WorldForgeError::new(
+                    ErrorCode::ScenarioInvalid,
+                    format!("district '{district_id}' does not exist"),
+                )
+            })?;
+        if !building
+            .allowed_districts
+            .iter()
+            .any(|allowed| allowed == district_id)
+        {
+            return Err(action_error(format!(
+                "'{}' cannot be constructed in '{}'",
+                building.name, district.name
+            )));
+        }
+        let treasury_id = self.city_treasury_id.ok_or_else(|| {
+            WorldForgeError::new(ErrorCode::RuntimeInitFailed, "city treasury is unavailable")
+        })?;
+        let state = self
+            .world
+            .get_component::<CityRuntimeState>(&treasury_id)
+            .cloned()
+            .ok_or_else(|| {
+                WorldForgeError::new(ErrorCode::RuntimeInitFailed, "city state is unavailable")
+            })?;
+        if building
+            .requires_technologies
+            .iter()
+            .any(|technology| !state.unlocked_technologies.contains(technology))
+        {
+            return Err(action_error(format!(
+                "building '{}' is locked by the research tree",
+                building.id
+            )));
+        }
+        let total_count = city_building_count(&state, &building.id);
+        if total_count >= building.max_count {
+            return Err(action_error(format!(
+                "building '{}' reached its limit of {}",
+                building.id, building.max_count
+            )));
+        }
+        let used_slots = city_district_slots(city, &state, district_id);
+        if used_slots.saturating_add(building.footprint) > district.slots {
+            return Err(action_error(format!(
+                "district '{}' does not have {} free slots",
+                district.id, building.footprint
+            )));
+        }
+        spend_resources(&mut self.world, treasury_id, &building.cost)?;
+        let key = placement_key(district_id, building_id);
+        let district_count = {
+            let state = self
+                .world
+                .get_component_mut::<CityRuntimeState>(&treasury_id)
+                .expect("validated city state");
+            let count = state.placements.entry(key).or_default();
+            *count += 1;
+            *count
+        };
+        let event = SimulationEvent::new(
+            self.world.current_tick(),
+            EventType::BuildingConstructed {
+                building: building.id,
+                district: district_id.to_string(),
+                count: district_count,
+            },
+        );
+        self.record_player_event(event.clone());
+        self.refresh_resource_totals(self.world.current_tick().value());
+        self.state_fingerprint = self.world.fingerprint();
+        Ok(self.progress_with_events(vec![event]))
+    }
+
+    /// Unlock a technology in the world's branching research graph.
+    pub fn research_technology(
+        &mut self,
+        technology_id: &str,
+    ) -> Result<RunProgress, WorldForgeError> {
+        self.ensure_player_action_allowed()?;
+        let city = self.city_config.as_ref().ok_or_else(|| {
+            WorldForgeError::new(
+                ErrorCode::ScenarioInvalid,
+                "this world has no research tree",
+            )
+        })?;
+        let technology = city
+            .technologies
+            .iter()
+            .find(|technology| technology.id == technology_id)
+            .ok_or_else(|| {
+                WorldForgeError::new(
+                    ErrorCode::ScenarioInvalid,
+                    format!("technology '{technology_id}' does not exist"),
+                )
+            })?
+            .clone();
+        let treasury_id = self.city_treasury_id.ok_or_else(|| {
+            WorldForgeError::new(ErrorCode::RuntimeInitFailed, "city treasury is unavailable")
+        })?;
+        let state = self
+            .world
+            .get_component::<CityRuntimeState>(&treasury_id)
+            .ok_or_else(|| {
+                WorldForgeError::new(ErrorCode::RuntimeInitFailed, "city state is unavailable")
+            })?;
+        if state.unlocked_technologies.contains(technology_id) {
+            return Err(action_error(format!(
+                "technology '{technology_id}' is already researched"
+            )));
+        }
+        if technology
+            .prerequisites
+            .iter()
+            .any(|required| !state.unlocked_technologies.contains(required))
+        {
+            return Err(action_error(format!(
+                "technology '{technology_id}' has unmet prerequisites"
+            )));
+        }
+        if technology
+            .excludes
+            .iter()
+            .any(|excluded| state.unlocked_technologies.contains(excluded))
+        {
+            return Err(action_error(format!(
+                "technology '{technology_id}' is excluded by an earlier choice"
+            )));
+        }
+        spend_resources(&mut self.world, treasury_id, &technology.cost)?;
+        self.world
+            .get_component_mut::<CityRuntimeState>(&treasury_id)
+            .expect("validated city state")
+            .unlocked_technologies
+            .insert(technology.id.clone());
+        let event = SimulationEvent::new(
+            self.world.current_tick(),
+            EventType::TechnologyUnlocked {
+                technology: technology.id,
+                branch: technology.branch,
+            },
+        );
+        self.record_player_event(event.clone());
+        self.refresh_resource_totals(self.world.current_tick().value());
+        self.state_fingerprint = self.world.fingerprint();
+        Ok(self.progress_with_events(vec![event]))
+    }
+
+    fn ensure_player_action_allowed(&self) -> Result<(), WorldForgeError> {
+        if self.state == RunState::Completed || matches!(self.state, RunState::Failed { .. }) {
+            return Err(WorldForgeError::new(
+                ErrorCode::RuntimeStateMismatch,
+                "a completed simulation cannot be changed",
+            ));
+        }
+        Ok(())
+    }
+
+    fn record_player_event(&mut self, event: SimulationEvent) {
+        if let Some(writer) = &mut self.replay_writer {
+            writer.record_event(event.clone());
+        }
+        self.event_count += 1;
+        self.event_type_counts.record(&event);
     }
 
     fn finalize(&mut self) -> Result<(), WorldForgeError> {
@@ -703,6 +1020,7 @@ impl SimulationRuntime {
             snapshots: self.snapshots.clone(),
             entities: self.run_entities.clone(),
             links: self.run_links.clone(),
+            city: self.city_progress(),
         })
     }
 
@@ -727,6 +1045,7 @@ impl SimulationRuntime {
             recent_events,
             entities: self.run_entities.clone(),
             links: self.run_links.clone(),
+            city: self.city_progress(),
         }
     }
 
@@ -854,6 +1173,100 @@ impl SimulationRuntime {
             .collect()
     }
 
+    fn city_progress(&self) -> Option<CityProgress> {
+        let city = self.city_config.as_ref()?;
+        let treasury_id = self.city_treasury_id?;
+        let state = self.world.get_component::<CityRuntimeState>(&treasury_id)?;
+        let inventory = self.world.get_component::<Inventory>(&treasury_id)?;
+        let (housing, jobs, wellbeing) = city_stats(city, state);
+        let population = inventory.get(&city.population_resource).to_f64_lossy();
+        let employment_rate = if population <= 0.0 {
+            1.0
+        } else {
+            (jobs as f64 / population).clamp(0.0, 1.0)
+        };
+        let districts = city
+            .districts
+            .iter()
+            .map(|district| CityDistrictProgress {
+                id: district.id.clone(),
+                name: district.name.clone(),
+                description: district.description.clone(),
+                slots: district.slots,
+                used_slots: city_district_slots(city, state, &district.id),
+            })
+            .collect();
+        let buildings = city
+            .buildings
+            .iter()
+            .map(|building| {
+                let unlocked = building
+                    .requires_technologies
+                    .iter()
+                    .all(|technology| state.unlocked_technologies.contains(technology));
+                CityBuildingProgress {
+                    id: building.id.clone(),
+                    name: building.name.clone(),
+                    description: building.description.clone(),
+                    category: building.category.clone(),
+                    tags: building.tags.clone(),
+                    allowed_districts: building.allowed_districts.clone(),
+                    footprint: building.footprint,
+                    count: city_building_count(state, &building.id),
+                    max_count: building.max_count,
+                    cost: building.cost.clone(),
+                    upkeep: building.upkeep.clone(),
+                    outputs: building.outputs.clone(),
+                    housing: building.housing,
+                    jobs: building.jobs,
+                    wellbeing: building.wellbeing,
+                    requires_technologies: building.requires_technologies.clone(),
+                    unlocked,
+                    affordable: unlocked && resources_available(inventory, &building.cost),
+                }
+            })
+            .collect();
+        let technologies = city
+            .technologies
+            .iter()
+            .map(|technology| {
+                let researched = state.unlocked_technologies.contains(&technology.id);
+                let available = !researched
+                    && technology
+                        .prerequisites
+                        .iter()
+                        .all(|required| state.unlocked_technologies.contains(required))
+                    && technology
+                        .excludes
+                        .iter()
+                        .all(|excluded| !state.unlocked_technologies.contains(excluded));
+                CityTechnologyProgress {
+                    id: technology.id.clone(),
+                    name: technology.name.clone(),
+                    description: technology.description.clone(),
+                    branch: technology.branch.clone(),
+                    cost: technology.cost.clone(),
+                    prerequisites: technology.prerequisites.clone(),
+                    excludes: technology.excludes.clone(),
+                    researched,
+                    available,
+                    affordable: available && resources_available(inventory, &technology.cost),
+                }
+            })
+            .collect();
+        Some(CityProgress {
+            treasury: city.treasury.clone(),
+            population,
+            housing,
+            jobs,
+            wellbeing,
+            employment_rate,
+            districts,
+            buildings,
+            technologies,
+        })
+    }
+
     /// Get the replay artifact (must call after run()).
     pub fn take_replay(&mut self) -> Option<ReplayArtifact> {
         self.replay.take()
@@ -862,6 +1275,132 @@ impl SimulationRuntime {
     /// Borrow the finalized replay after `run` completes.
     pub fn replay(&self) -> Option<&ReplayArtifact> {
         self.replay.as_ref()
+    }
+
+    fn run_city_economy(&mut self, tick: Tick) -> Result<Vec<SimulationEvent>, WorldForgeError> {
+        let (Some(city), Some(treasury_id)) = (self.city_config.clone(), self.city_treasury_id)
+        else {
+            return Ok(Vec::new());
+        };
+        let state = self
+            .world
+            .get_component::<CityRuntimeState>(&treasury_id)
+            .cloned()
+            .ok_or_else(|| {
+                WorldForgeError::new(ErrorCode::RuntimeInitFailed, "city state is unavailable")
+            })?;
+        let district_tags = city_district_tags(&city, &state);
+        let mut events = Vec::new();
+
+        for (key, count) in &state.placements {
+            let Some((district_id, building_id)) = key.split_once('/') else {
+                continue;
+            };
+            let Some(building) = city
+                .buildings
+                .iter()
+                .find(|building| building.id == building_id)
+            else {
+                continue;
+            };
+            let quantity = Fixed64::from_f64_lossy(f64::from(*count));
+            let inventory = self
+                .world
+                .get_component::<Inventory>(&treasury_id)
+                .ok_or_else(|| {
+                    WorldForgeError::new(
+                        ErrorCode::RuntimeInitFailed,
+                        "city treasury inventory is unavailable",
+                    )
+                })?;
+            let shortage = building.upkeep.iter().find_map(|(resource, amount)| {
+                let needed = Fixed64::from_f64_lossy(*amount) * quantity;
+                let available = inventory.get(resource);
+                (available < needed).then(|| (resource.clone(), needed, available))
+            });
+            if let Some((resource, needed, available)) = shortage {
+                events.push(SimulationEvent::new(
+                    tick,
+                    EventType::InventoryShortage {
+                        entity: format!("{district_id}/{building_id}"),
+                        resource,
+                        needed,
+                        available,
+                    },
+                ));
+                continue;
+            }
+
+            let inventory = self
+                .world
+                .get_component_mut::<Inventory>(&treasury_id)
+                .expect("validated city treasury inventory");
+            for (resource, amount) in &building.upkeep {
+                inventory
+                    .try_subtract(resource, Fixed64::from_f64_lossy(*amount) * quantity)
+                    .expect("upkeep was checked atomically");
+            }
+            for (resource, amount) in &building.outputs {
+                let multiplier = city_output_multiplier(
+                    &city,
+                    &state,
+                    &district_tags,
+                    district_id,
+                    building,
+                    resource,
+                );
+                let produced = Fixed64::from_f64_lossy(*amount)
+                    * quantity
+                    * Fixed64::from_f64_lossy(multiplier);
+                inventory.add(resource, produced);
+                events.push(SimulationEvent::new(
+                    tick,
+                    EventType::ProductionCompleted {
+                        entity: format!("{district_id}/{building_id}"),
+                        resource: resource.clone(),
+                        amount: produced,
+                    },
+                ));
+            }
+        }
+
+        if city.population_growth_per_tick > 0.0 {
+            let stats = city_stats(&city, &state);
+            let inventory = self
+                .world
+                .get_component::<Inventory>(&treasury_id)
+                .expect("validated city treasury inventory");
+            let current = inventory.get(&city.population_resource);
+            let capacity = Fixed64::from_f64_lossy(stats.0 as f64);
+            let growth = Fixed64::from_f64_lossy(city.population_growth_per_tick)
+                .min((capacity - current).max(Fixed64::ZERO));
+            if growth > Fixed64::ZERO {
+                let can_grow = city.population_needs.iter().all(|(resource, per_person)| {
+                    inventory.get(resource) >= Fixed64::from_f64_lossy(*per_person) * growth
+                });
+                if can_grow {
+                    let inventory = self
+                        .world
+                        .get_component_mut::<Inventory>(&treasury_id)
+                        .expect("validated city treasury inventory");
+                    for (resource, per_person) in &city.population_needs {
+                        inventory
+                            .try_subtract(resource, Fixed64::from_f64_lossy(*per_person) * growth)
+                            .expect("population needs were checked atomically");
+                    }
+                    inventory.add(&city.population_resource, growth);
+                    events.push(SimulationEvent::new(
+                        tick,
+                        EventType::PopulationChanged {
+                            amount: growth,
+                            population: current + growth,
+                            housing: stats.0,
+                        },
+                    ));
+                }
+            }
+        }
+        Ok(events)
     }
 
     /// Events retained by the configured capture policy after completion.
@@ -1038,6 +1577,172 @@ impl SimulationRuntime {
     pub fn state(&self) -> &RunState {
         &self.state
     }
+}
+
+fn placement_key(district: &str, building: &str) -> String {
+    format!("{district}/{building}")
+}
+
+fn city_building_count(state: &CityRuntimeState, building_id: &str) -> u32 {
+    state
+        .placements
+        .iter()
+        .filter_map(|(key, count)| key.split_once('/').map(|(_, building)| (building, count)))
+        .filter(|(building, _)| *building == building_id)
+        .fold(0u32, |total, (_, count)| total.saturating_add(*count))
+}
+
+fn city_district_slots(city: &CityConfig, state: &CityRuntimeState, district_id: &str) -> u32 {
+    state
+        .placements
+        .iter()
+        .filter_map(|(key, count)| {
+            let (district, building_id) = key.split_once('/')?;
+            (district == district_id).then_some((building_id, count))
+        })
+        .filter_map(|(building_id, count)| {
+            city.buildings
+                .iter()
+                .find(|building| building.id == building_id)
+                .map(|building| building.footprint.saturating_mul(*count))
+        })
+        .fold(0u32, u32::saturating_add)
+}
+
+fn city_district_tags(
+    city: &CityConfig,
+    state: &CityRuntimeState,
+) -> BTreeMap<String, BTreeMap<String, u32>> {
+    let mut result = BTreeMap::<String, BTreeMap<String, u32>>::new();
+    for (key, count) in &state.placements {
+        let Some((district, building_id)) = key.split_once('/') else {
+            continue;
+        };
+        let Some(building) = city
+            .buildings
+            .iter()
+            .find(|building| building.id == building_id)
+        else {
+            continue;
+        };
+        for tag in &building.tags {
+            let tag_count = result
+                .entry(district.to_string())
+                .or_default()
+                .entry(tag.clone())
+                .or_default();
+            *tag_count = tag_count.saturating_add(*count);
+        }
+    }
+    result
+}
+
+fn city_output_multiplier(
+    city: &CityConfig,
+    state: &CityRuntimeState,
+    district_tags: &BTreeMap<String, BTreeMap<String, u32>>,
+    district_id: &str,
+    building: &BuildingDefinition,
+    resource: &str,
+) -> f64 {
+    let mut multiplier = 1.0;
+    for technology in &city.technologies {
+        if !state.unlocked_technologies.contains(&technology.id) {
+            continue;
+        }
+        if let Some(value) = technology.effects.building_multipliers.get(&building.id) {
+            multiplier *= *value;
+        }
+        if let Some(value) = technology.effects.resource_multipliers.get(resource) {
+            multiplier *= *value;
+        }
+    }
+    if let Some(tags) = district_tags.get(district_id) {
+        for synergy in &building.synergies {
+            if tags.get(&synergy.with_tag).copied().unwrap_or_default() > 0 {
+                multiplier *= synergy.output_multiplier;
+            }
+        }
+    }
+    multiplier.clamp(0.1, 100.0)
+}
+
+fn city_stats(city: &CityConfig, state: &CityRuntimeState) -> (u64, u64, f64) {
+    let mut housing = 0u64;
+    let mut jobs = 0u64;
+    let mut wellbeing = 0.0;
+    for (key, count) in &state.placements {
+        let Some((_, building_id)) = key.split_once('/') else {
+            continue;
+        };
+        let Some(building) = city
+            .buildings
+            .iter()
+            .find(|building| building.id == building_id)
+        else {
+            continue;
+        };
+        housing = housing.saturating_add(u64::from(building.housing) * u64::from(*count));
+        jobs = jobs.saturating_add(u64::from(building.jobs) * u64::from(*count));
+        wellbeing += building.wellbeing * f64::from(*count);
+    }
+    let mut housing_multiplier = 1.0;
+    let mut jobs_multiplier = 1.0;
+    for technology in &city.technologies {
+        if !state.unlocked_technologies.contains(&technology.id) {
+            continue;
+        }
+        if technology.effects.housing_multiplier > 0.0 {
+            housing_multiplier *= technology.effects.housing_multiplier;
+        }
+        if technology.effects.jobs_multiplier > 0.0 {
+            jobs_multiplier *= technology.effects.jobs_multiplier;
+        }
+        wellbeing += technology.effects.wellbeing_bonus;
+    }
+    (
+        (housing as f64 * housing_multiplier).round().max(0.0) as u64,
+        (jobs as f64 * jobs_multiplier).round().max(0.0) as u64,
+        wellbeing,
+    )
+}
+
+fn resources_available(inventory: &Inventory, costs: &BTreeMap<String, f64>) -> bool {
+    costs
+        .iter()
+        .all(|(resource, amount)| inventory.get(resource) >= Fixed64::from_f64_lossy(*amount))
+}
+
+fn spend_resources(
+    world: &mut SimulationWorld,
+    treasury_id: EntityId,
+    costs: &BTreeMap<String, f64>,
+) -> Result<(), WorldForgeError> {
+    let inventory = world
+        .get_component::<Inventory>(&treasury_id)
+        .ok_or_else(|| action_error("city treasury inventory is unavailable"))?;
+    if let Some((resource, needed)) = costs
+        .iter()
+        .find(|(resource, amount)| inventory.get(resource) < Fixed64::from_f64_lossy(**amount))
+    {
+        return Err(action_error(format!(
+            "insufficient {resource}: need {needed}, have {}",
+            inventory.get(resource)
+        )));
+    }
+    let inventory = world
+        .get_component_mut::<Inventory>(&treasury_id)
+        .expect("validated city treasury inventory");
+    for (resource, amount) in costs {
+        inventory
+            .try_subtract(resource, Fixed64::from_f64_lossy(*amount))
+            .expect("construction cost was checked atomically");
+    }
+    Ok(())
+}
+
+fn action_error(message: impl Into<String>) -> WorldForgeError {
+    WorldForgeError::new(ErrorCode::ScenarioInvalid, message)
 }
 
 #[cfg(test)]
@@ -1274,5 +1979,46 @@ goods = 2.0
             second.final_state_fingerprint
         );
         assert_eq!(first.proof.event_chain_root, second.proof.event_chain_root);
+    }
+
+    #[test]
+    fn city_building_and_research_form_a_deterministic_growth_loop() {
+        let play = || {
+            let mut runtime =
+                SimulationRuntime::load(&example("micro-city"), 99, Some(20)).unwrap();
+            let initial = runtime.current_progress().city.unwrap();
+            assert_eq!(initial.population, 40.0);
+            assert_eq!(initial.housing, 0);
+
+            runtime.research_technology("solar-weave").unwrap();
+            runtime
+                .construct_building("solar-canopy", "sun-belt")
+                .unwrap();
+            runtime
+                .construct_building("courtyard-homes", "civic-core")
+                .unwrap();
+            let progress = runtime.step(20).unwrap();
+            let city = progress.city.as_ref().unwrap();
+            assert_eq!(city.housing, 90);
+            assert!(city.population > 40.0);
+            assert!(city
+                .technologies
+                .iter()
+                .any(|technology| technology.id == "solar-weave" && technology.researched));
+            assert!(runtime
+                .retained_events()
+                .iter()
+                .any(|event| matches!(event.event_type, EventType::BuildingConstructed { .. })));
+            assert!(runtime
+                .retained_events()
+                .iter()
+                .any(|event| matches!(event.event_type, EventType::TechnologyUnlocked { .. })));
+            (
+                progress.state_fingerprint,
+                runtime.replay().unwrap().event_chain_root,
+            )
+        };
+
+        assert_eq!(play(), play());
     }
 }

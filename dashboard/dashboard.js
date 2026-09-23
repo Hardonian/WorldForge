@@ -7,6 +7,8 @@ const TYPE_COLORS = {
     shortage: '#ff6f7c',
     price: '#f1b96b',
     system: '#9b8cff',
+    construction: '#f1b96b',
+    research: '#d578ef',
 };
 const WORLD_SYMBOLS = {
     'supply-chain': 'SC', ecosystem: 'EC', 'micro-city': 'MC',
@@ -146,12 +148,17 @@ function bindInteractions() {
     el('capacity-slider').addEventListener('input', updateCapacityLabel);
     el('play-entity-select').addEventListener('change', syncCapacityControl);
     el('apply-capacity').addEventListener('click', applyCapacityDecision);
+    el('city-building-select')?.addEventListener('change', syncCityBuildingSelection);
+    el('city-district-select')?.addEventListener('change', syncCityBuildingSelection);
+    el('city-build-button')?.addEventListener('click', constructCityBuilding);
     document.querySelectorAll('.preset-btn').forEach(btn => {
         btn.addEventListener('click', () => {
             const val = Number(btn.dataset.capacity);
             el('capacity-slider').value = val;
             updateCapacityLabel();
             syncPresetHighlight(val);
+            if (val > 100) WorldForgeCG.audio.playOverdrive();
+            else WorldForgeCG.audio.playBlip(600, 0.05);
         });
     });
     initThemeManager();
@@ -272,7 +279,7 @@ function renderWorldNavigation() {
         title.textContent = world.title;
         const details = document.createElement('small');
         const baseCount = world.dependencies?.length || 0;
-        details.textContent = `${world.entityCount} entities · ${world.resourceCount} resources${baseCount ? ` · ${baseCount} base` : ''}`;
+        details.textContent = `${world.entityCount} entities · ${world.resourceCount} resources${world.technologyCount ? ` · ${world.technologyCount} techs` : ''}${baseCount ? ` · ${baseCount} base` : ''}`;
         copy.append(title, details);
         const arrow = document.createElement('span');
         arrow.className = 'nav-arrow';
@@ -378,7 +385,7 @@ function selectWorld(worldId, options = {}) {
     dom.worldTitle.textContent = world.title;
     dom.worldDesc.textContent = world.description || 'A packaged deterministic simulation world.';
     const baseCount = world.dependencies?.length || 0;
-    dom.worldMeta.textContent = `v${world.version} · ${world.entityCount} entities · ${world.resourceCount} resources${baseCount ? ` · ${baseCount} inherited base` : ''}`;
+    dom.worldMeta.textContent = `v${world.version} · ${world.entityCount} entities · ${world.resourceCount} resources${world.cityBuildingCount ? ` · ${world.cityBuildingCount} buildings · ${world.technologyCount} techs` : ''}${baseCount ? ` · ${baseCount} inherited base` : ''}`;
     const flagBadge = el('world-flag-badge');
     if (flagBadge) flagBadge.innerHTML = getWorldFlagSvg(worldId, 18);
     if (options.useDefaults) {
@@ -912,6 +919,7 @@ function resetPlayControls() {
     el('play-reset').disabled = true;
     el('play-save').disabled = true;
     el('apply-capacity').disabled = true;
+    el('city-build-button').disabled = true;
     el('play-replay').classList.add('hidden');
 }
 
@@ -961,6 +969,7 @@ async function startPlaySession() {
         showToast('Could not start world', error.message, 'error');
     } finally {
         state.play.requestInFlight = false;
+        renderCityLayer(state.play.data?.city);
         setButtonBusy(el('play-new'), false, state.play.sessionId ? 'New world' : 'Start world');
         setButtonBusy(el('play-intro-start'), false, 'Start simulation');
     }
@@ -1014,6 +1023,7 @@ async function advancePlaySession(ticks) {
         if (state.play !== play) return;
         play.requestInFlight = false;
         el('play-step').disabled = Boolean(play.data?.completed);
+        renderCityLayer(play.data?.city);
     }
 }
 
@@ -1041,6 +1051,7 @@ function completePlaySession(data) {
     el('play-toggle').disabled = true;
     el('play-step').disabled = true;
     el('apply-capacity').disabled = true;
+    el('city-build-button').disabled = true;
     el('play-save').disabled = false;
     el('play-replay').classList.remove('hidden');
     el('play-new').textContent = 'Play again';
@@ -1068,6 +1079,8 @@ async function applyCapacityDecision() {
         if (state.play !== play) return;
         consumePlayUpdate(data);
         showToast('Decision applied', `${prettyName(entity)} capacity is now ${Math.round(capacity * 100)}%.`);
+        if (capacity > 1.0) WorldForgeCG.audio.playOverdrive();
+        else WorldForgeCG.audio.playBlip(680, 0.08);
     } catch (error) {
         showToast('Decision rejected', error.message, 'error');
     } finally {
@@ -1075,6 +1088,149 @@ async function applyCapacityDecision() {
         play.requestInFlight = false;
         el('apply-capacity').disabled = Boolean(play.data?.completed);
     }
+}
+
+async function constructCityBuilding() {
+    const play = state.play;
+    if (!play.sessionId || play.requestInFlight || play.data?.completed || !play.data?.city) return;
+    const building = el('city-building-select').value;
+    const district = el('city-district-select').value;
+    if (!building || !district) return;
+    play.requestInFlight = true;
+    el('city-build-button').disabled = true;
+    try {
+        const data = await api(`/api/play/sessions/${play.sessionId}/construct`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ building, district }),
+        });
+        if (state.play !== play) return;
+        consumePlayUpdate(data);
+        showToast('Building constructed', `${prettyName(building)} is now active in ${prettyName(district)}.`);
+        WorldForgeCG.audio.playBlip(760, 0.1);
+    } catch (error) {
+        showToast('Construction rejected', error.message, 'error');
+    } finally {
+        if (state.play !== play) return;
+        play.requestInFlight = false;
+        renderCityLayer(play.data?.city);
+    }
+}
+
+async function researchCityTechnology(technology) {
+    const play = state.play;
+    if (!play.sessionId || play.requestInFlight || play.data?.completed || !play.data?.city) return;
+    play.requestInFlight = true;
+    renderCityLayer(play.data.city);
+    try {
+        const data = await api(`/api/play/sessions/${play.sessionId}/research`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ technology }),
+        });
+        if (state.play !== play) return;
+        consumePlayUpdate(data);
+        showToast('Technology unlocked', `${prettyName(technology)} has reshaped the city system.`);
+        WorldForgeCG.audio.playOverdrive();
+    } catch (error) {
+        showToast('Research rejected', error.message, 'error');
+    } finally {
+        if (state.play !== play) return;
+        play.requestInFlight = false;
+        renderCityLayer(play.data?.city);
+    }
+}
+
+function renderCityLayer(city) {
+    const panel = el('city-layer');
+    if (!panel) return;
+    if (!city) {
+        panel.classList.add('hidden');
+        return;
+    }
+    panel.classList.remove('hidden');
+    el('city-population').textContent = formatDecimal(city.population, 0);
+    el('city-housing').textContent = formatNumber(city.housing);
+    el('city-jobs').textContent = formatNumber(city.jobs);
+    el('city-wellbeing').textContent = formatDecimal(city.wellbeing, 1);
+
+    const buildingSelect = el('city-building-select');
+    const currentBuilding = buildingSelect.value;
+    const ids = city.buildings.map(building => building.id);
+    const existing = [...buildingSelect.options].map(option => option.value);
+    if (ids.join('|') !== existing.join('|')) {
+        buildingSelect.replaceChildren(...city.buildings.map(building => {
+            const suffix = building.unlocked ? ` · ${building.count}/${building.maxCount}` : ' · locked';
+            return new Option(`${building.name}${suffix}`, building.id);
+        }));
+    } else {
+        city.buildings.forEach((building, index) => {
+            const suffix = building.unlocked ? ` · ${building.count}/${building.maxCount}` : ' · locked';
+            buildingSelect.options[index].textContent = `${building.name}${suffix}`;
+        });
+    }
+    if (ids.includes(currentBuilding)) buildingSelect.value = currentBuilding;
+
+    const districts = el('city-districts');
+    districts.replaceChildren(...city.districts.map(district => {
+        const node = document.createElement('div'); node.className = 'district-chip';
+        const label = document.createElement('span');
+        const name = document.createElement('b'); name.textContent = district.name;
+        const slots = document.createElement('small'); slots.textContent = `${district.usedSlots}/${district.slots}`;
+        label.append(name, slots);
+        const meter = document.createElement('i');
+        meter.style.setProperty('--district-use', `${Math.min(100, district.usedSlots / Math.max(1, district.slots) * 100)}%`);
+        node.title = district.description;
+        node.append(label, meter);
+        return node;
+    }));
+
+    const tree = el('city-technologies');
+    tree.replaceChildren(...city.technologies.map(technology => {
+        const node = document.createElement('article');
+        node.className = `technology-node${technology.researched ? ' researched' : technology.available ? '' : ' locked'}`;
+        const title = document.createElement('strong'); title.textContent = technology.name;
+        const branch = document.createElement('small'); branch.textContent = technology.branch;
+        const button = document.createElement('button'); button.type = 'button';
+        button.textContent = technology.researched ? 'Researched' : 'Research';
+        button.disabled = technology.researched || !technology.available || !technology.affordable || state.play.requestInFlight || state.play.data?.completed;
+        button.addEventListener('click', () => researchCityTechnology(technology.id));
+        const copy = document.createElement('p'); copy.textContent = technology.description;
+        const cost = document.createElement('span'); cost.className = 'tech-cost';
+        cost.textContent = technology.researched ? 'Integrated into the city' : `${resourceList(technology.cost)}${technology.prerequisites.length ? ` · after ${technology.prerequisites.map(prettyName).join(', ')}` : ''}`;
+        node.append(title, branch, button, copy, cost);
+        return node;
+    }));
+    syncCityBuildingSelection();
+}
+
+function syncCityBuildingSelection() {
+    const city = state.play.data?.city;
+    if (!city) return;
+    const building = city.buildings.find(item => item.id === el('city-building-select').value) || city.buildings[0];
+    if (!building) return;
+    el('city-building-select').value = building.id;
+    const districtSelect = el('city-district-select');
+    const currentDistrict = districtSelect.value;
+    const allowed = city.districts.filter(district => building.allowedDistricts.includes(district.id));
+    districtSelect.replaceChildren(...allowed.map(district => new Option(`${district.name} · ${district.slots - district.usedSlots} free`, district.id)));
+    if (allowed.some(district => district.id === currentDistrict)) districtSelect.value = currentDistrict;
+    const district = allowed.find(item => item.id === districtSelect.value);
+
+    const detail = el('city-building-detail'); detail.replaceChildren();
+    const title = document.createElement('strong'); title.textContent = `${building.name} · ${prettyName(building.category || 'civic')}`;
+    const copy = document.createElement('span'); copy.textContent = building.description;
+    const economy = document.createElement('span'); economy.className = 'city-cost';
+    economy.textContent = `Build ${resourceList(building.cost)} · upkeep ${resourceList(building.upkeep)} · yields ${resourceList(building.outputs)}`;
+    const impact = document.createElement('span');
+    impact.textContent = `Housing +${building.housing} · jobs +${building.jobs} · wellbeing +${formatDecimal(building.wellbeing, 1)}${building.requiresTechnologies.length ? ` · requires ${building.requiresTechnologies.map(prettyName).join(', ')}` : ''}`;
+    detail.append(title, copy, document.createElement('br'), economy, document.createElement('br'), impact);
+
+    const hasSpace = district && district.usedSlots + building.footprint <= district.slots;
+    el('city-build-button').disabled = !building.unlocked || !building.affordable || building.count >= building.maxCount || !hasSpace || state.play.requestInFlight || state.play.data?.completed;
+}
+
+function resourceList(resources) {
+    const entries = Object.entries(resources || {});
+    return entries.length ? entries.map(([resource, amount]) => `${formatDecimal(amount, 1)} ${prettyName(resource)}`).join(' + ') : 'none';
 }
 
 function updateCapacityLabel() {
@@ -1106,6 +1262,7 @@ function renderPlayState() {
     renderPlayNetwork(data);
     WorldForgeCG.setData(data);
     renderProducerOptions(data.entityStates);
+    renderCityLayer(data.city);
     updatePlayStatus();
     updateVitalityGauge(data);
 }
@@ -1705,15 +1862,18 @@ function getResourceNeonColor(resource) {
 function detectArchetype(entity) {
     const type = (entity.entity_type || '').toLowerCase();
     const name = (entity.name || '').toLowerCase();
-    if (type.includes('renewable') || type.includes('power') || name.includes('wind') || name.includes('solar') || name.includes('sunlight')) return 'power';
-    if (type.includes('producer') || type.includes('extractor') || name.includes('mine') || name.includes('quarry')) return 'extractor';
+    if (type.includes('water') || name.includes('water') || name.includes('river') || name.includes('ocean') || name.includes('sea') || name.includes('aquifer')) return 'water';
+    if (type.includes('predator') || name.includes('wolf') || name.includes('carnivore')) return 'predator';
+    if (type.includes('prey') || name.includes('deer') || name.includes('herd') || name.includes('wildlife') || name.includes('fauna')) return 'wildlife';
+    if (name.includes('grass') || name.includes('forest') || name.includes('vegetation') || name.includes('flora') || name.includes('biome') || type.includes('ecosystem') || type.includes('bio') || type.includes('food') || name.includes('farm')) return 'bio';
+    if (type.includes('renewable') || type.includes('power') || name.includes('wind') || name.includes('solar') || name.includes('sunlight') || name.includes('energy')) return 'power';
+    if (type.includes('extractor') || name.includes('mine') || name.includes('quarry') || name.includes('well')) return 'extractor';
     if (type.includes('processor') || type.includes('refiner') || name.includes('mill') || name.includes('chemical') || name.includes('desal')) return 'processor';
-    if (type.includes('manufacturer') || name.includes('factory')) return 'manufacturer';
-    if (type.includes('distributor') || name.includes('warehouse') || name.includes('depot') || name.includes('port')) return 'depot';
+    if (type.includes('manufacturer') || name.includes('factory') || name.includes('assembly')) return 'manufacturer';
+    if (type.includes('distributor') || name.includes('warehouse') || name.includes('depot') || name.includes('port') || name.includes('storage')) return 'depot';
     if (type.includes('consumer') || name.includes('city') || name.includes('market') || name.includes('population') || name.includes('resident')) return 'habitat';
-    if (type.includes('food') || name.includes('farm') || name.includes('vegetation') || name.includes('prey') || name.includes('carnivore')) return 'bio';
-    if (type.includes('water') || name.includes('water')) return 'water';
-    if (type.includes('care') || name.includes('medical') || name.includes('care')) return 'care';
+    if (type.includes('care') || name.includes('medical') || name.includes('hospital') || name.includes('clinic')) return 'care';
+    if (type.includes('producer')) return 'extractor';
     return 'generic';
 }
 
@@ -1725,8 +1885,10 @@ const ARCHETYPE_META = {
     depot: { color: '#38bdf8', label: 'LOGISTICS' },
     habitat: { color: '#f59e0b', label: 'HABITAT' },
     bio: { color: '#a3e635', label: 'ORGANIC' },
+    wildlife: { color: '#fbbf24', label: 'HERBIVORE' },
+    predator: { color: '#f43f5e', label: 'PREDATOR' },
     water: { color: '#06b6d4', label: 'HYDRO' },
-    care: { color: '#f43f5e', label: 'MEDICAL' },
+    care: { color: '#ec4899', label: 'MEDICAL' },
     generic: { color: '#67a9ff', label: 'FACILITY' },
 };
 
@@ -1748,6 +1910,87 @@ const WorldForgeCG = {
     shockwaves: [],
     floaties: [],
     ambientDust: [],
+    envWeather: [],
+    envWeatherType: 'cyber',
+
+    audio: {
+        ctx: null,
+        enabled: localStorage.getItem('worldforge_sfx') === 'true',
+        init() {
+            if (!this.ctx && typeof AudioContext !== 'undefined') {
+                try {
+                    this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+                } catch (_) {}
+            }
+            if (this.ctx && this.ctx.state === 'suspended') {
+                this.ctx.resume().catch(() => {});
+            }
+        },
+        toggle() {
+            this.enabled = !this.enabled;
+            localStorage.setItem('worldforge_sfx', String(this.enabled));
+            if (this.enabled) this.init();
+            return this.enabled;
+        },
+        playBlip(freq = 640, duration = 0.06, type = 'sine') {
+            if (!this.enabled) return;
+            this.init();
+            if (!this.ctx) return;
+            try {
+                const now = this.ctx.currentTime;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = type;
+                osc.frequency.setValueAtTime(freq, now);
+                osc.frequency.exponentialRampToValueAtTime(freq * 1.5, now + duration);
+                gain.gain.setValueAtTime(0.08, now);
+                gain.gain.exponentialRampToValueAtTime(0.001, now + duration);
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                osc.start(now);
+                osc.stop(now + duration);
+            } catch (_) {}
+        },
+        playShortage() {
+            if (!this.enabled) return;
+            this.init();
+            if (!this.ctx) return;
+            try {
+                const now = this.ctx.currentTime;
+                [420, 310].forEach((freq, i) => {
+                    const osc = this.ctx.createOscillator();
+                    const gain = this.ctx.createGain();
+                    osc.type = 'sawtooth';
+                    osc.frequency.setValueAtTime(freq, now + i * 0.08);
+                    gain.gain.setValueAtTime(0.06, now + i * 0.08);
+                    gain.gain.exponentialRampToValueAtTime(0.001, now + i * 0.08 + 0.12);
+                    osc.connect(gain);
+                    gain.connect(this.ctx.destination);
+                    osc.start(now + i * 0.08);
+                    osc.stop(now + i * 0.08 + 0.12);
+                });
+            } catch (_) {}
+        },
+        playOverdrive() {
+            if (!this.enabled) return;
+            this.init();
+            if (!this.ctx) return;
+            try {
+                const now = this.ctx.currentTime;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(340, now);
+                osc.frequency.exponentialRampToValueAtTime(880, now + 0.15);
+                gain.gain.setValueAtTime(0.09, now);
+                gain.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                osc.start(now);
+                osc.stop(now + 0.15);
+            } catch (_) {}
+        },
+    },
 
     camera: {
         x: 0, y: 0, zoom: 1,
@@ -1785,7 +2028,109 @@ const WorldForgeCG = {
             color: Math.random() > 0.5 ? '#67a9ff' : '#42d3ea',
         }));
 
+        this.initEnvWeather();
         this.bindEvents();
+    },
+
+    initEnvWeather(worldName = '') {
+        const wn = (worldName || '').toLowerCase();
+        let type = 'cyber';
+        if (wn.includes('eco')) type = 'ecosystem';
+        else if (wn.includes('coast')) type = 'coastal';
+        else if (wn.includes('supply') || wn.includes('freight')) type = 'industrial';
+        else if (wn.includes('stress')) type = 'crisis';
+        else if (wn.includes('city')) type = 'urban';
+        this.envWeatherType = type;
+
+        const count = 48;
+        this.envWeather = Array.from({ length: count }, (_, i) => ({
+            id: i,
+            x: (Math.random() - 0.5) * 1400,
+            y: (Math.random() - 0.5) * 900,
+            r: type === 'ecosystem' ? Math.random() * 2.2 + 1.2 : Math.random() * 1.8 + 0.8,
+            speedX: type === 'coastal' ? 0.9 + Math.random() * 0.8 : (Math.random() - 0.5) * 0.35,
+            speedY: type === 'ecosystem' ? -0.25 - Math.random() * 0.3 : (Math.random() - 0.5) * 0.35,
+            alpha: Math.random() * 0.45 + 0.15,
+            phase: Math.random() * Math.PI * 2,
+            color: type === 'ecosystem' ? (Math.random() > 0.35 ? '#a3e635' : '#facc15')
+                 : type === 'coastal' ? (Math.random() > 0.5 ? '#38bdf8' : '#e0f2fe')
+                 : type === 'crisis' ? (Math.random() > 0.5 ? '#f43f5e' : '#fb923c')
+                 : (Math.random() > 0.5 ? '#67a9ff' : '#42d3ea'),
+        }));
+    },
+
+    syncAudioBtn(active) {
+        const btn = el('cg-btn-audio');
+        const iconOn = el('cg-icon-audio-on');
+        const iconOff = el('cg-icon-audio-off');
+        if (btn) btn.classList.toggle('audio-active', active);
+        if (iconOn) iconOn.classList.toggle('hidden', !active);
+        if (iconOff) iconOff.classList.toggle('hidden', active);
+    },
+
+    toggleFullscreen() {
+        const wrap = el('play-network-container');
+        if (!wrap) return;
+        if (document.fullscreenElement) {
+            document.exitFullscreen().catch(() => {});
+            wrap.classList.remove('fullscreen-active');
+        } else if (wrap.requestFullscreen) {
+            wrap.requestFullscreen().catch(() => {
+                wrap.classList.toggle('fullscreen-active');
+            });
+        } else {
+            wrap.classList.toggle('fullscreen-active');
+        }
+        setTimeout(() => this.fitView(false), 120);
+    },
+
+    bindKeyboard() {
+        window.addEventListener('keydown', (e) => {
+            if (this.viewMode !== 'cg' || !this.active) return;
+            const tag = document.activeElement?.tagName?.toLowerCase();
+            if (tag === 'input' || tag === 'textarea' || tag === 'select') return;
+
+            const key = e.key.toLowerCase();
+            if (key === 'w' || e.key === 'ArrowUp') {
+                e.preventDefault();
+                this.camera.targetY += 45;
+                this.camera.hasInteracted = true;
+            } else if (key === 's' || e.key === 'ArrowDown') {
+                e.preventDefault();
+                this.camera.targetY -= 45;
+                this.camera.hasInteracted = true;
+            } else if (key === 'a' || e.key === 'ArrowLeft') {
+                e.preventDefault();
+                this.camera.targetX += 45;
+                this.camera.hasInteracted = true;
+            } else if (key === 'd' || e.key === 'ArrowRight') {
+                e.preventDefault();
+                this.camera.targetX -= 45;
+                this.camera.hasInteracted = true;
+            } else if (key === '+' || key === '=') {
+                e.preventDefault();
+                this.zoomBy(1.22);
+            } else if (key === '-' || key === '_') {
+                e.preventDefault();
+                this.zoomBy(0.82);
+            } else if (key === 'f' || e.key === 'Home') {
+                e.preventDefault();
+                this.fitView(true);
+            } else if (e.code === 'Space') {
+                e.preventDefault();
+                togglePlay();
+            } else if (key === 'm') {
+                e.preventDefault();
+                this.setViewMode(this.viewMode === 'cg' ? 'schematic' : 'cg');
+            } else if (['1', '2', '3', '4', '5'].includes(key)) {
+                const speeds = { '1': 1, '2': 2, '3': 5, '4': 10, '5': 20 };
+                const speedSelect = el('play-speed');
+                if (speedSelect && speeds[key]) {
+                    speedSelect.value = String(speeds[key]);
+                    setPlaySpeed(speeds[key]);
+                }
+            }
+        });
     },
 
     bindControls() {
@@ -1796,6 +2141,15 @@ const WorldForgeCG = {
         el('cg-btn-zoom-out')?.addEventListener('click', () => this.zoomBy(0.78));
         el('cg-btn-reset-cam')?.addEventListener('click', () => this.fitView(true));
         el('cg-btn-fx-toggle')?.addEventListener('click', () => this.toggleVfx());
+        el('cg-btn-audio')?.addEventListener('click', () => {
+            const active = this.audio.toggle();
+            this.syncAudioBtn(active);
+            if (active) this.audio.playBlip(750, 0.08);
+            showToast('Tactical Audio', active ? 'Procedural sound FX active.' : 'Procedural sound FX muted.');
+        });
+        el('cg-btn-fullscreen')?.addEventListener('click', () => this.toggleFullscreen());
+        this.syncAudioBtn(this.audio.enabled);
+        this.bindKeyboard();
     },
 
     bindEvents() {
@@ -1871,6 +2225,7 @@ const WorldForgeCG = {
             const hit = this.getNodeAt(px, py);
             if (hit) {
                 this.setSelectedEntity(hit.name);
+                this.audio.playBlip(720, 0.06);
                 const select = el('play-entity-select');
                 if (select) {
                     select.value = hit.name;
@@ -2016,6 +2371,11 @@ const WorldForgeCG = {
         this.init();
         if (!data || !data.entityStates) return;
 
+        if (data.world && this.lastWorld !== data.world) {
+            this.lastWorld = data.world;
+            this.initEnvWeather(data.world);
+        }
+
         const entities = data.entityStates.slice(0, MAX_NETWORK_NODES);
         const rawEntities = data.entities || [];
         const links = data.links || [];
@@ -2148,17 +2508,17 @@ const WorldForgeCG = {
         });
 
         if (rankGroups.size > 1 && count <= 24) {
-            // Tiered flow layout (left to right)
+            // Tiered flow layout (left to right) with generous vertical spacing
             const sortedRanks = [...rankGroups.keys()].sort((a, b) => a - b);
             const totalCols = sortedRanks.length;
-            const widthSpan = count > 10 ? 640 : 540;
+            const widthSpan = count > 10 ? 680 : 560;
             const xStep = totalCols > 1 ? widthSpan / (totalCols - 1) : 0;
             const startX = -widthSpan / 2;
 
             sortedRanks.forEach((rank, colIdx) => {
                 const colNodes = rankGroups.get(rank);
                 const colCount = colNodes.length;
-                const heightSpan = Math.min(320, Math.max(90, (colCount - 1) * 95));
+                const heightSpan = Math.max(160, (colCount - 1) * 165);
                 const yStep = colCount > 1 ? heightSpan / (colCount - 1) : 0;
                 const startY = -heightSpan / 2;
 
@@ -2171,8 +2531,8 @@ const WorldForgeCG = {
             });
         } else {
             // Organic tactical ellipse layout
-            const rx = count > 14 ? 310 : 260;
-            const ry = count > 14 ? 160 : 135;
+            const rx = count > 14 ? 330 : 280;
+            const ry = count > 14 ? 180 : 150;
             entities.forEach((e, idx) => {
                 const angle = (idx / count) * Math.PI * 2 - Math.PI / 2;
                 positions.set(e.name, {
@@ -2182,55 +2542,146 @@ const WorldForgeCG = {
             });
         }
 
+        // Repulsion relaxation pass to guarantee collision-free placement
+        const posArray = [...positions.entries()];
+        for (let iter = 0; iter < 12; iter++) {
+            for (let i = 0; i < posArray.length; i++) {
+                for (let j = i + 1; j < posArray.length; j++) {
+                    const p1 = posArray[i][1];
+                    const p2 = posArray[j][1];
+                    const dx = p2.x - p1.x;
+                    const dy = p2.y - p1.y;
+                    const dist = Math.hypot(dx, dy) || 1;
+                    const minDist = 150;
+                    if (dist < minDist) {
+                        const overlap = (minDist - dist) / 2;
+                        const nx = dx / dist;
+                        const ny = dy / dist;
+                        p1.x -= nx * overlap;
+                        p1.y -= ny * overlap;
+                        p2.x += nx * overlap;
+                        p2.y += ny * overlap;
+                    }
+                }
+            }
+        }
+
         return positions;
     },
 
     onEvents(events) {
         if (!events || !events.length) return;
-        events.forEach(event => {
-            const node = this.nodes.get(event.entity);
+
+        // Group events by entity to aggregate identical concurrent items
+        const byEntity = new Map();
+        events.forEach(ev => {
+            if (!byEntity.has(ev.entity)) byEntity.set(ev.entity, []);
+            byEntity.get(ev.entity).push(ev);
+        });
+
+        let hadShortage = false;
+        let hadCapacityChange = false;
+
+        byEntity.forEach((evList, entityName) => {
+            const node = this.nodes.get(entityName);
             if (!node) return;
 
-            if (event.type === 'production') {
+            // Aggregate identical production events: resource -> total amount & count
+            const prodAgg = new Map();
+            const otherEvents = [];
+
+            evList.forEach(ev => {
+                if (ev.type === 'production') {
+                    const key = ev.resource || 'unknown';
+                    const cur = prodAgg.get(key) || { amount: 0, count: 0, resource: ev.resource };
+                    cur.amount += (ev.amount || 0);
+                    cur.count += 1;
+                    prodAgg.set(key, cur);
+                } else {
+                    otherEvents.push(ev);
+                }
+            });
+
+            // Trigger pulses
+            if (prodAgg.size > 0) {
                 node.pulse = 1.0;
                 if (this.vfxEnabled) {
                     this.shockwaves.push({
                         x: node.x, y: node.y, r: node.radius, maxR: node.radius + 38,
                         color: '#46d29a', alpha: 0.9, width: 2.0,
                     });
-                    this.floaties.push({
-                        text: `+${compactNumber(event.amount)} ${prettyName(event.resource)}`,
-                        x: node.x, y: node.y - node.radius - 8,
-                        vy: -1.2, color: '#46d29a', alpha: 1, life: 60, maxLife: 60,
-                    });
-                }
-            } else if (event.type === 'shortage') {
-                node.warningPulse = 1.0;
-                if (this.vfxEnabled) {
-                    this.shockwaves.push({
-                        x: node.x, y: node.y, r: node.radius, maxR: node.radius + 50,
-                        color: '#ff6f7c', alpha: 1.0, width: 2.6,
-                    });
-                    this.floaties.push({
-                        text: `⚠ SHORTAGE: ${prettyName(event.resource)}`,
-                        x: node.x, y: node.y - node.radius - 12,
-                        vy: -0.9, color: '#ff6f7c', alpha: 1, life: 80, maxLife: 80,
-                    });
-                }
-            } else if (event.type === 'capacity_change') {
-                if (this.vfxEnabled) {
-                    this.shockwaves.push({
-                        x: node.x, y: node.y, r: node.radius, maxR: node.radius + 32,
-                        color: '#f1b96b', alpha: 0.85, width: 2.0,
-                    });
-                    this.floaties.push({
-                        text: `⚡ ${Math.round(event.value * 100)}%`,
-                        x: node.x, y: node.y - node.radius - 8,
-                        vy: -1.0, color: '#f1b96b', alpha: 1, life: 65, maxLife: 65,
-                    });
                 }
             }
+
+            // Collect all unique floatie descriptors for this entity
+            const floatieItems = [];
+            prodAgg.forEach((agg, res) => {
+                const countSuffix = agg.count > 1 ? ` (x${agg.count})` : '';
+                floatieItems.push({
+                    text: `+${compactNumber(agg.amount)} ${prettyName(res)}${countSuffix}`,
+                    color: getResourceNeonColor(res) || '#46d29a',
+                    type: 'prod',
+                });
+            });
+
+            otherEvents.forEach(ev => {
+                if (ev.type === 'shortage') {
+                    hadShortage = true;
+                    node.warningPulse = 1.0;
+                    if (this.vfxEnabled) {
+                        this.shockwaves.push({
+                            x: node.x, y: node.y, r: node.radius, maxR: node.radius + 50,
+                            color: '#ff6f7c', alpha: 1.0, width: 2.6,
+                        });
+                    }
+                    floatieItems.push({
+                        text: `⚠ SHORTAGE: ${prettyName(ev.resource)}`,
+                        color: '#ff6f7c',
+                        type: 'shortage',
+                    });
+                } else if (ev.type === 'capacity_change') {
+                    hadCapacityChange = true;
+                    if (this.vfxEnabled) {
+                        this.shockwaves.push({
+                            x: node.x, y: node.y, r: node.radius, maxR: node.radius + 32,
+                            color: '#f1b96b', alpha: 0.85, width: 2.0,
+                        });
+                    }
+                    floatieItems.push({
+                        text: `⚡ ${Math.round(ev.value * 100)}%`,
+                        color: '#f1b96b',
+                        type: 'capacity',
+                    });
+                }
+            });
+
+            if (this.vfxEnabled && floatieItems.length > 0) {
+                const total = floatieItems.length;
+                floatieItems.forEach((item, idx) => {
+                    // Stagger horizontally and vertically so each item is distinctly readable
+                    const xOffset = total > 1 ? (idx - (total - 1) / 2) * 36 : 0;
+                    const yOffset = idx * 15;
+                    this.floaties.push({
+                        text: item.text,
+                        x: node.x + xOffset,
+                        y: node.y - node.radius - 12 - yOffset,
+                        vy: -0.9 - Math.random() * 0.3,
+                        color: item.color,
+                        type: item.type,
+                        alpha: 1,
+                        life: item.type === 'shortage' ? 85 : 65,
+                        maxLife: item.type === 'shortage' ? 85 : 65,
+                    });
+                });
+            }
         });
+
+        // Procedural Audio SFX
+        if (hadShortage) {
+            this.audio.playShortage();
+        } else if (hadCapacityChange) {
+            this.audio.playOverdrive();
+        }
     },
 
     setSelectedEntity(name) {
@@ -2448,6 +2899,46 @@ const WorldForgeCG = {
         ctx.fillStyle = sweepGrad;
         ctx.fill();
 
+        // Environmental weather & atmosphere particle FX
+        if (this.vfxEnabled && this.envWeather.length > 0) {
+            const isEco = this.envWeatherType === 'ecosystem';
+            const isCoast = this.envWeatherType === 'coastal';
+
+            this.envWeather.forEach(p => {
+                p.x += p.speedX;
+                p.y += p.speedY;
+
+                if (isEco) {
+                    p.x += Math.sin(now * 0.002 + p.phase) * 0.45;
+                    if (p.y < -h / 2 - 250) p.y = h / 2 + 250;
+                }
+                if (isCoast) {
+                    if (p.x > w / 2 + 350) p.x = -w / 2 - 350;
+                }
+                if (p.x > w / 2 + 350) p.x = -w / 2 - 350;
+                if (p.x < -w / 2 - 350) p.x = w / 2 + 350;
+                if (p.y > h / 2 + 250) p.y = -h / 2 - 250;
+                if (p.y < -h / 2 - 250) p.y = h / 2 + 250;
+
+                const screenX = w / 2 + p.x + this.camera.x * 0.35;
+                const screenY = h / 2 + p.y + this.camera.y * 0.35;
+
+                // Pulsing glow alpha
+                const pulseAlpha = isEco ? p.alpha * (0.6 + 0.4 * Math.sin(now * 0.004 + p.phase)) : p.alpha;
+                const hexA = Math.floor(pulseAlpha * 255).toString(16).padStart(2, '0');
+
+                ctx.beginPath();
+                ctx.arc(screenX, screenY, p.r, 0, Math.PI * 2);
+                ctx.fillStyle = `${p.color}${hexA}`;
+                if (isEco && p.r > 2) {
+                    ctx.shadowColor = p.color;
+                    ctx.shadowBlur = 6;
+                }
+                ctx.fill();
+                ctx.shadowBlur = 0;
+            });
+        }
+
         // Subtle ambient floating dust particles
         if (this.vfxEnabled) {
             this.ambientDust.forEach(dust => {
@@ -2484,6 +2975,8 @@ const WorldForgeCG = {
 
     drawConduits(ctx, now) {
         const flowOffset = (now * 0.04) % 20;
+        const chevronOffset = (now * 0.0007) % 0.33;
+
         this.links.forEach(link => {
             const from = this.nodes.get(link.from);
             const to = this.nodes.get(link.to);
@@ -2515,6 +3008,47 @@ const WorldForgeCG = {
             ctx.lineWidth = 1.4;
             ctx.stroke();
             ctx.restore();
+
+            // Selected node conduit telemetry link
+            const isConnectedToSelected = this.selectedNodeName && (link.from === this.selectedNodeName || link.to === this.selectedNodeName);
+            if (isConnectedToSelected) {
+                ctx.save();
+                ctx.beginPath();
+                ctx.moveTo(from.x, from.y);
+                ctx.quadraticCurveTo(cp.x, cp.y, to.x, to.y);
+                ctx.strokeStyle = '#f1b96b';
+                ctx.lineWidth = 2.2;
+                ctx.shadowColor = '#f1b96b';
+                ctx.shadowBlur = 8;
+                ctx.stroke();
+                ctx.restore();
+            }
+
+            // Animated directional flow chevrons (> > >)
+            if (this.vfxEnabled) {
+                for (let i = 0; i < 3; i++) {
+                    const ct = (chevronOffset + i * 0.33) % 1.0;
+                    if (ct > 0.16 && ct < 0.84) {
+                        const cx = (1 - ct) * (1 - ct) * from.x + 2 * (1 - ct) * ct * cp.x + ct * ct * to.x;
+                        const cy = (1 - ct) * (1 - ct) * from.y + 2 * (1 - ct) * ct * cp.y + ct * ct * to.y;
+                        const tx = 2 * (1 - ct) * (cp.x - from.x) + 2 * ct * (to.x - cp.x);
+                        const ty = 2 * (1 - ct) * (cp.y - from.y) + 2 * ct * (to.y - cp.y);
+                        const angle = Math.atan2(ty, tx);
+
+                        ctx.save();
+                        ctx.translate(cx, cy);
+                        ctx.rotate(angle);
+                        ctx.strokeStyle = `${link.color}bb`;
+                        ctx.lineWidth = 1.5;
+                        ctx.beginPath();
+                        ctx.moveTo(-3.5, -3);
+                        ctx.lineTo(2.5, 0);
+                        ctx.lineTo(-3.5, 3);
+                        ctx.stroke();
+                        ctx.restore();
+                    }
+                }
+            }
         });
     },
 
@@ -2528,10 +3062,10 @@ const WorldForgeCG = {
             if (p.t >= 1) {
                 p.t = 0;
                 // Micro absorption spark at destination
-                if (Math.random() < 0.25) {
+                if (Math.random() < 0.3) {
                     this.shockwaves.push({
-                        x: to.x, y: to.y, r: to.radius - 4, maxR: to.radius + 12,
-                        color: p.color, alpha: 0.5, width: 1.2,
+                        x: to.x, y: to.y, r: to.radius - 4, maxR: to.radius + 14,
+                        color: p.color, alpha: 0.6, width: 1.4,
                     });
                 }
             }
@@ -2541,24 +3075,23 @@ const WorldForgeCG = {
             const px = (1 - t) * (1 - t) * from.x + 2 * (1 - t) * t * cp.x + t * t * to.x;
             const py = (1 - t) * (1 - t) * from.y + 2 * (1 - t) * t * cp.y + t * t * to.y;
 
-            // Tail
-            const t0 = Math.max(0, t - 0.05);
-            const tx0 = (1 - t0) * (1 - t0) * from.x + 2 * (1 - t0) * t0 * cp.x + t0 * t0 * to.x;
-            const ty0 = (1 - t0) * (1 - t0) * from.y + 2 * (1 - t0) * t0 * cp.y + t0 * t0 * to.y;
+            // Fading comet motion trail
+            for (let s = 1; s <= 3; s++) {
+                const ts = Math.max(0, t - s * 0.02);
+                const sx = (1 - ts) * (1 - ts) * from.x + 2 * (1 - ts) * ts * cp.x + ts * ts * to.x;
+                const sy = (1 - ts) * (1 - ts) * from.y + 2 * (1 - ts) * ts * cp.y + ts * ts * to.y;
+                ctx.beginPath();
+                ctx.arc(sx, sy, p.r * (1 - s * 0.22), 0, Math.PI * 2);
+                ctx.fillStyle = `${p.color}${Math.floor((0.45 / s) * 255).toString(16).padStart(2, '0')}`;
+                ctx.fill();
+            }
 
-            ctx.beginPath();
-            ctx.moveTo(tx0, ty0);
-            ctx.lineTo(px, py);
-            ctx.strokeStyle = `${p.color}55`;
-            ctx.lineWidth = p.r * 1.5;
-            ctx.stroke();
-
-            // Head
+            // Comet Head with bright core
             ctx.beginPath();
             ctx.arc(px, py, p.r, 0, Math.PI * 2);
             ctx.fillStyle = '#ffffff';
             ctx.shadowColor = p.color;
-            ctx.shadowBlur = 8;
+            ctx.shadowBlur = 10;
             ctx.fill();
             ctx.shadowBlur = 0;
         });
@@ -2588,8 +3121,9 @@ const WorldForgeCG = {
     },
 
     drawFloaties(ctx) {
-        ctx.font = '600 11px ui-monospace, SFMono-Regular, monospace';
+        ctx.font = '650 10.5px ui-monospace, SFMono-Regular, monospace';
         ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
         for (let i = this.floaties.length - 1; i >= 0; i--) {
             const fl = this.floaties[i];
             fl.y += fl.vy;
@@ -2602,11 +3136,29 @@ const WorldForgeCG = {
                 continue;
             }
 
+            const tw = ctx.measureText(fl.text).width;
+            const padX = 6;
+            const badgeW = tw + padX * 2;
+            const badgeH = 17;
+            const hexAlpha = Math.floor(fl.alpha * 255).toString(16).padStart(2, '0');
+
             ctx.save();
-            ctx.fillStyle = `${fl.color}${Math.floor(fl.alpha * 255).toString(16).padStart(2, '0')}`;
-            ctx.shadowColor = '#000000';
-            ctx.shadowBlur = 5;
-            ctx.fillText(fl.text, fl.x, fl.y);
+            ctx.translate(fl.x, fl.y);
+
+            // Translucent dark pill background
+            ctx.fillStyle = `rgba(6,10,16,${(fl.alpha * 0.88).toFixed(2)})`;
+            ctx.strokeStyle = `${fl.color}${Math.floor(fl.alpha * 180).toString(16).padStart(2, '0')}`;
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.roundRect(-badgeW / 2, -badgeH / 2, badgeW, badgeH, 4);
+            ctx.fill();
+            ctx.stroke();
+
+            // Text
+            ctx.fillStyle = `${fl.color}${hexAlpha}`;
+            ctx.shadowColor = fl.color;
+            ctx.shadowBlur = fl.type === 'shortage' ? 8 : 4;
+            ctx.fillText(fl.text, 0, 0.5);
             ctx.restore();
         }
     },
@@ -2866,6 +3418,66 @@ const WorldForgeCG = {
                 // Medical cross
                 ctx.fillRect(-3, -8, 6, 16);
                 ctx.fillRect(-8, -3, 16, 6);
+                break;
+            }
+            case 'wildlife': {
+                // Herbivore / Deer silhouette with branching antlers & breathing pulse
+                const breath = Math.sin(now * 0.0035) * 0.8;
+                ctx.save();
+                ctx.translate(0, breath);
+                // Head shape
+                ctx.beginPath();
+                ctx.moveTo(-4, 4);
+                ctx.lineTo(0, 9);
+                ctx.lineTo(4, 4);
+                ctx.lineTo(3, -2);
+                ctx.lineTo(-3, -2);
+                ctx.closePath();
+                ctx.stroke();
+                // Antlers
+                ctx.beginPath();
+                ctx.moveTo(-2, -2); ctx.lineTo(-6, -8); ctx.lineTo(-9, -7);
+                ctx.moveTo(-6, -8); ctx.lineTo(-7, -11);
+                ctx.moveTo(2, -2); ctx.lineTo(6, -8); ctx.lineTo(9, -7);
+                ctx.moveTo(6, -8); ctx.lineTo(7, -11);
+                ctx.stroke();
+                // Eye dot
+                ctx.beginPath();
+                ctx.arc(0, 2, 1.2, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.restore();
+                break;
+            }
+            case 'predator': {
+                // Apex Predator / Wolf head silhouette with alert ears & glowing eye
+                const pulse = Math.sin(now * 0.004) * 0.9;
+                ctx.save();
+                ctx.translate(0, pulse);
+                // Wolf head outline
+                ctx.beginPath();
+                ctx.moveTo(0, 9);
+                ctx.lineTo(-4, 3);
+                ctx.lineTo(-7, -2);
+                ctx.lineTo(-6, -10); // left ear tip
+                ctx.lineTo(-2, -5);  // head top
+                ctx.lineTo(2, -5);
+                ctx.lineTo(6, -10);  // right ear tip
+                ctx.lineTo(7, -2);
+                ctx.lineTo(4, 3);
+                ctx.closePath();
+                ctx.stroke();
+                // Inner ears
+                ctx.beginPath();
+                ctx.moveTo(-5, -3); ctx.lineTo(-4, -7);
+                ctx.moveTo(5, -3); ctx.lineTo(4, -7);
+                ctx.stroke();
+                // Ruby glowing eyes
+                ctx.fillStyle = '#ff4d6d';
+                ctx.beginPath();
+                ctx.arc(-2, -0.5, 1.2, 0, Math.PI * 2);
+                ctx.arc(2, -0.5, 1.2, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.restore();
                 break;
             }
             default: {

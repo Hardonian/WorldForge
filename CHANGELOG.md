@@ -2,6 +2,16 @@
 
 ## [0.2.0] - 2026-09-23
 
+### City building and research
+
+- Added optional, data-driven `city.toml` worlds with finite district slots, constructible buildings, costs, upkeep, outputs, housing, jobs, wellbeing, and population growth.
+- Added tagged co-location synergies and technology effects that reshape building output, resource yields, civic capacity, employment, and wellbeing.
+- Added validated branching research graphs with prerequisites, cross-branch synthesis, and mutually exclusive policy choices.
+- Added proof-chained construction, research, and player-capacity events with deterministic replay re-execution and save/resume parity.
+- Added live Simulation Studio construction controls, district utilization, civic vitals, affordability feedback, and an interactive research constellation.
+- Expanded `micro-city` into a four-district, eight-building, nine-technology playable city and taught generated city templates to emit city rules.
+- Added a city-system JSON schema, content-authoring documentation, graph-cycle validation, and end-to-end regression coverage.
+
 ### Local world inheritance
 
 - Added recursive `extends` resolution for sibling world packages with deterministic parent-order and child-last overlays.

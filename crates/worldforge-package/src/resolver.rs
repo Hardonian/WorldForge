@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 use worldforge_core::error::{ErrorCode, WorldForgeError};
 use worldforge_core::hash::Fingerprint;
-use worldforge_world::{EntitiesConfig, Scenario, WorldManifest};
+use worldforge_world::{CityConfig, EntitiesConfig, Scenario, WorldManifest};
 
 use super::{collect_files, fingerprint_files};
 
@@ -27,6 +27,7 @@ pub struct ResolvedWorld {
     pub manifest: WorldManifest,
     pub scenario: Scenario,
     pub entities: EntitiesConfig,
+    pub city: Option<CityConfig>,
     pub dependencies: Vec<ResolvedDependency>,
     pub effective_mods: Vec<String>,
     pub fingerprint: Fingerprint,
@@ -114,6 +115,11 @@ fn resolve_internal(
         let scenario = Scenario::from_file(&canonical.join("scenario.toml"))?;
         let local_entities = EntitiesConfig::from_file(&canonical.join("entities.toml"))?;
         local_entities.validate_fragment()?;
+        let local_city_path = canonical.join("city.toml");
+        let local_city = local_city_path
+            .is_file()
+            .then(|| CityConfig::from_file(&local_city_path))
+            .transpose()?;
 
         let mut seen = BTreeSet::new();
         let mut entities = EntitiesConfig {
@@ -122,6 +128,7 @@ fn resolve_internal(
         };
         let mut dependencies = Vec::new();
         let mut effective_mods = Vec::new();
+        let mut city = None;
 
         for reference in &manifest.extends {
             validate_dependency_reference(reference)?;
@@ -140,6 +147,9 @@ fn resolve_internal(
                     )
                 })?;
             entities.overlay(dependency.entities.clone());
+            if dependency.city.is_some() {
+                city = dependency.city.clone();
+            }
             extend_unique(&mut effective_mods, dependency.effective_mods);
             dependencies.push(ResolvedDependency {
                 reference: reference.clone(),
@@ -151,6 +161,12 @@ fn resolve_internal(
 
         entities.overlay(local_entities);
         entities.validate()?;
+        if local_city.is_some() {
+            city = local_city;
+        }
+        if let Some(city) = &city {
+            city.validate(&entities)?;
+        }
         scenario.validate_against(&manifest, &entities)?;
         extend_unique(&mut effective_mods, manifest.mods.clone());
         validate_existing_lock(&canonical, &dependencies)?;
@@ -161,6 +177,7 @@ fn resolve_internal(
             manifest,
             scenario,
             entities,
+            city,
             dependencies,
             effective_mods,
             fingerprint,

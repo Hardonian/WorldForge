@@ -387,11 +387,18 @@
                                     <button type="button" class="icon-button cg-tool-btn" id="cg-btn-zoom-out" title="Zoom out (-)" aria-label="Zoom out">
                                         <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 10h10"/></svg>
                                     </button>
-                                    <button type="button" class="icon-button cg-tool-btn" id="cg-btn-reset-cam" title="Reset camera view" aria-label="Reset camera">
-                                        <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 7V3h4M17 7V3h-4M3 13v4h4M17 13v4h-4"/></svg>
+                                    <button type="button" class="icon-button cg-tool-btn" id="cg-btn-reset-cam" title="Fit &amp; center view (F)" aria-label="Fit camera view">
+                                        <svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="4"/><path d="M10 2v3M10 15v3M2 10h3M15 10h3"/></svg>
                                     </button>
                                     <button type="button" class="icon-button cg-tool-btn active" id="cg-btn-fx-toggle" title="Toggle visual effects and particles" aria-label="Toggle VFX">
                                         <svg viewBox="0 0 20 20" aria-hidden="true"><path d="m10 2 2 5 5 2-5 2-2 5-2-5-5-2 5-2 2-5Z"/></svg>
+                                    </button>
+                                    <button type="button" class="icon-button cg-tool-btn" id="cg-btn-audio" title="Toggle procedural sound FX" aria-label="Toggle audio">
+                                        <svg viewBox="0 0 20 20" aria-hidden="true" id="cg-icon-audio-on" class="hidden"><path d="M9 4 5 7H2v6h3l4 3V4ZM13 7a4 4 0 0 1 0 6M15 5a7 7 0 0 1 0 10"/></svg>
+                                        <svg viewBox="0 0 20 20" aria-hidden="true" id="cg-icon-audio-off"><path d="M9 4 5 7H2v6h3l4 3V4ZM13 8l5 5M18 8l-5 5"/></svg>
+                                    </button>
+                                    <button type="button" class="icon-button cg-tool-btn" id="cg-btn-fullscreen" title="Toggle fullscreen view" aria-label="Toggle fullscreen">
+                                        <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 7V3h4M17 7V3h-4M3 13v4h4M17 13v4h-4"/></svg>
                                     </button>
                                 </div>
                                 <span class="live-indicator"><i></i>Engine live</span>
@@ -421,6 +428,7 @@
                                 <span><i class="legend-dot flow"></i> Flow conduits</span>
                                 <span><i class="legend-dot prod"></i> Production</span>
                                 <span><i class="legend-dot alert"></i> Shortage</span>
+                                <span class="cg-keyboard-hint" title="WASD / Arrows to Pan · +/- Zoom · Space Play/Pause · F Fit · 1-5 Speed">Controls: WASD · Space · F</span>
                             </div>
                         </div>
                     </section>
@@ -461,6 +469,34 @@
                             <div class="live-objectives" id="live-objectives"></div>
                         </section>
                     </aside>
+
+                    <section class="play-card city-layer-card hidden" id="city-layer" aria-labelledby="city-layer-title">
+                        <div class="play-panel-heading city-layer-heading">
+                            <div><span>Living city system</span><h3 id="city-layer-title">Build, Research, Transform</h3></div>
+                            <div class="city-vitals" aria-label="City statistics">
+                                <span><small>Population</small><strong id="city-population">0</strong></span>
+                                <span><small>Housing</small><strong id="city-housing">0</strong></span>
+                                <span><small>Jobs</small><strong id="city-jobs">0</strong></span>
+                                <span><small>Wellbeing</small><strong id="city-wellbeing">0</strong></span>
+                            </div>
+                        </div>
+                        <div class="city-system-grid">
+                            <section class="city-build-panel" aria-labelledby="city-build-title">
+                                <div class="city-subheading"><span>Place</span><h4 id="city-build-title">Construct a building</h4></div>
+                                <div class="city-build-controls">
+                                    <label class="field"><span>Building</span><select id="city-building-select"></select></label>
+                                    <label class="field"><span>District</span><select id="city-district-select"></select></label>
+                                    <button class="button button-primary" id="city-build-button" type="button">Construct</button>
+                                </div>
+                                <div class="city-selection-detail" id="city-building-detail"></div>
+                                <div class="district-ledger" id="city-districts"></div>
+                            </section>
+                            <section class="city-research-panel" aria-labelledby="city-research-title">
+                                <div class="city-subheading"><span>Evolve</span><h4 id="city-research-title">Research constellation</h4></div>
+                                <div class="technology-tree" id="city-technologies"></div>
+                            </section>
+                        </div>
+                    </section>
 
                     <section class="play-card resources-card" aria-labelledby="live-resources-title">
                         <div class="play-panel-heading"><div><span>World inventory</span><h3 id="live-resources-title">Live resources</h3></div><strong id="play-fingerprint" class="mono play-fingerprint">—</strong></div>

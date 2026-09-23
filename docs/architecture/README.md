@@ -3,6 +3,9 @@
 `worldforge-core` owns IDs, fixed point, RNG, hashes, versions, and errors.
 `worldforge-ecs` owns deterministic storage/scheduling. `worldforge-world` owns
 manifests, scenarios, events, objectives, and canonical components.
+Its optional city rules define districts, buildings, synergies, population, and
+technology graphs; `worldforge-runtime` executes those player-directed systems
+inside the same fixed-point state and event proof chain as the resource graph.
 `worldforge-economy` implements resource mechanics. `worldforge-runtime`
 coordinates ticks and produces results. `worldforge-proof` and
 `worldforge-replay` provide hash chains and artifacts. `worldforge-package`

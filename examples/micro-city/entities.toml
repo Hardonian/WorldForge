@@ -1,6 +1,20 @@
 # City-builder simulation: power + water + housing → population + economy
 
 [[entities]]
+name = "city-hall"
+entity_type = "civic-core"
+region = "downtown"
+
+[entities.initial_inventory]
+credits = 6000.0
+materials = 900.0
+research = 180.0
+power = 300.0
+clean_water = 300.0
+food = 300.0
+population = 40.0
+
+[[entities]]
 name = "coal-plant"
 entity_type = "producer"
 region = "industrial"

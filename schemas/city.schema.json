@@ -1,0 +1,101 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "World Forge City Systems",
+  "description": "Schema for optional city.toml construction, district, population, and research rules",
+  "type": "object",
+  "required": ["treasury", "districts", "buildings"],
+  "properties": {
+    "treasury": { "$ref": "#/definitions/id" },
+    "population_resource": { "$ref": "#/definitions/id" },
+    "population_growth_per_tick": { "type": "number", "minimum": 0 },
+    "population_needs": { "$ref": "#/definitions/resources" },
+    "districts": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["id", "name", "slots"],
+        "properties": {
+          "id": { "$ref": "#/definitions/id" },
+          "name": { "type": "string", "minLength": 1 },
+          "description": { "type": "string" },
+          "slots": { "type": "integer", "minimum": 1 }
+        },
+        "additionalProperties": false
+      }
+    },
+    "buildings": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["id", "name", "allowed_districts"],
+        "properties": {
+          "id": { "$ref": "#/definitions/id" },
+          "name": { "type": "string", "minLength": 1 },
+          "description": { "type": "string" },
+          "category": { "type": "string" },
+          "tags": { "$ref": "#/definitions/ids" },
+          "allowed_districts": { "$ref": "#/definitions/ids" },
+          "footprint": { "type": "integer", "minimum": 1 },
+          "max_count": { "type": "integer", "minimum": 1 },
+          "cost": { "$ref": "#/definitions/resources" },
+          "upkeep": { "$ref": "#/definitions/resources" },
+          "outputs": { "$ref": "#/definitions/resources" },
+          "housing": { "type": "integer", "minimum": 0 },
+          "jobs": { "type": "integer", "minimum": 0 },
+          "wellbeing": { "type": "number", "minimum": 0 },
+          "requires_technologies": { "$ref": "#/definitions/ids" },
+          "synergies": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["with_tag", "output_multiplier"],
+              "properties": {
+                "with_tag": { "$ref": "#/definitions/id" },
+                "output_multiplier": { "type": "number", "minimum": 1, "maximum": 10 }
+              },
+              "additionalProperties": false
+            }
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "technologies": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "name", "branch"],
+        "properties": {
+          "id": { "$ref": "#/definitions/id" },
+          "name": { "type": "string", "minLength": 1 },
+          "description": { "type": "string" },
+          "branch": { "type": "string", "minLength": 1 },
+          "cost": { "$ref": "#/definitions/resources" },
+          "prerequisites": { "$ref": "#/definitions/ids" },
+          "excludes": { "$ref": "#/definitions/ids" },
+          "effects": {
+            "type": "object",
+            "properties": {
+              "resource_multipliers": { "$ref": "#/definitions/multipliers" },
+              "building_multipliers": { "$ref": "#/definitions/multipliers" },
+              "housing_multiplier": { "type": "number", "minimum": 0.1, "maximum": 10 },
+              "jobs_multiplier": { "type": "number", "minimum": 0.1, "maximum": 10 },
+              "wellbeing_bonus": { "type": "number" }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false,
+  "definitions": {
+    "id": { "type": "string", "pattern": "^[a-z0-9](?:[a-z0-9_-]{0,62}[a-z0-9])?$" },
+    "ids": { "type": "array", "items": { "$ref": "#/definitions/id" }, "uniqueItems": true },
+    "resources": { "type": "object", "additionalProperties": { "type": "number", "exclusiveMinimum": 0 } },
+    "multipliers": { "type": "object", "additionalProperties": { "type": "number", "minimum": 0.1, "maximum": 10 } }
+  }
+}

@@ -33,6 +33,25 @@ pub enum EventType {
         old_capacity: Fixed64,
         new_capacity: Fixed64,
     },
+    PlayerCapacityChanged {
+        entity: String,
+        old_capacity: Fixed64,
+        new_capacity: Fixed64,
+    },
+    BuildingConstructed {
+        building: String,
+        district: String,
+        count: u32,
+    },
+    TechnologyUnlocked {
+        technology: String,
+        branch: String,
+    },
+    PopulationChanged {
+        amount: Fixed64,
+        population: Fixed64,
+        housing: u64,
+    },
     ObjectiveUpdated {
         objective: String,
         status: String,
@@ -97,6 +116,27 @@ impl SimulationEvent {
             } => {
                 format!("{} capacity: {} → {}", entity, old_capacity, new_capacity)
             }
+            EventType::PlayerCapacityChanged {
+                entity,
+                old_capacity,
+                new_capacity,
+            } => format!(
+                "{} capacity: {} → {} (player decision)",
+                entity, old_capacity, new_capacity
+            ),
+            EventType::BuildingConstructed {
+                building,
+                district,
+                count,
+            } => format!("built {building} in {district} (district count: {count})"),
+            EventType::TechnologyUnlocked { technology, branch } => {
+                format!("researched {technology} in the {branch} branch")
+            }
+            EventType::PopulationChanged {
+                amount,
+                population,
+                housing,
+            } => format!("population grew by {amount} to {population} ({housing} housing)"),
             EventType::ObjectiveUpdated { objective, status } => {
                 format!("objective '{}': {}", objective, status)
             }
