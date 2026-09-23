@@ -98,6 +98,9 @@ enum Command {
         /// Local address to bind
         #[arg(long, default_value = "127.0.0.1:8787")]
         bind: String,
+        /// Directory containing example worlds exposed by the dashboard
+        #[arg(long, default_value = "examples")]
+        worlds_dir: PathBuf,
     },
 
     /// Package operations
@@ -175,7 +178,7 @@ fn main() -> ExitCode {
             output_path,
         } => commands::export(&path, ticks, seed, output_path.as_deref()),
         Command::Benchmark { path, ticks, reps } => commands::benchmark(&path, ticks, reps),
-        Command::Dashboard { bind } => dashboard_server::serve(&bind),
+        Command::Dashboard { bind, worlds_dir } => dashboard_server::serve(&bind, &worlds_dir),
         Command::Package { action } => match action {
             PackageAction::Validate { path } => commands::validate(&path),
             PackageAction::Build { path, output_path } => {
