@@ -67,6 +67,13 @@
                             <span class="nav-copy"><strong>Compare runs</strong><small>Seeds &amp; proofs</small></span>
                             <span class="nav-arrow" aria-hidden="true">→</span>
                         </button>
+                        <button class="nav-item" id="nav-analytics" type="button">
+                            <span class="nav-icon" aria-hidden="true">
+                                <svg viewBox="0 0 24 24"><path d="M3 3v18h18M7 16l4-8 4 5 5-9M7 16l4 2 4-5 5 1"/></svg>
+                            </span>
+                            <span class="nav-copy"><strong>Risk Lab</strong><small>Monte Carlo &amp; bottlenecks</small></span>
+                            <span class="nav-arrow" aria-hidden="true">→</span>
+                        </button>
                         <button class="nav-item" id="nav-benchmark" type="button">
                             <span class="nav-icon" aria-hidden="true">
                                 <svg viewBox="0 0 24 24"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l3 2M9 2h6"/></svg>
@@ -496,6 +503,14 @@
                                 <div class="technology-tree" id="city-technologies"></div>
                             </section>
                         </div>
+                        <section class="civic-governance" aria-labelledby="civic-governance-title">
+                            <div class="city-subheading"><span>Govern</span><h4 id="civic-governance-title">Council chamber</h4></div>
+                            <div class="civic-layout">
+                                <div><div class="civic-label">Political landscape</div><div class="faction-ledger" id="civic-factions"></div></div>
+                                <div><div class="civic-label">Live dilemmas</div><div class="dilemma-stack" id="civic-dilemmas"></div></div>
+                                <div><div class="civic-label">City constitution</div><div class="decision-history" id="civic-history"></div></div>
+                            </div>
+                        </section>
                     </section>
 
                     <section class="play-card resources-card" aria-labelledby="live-resources-title">
@@ -582,6 +597,34 @@
                 </form>
                 <div class="save-list-heading"><div><span>Your slots</span><strong id="save-count">0 saves</strong></div><button class="button button-quiet" id="refresh-saves" type="button">Refresh</button></div>
                 <div class="save-list" id="save-list"><div class="empty-state"><span class="empty-mark">□</span><h3>No saves yet</h3><p>Start a world and create your first durable save.</p></div></div>
+            </div>
+        </div>
+    </dialog>
+
+    <dialog class="tool-dialog analytics-dialog" id="analytics-dialog" aria-labelledby="analytics-title">
+        <div class="dialog-shell">
+            <header class="dialog-header analytics-header">
+                <div>
+                    <div class="panel-kicker">Multi-Seed Stochastic Sweeps</div>
+                    <h2 id="analytics-title">Risk Lab &amp; Systemic Bottlenecks</h2>
+                    <p>Execute deterministic Monte Carlo sweeps to compute confidence envelopes, pinpoint systemic friction, and analyze cross-resource elasticity.</p>
+                </div>
+                <button class="icon-button dialog-close" id="analytics-close" type="button" aria-label="Close Risk Lab"><svg viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></svg></button>
+            </header>
+            <div class="dialog-body analytics-body">
+                <form class="analytics-form" id="analytics-form">
+                    <label class="field"><span>Monte Carlo runs</span><input id="analytics-runs" type="number" min="2" max="100" value="15"></label>
+                    <label class="field"><span>Ticks per run</span><input id="analytics-ticks" type="number" min="50" max="10000" value="500"></label>
+                    <label class="field"><span>Base seed</span><input id="analytics-seed" type="number" min="0" value="42"></label>
+                    <button class="button button-primary" id="analytics-run-btn" type="button">Execute Monte Carlo</button>
+                </form>
+                <div id="analytics-results" class="tool-results">
+                    <div class="empty-state">
+                        <span class="empty-mark">∿</span>
+                        <h3>Stochastic Risk Modeling</h3>
+                        <p>Run Monte Carlo sweeps across deterministic seeds to reveal confidence envelopes, systemic bottlenecks, and cross-resource correlations.</p>
+                    </div>
+                </div>
             </div>
         </div>
     </dialog>

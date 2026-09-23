@@ -9,6 +9,7 @@ const TYPE_COLORS = {
     system: '#9b8cff',
     construction: '#f1b96b',
     research: '#d578ef',
+    governance: '#42d3ea',
 };
 const WORLD_SYMBOLS = {
     'supply-chain': 'SC', ecosystem: 'EC', 'micro-city': 'MC',
@@ -57,6 +58,7 @@ const state = {
     },
     saves: [],
     builderIdTouched: false,
+    analytics: { report: null, activeResource: null },
 };
 
 const el = id => document.getElementById(id);
@@ -73,6 +75,7 @@ const dom = {
     playDialog: el('play-dialog'),
     saveDialog: el('save-dialog'),
     builderDialog: el('builder-dialog'),
+    analyticsDialog: el('analytics-dialog'),
 };
 
 function currentWorld() {
@@ -128,10 +131,12 @@ function bindInteractions() {
         renderEvents();
     });
     el('nav-compare').addEventListener('click', openComparison);
+    el('nav-analytics')?.addEventListener('click', openAnalytics);
     el('nav-benchmark').addEventListener('click', openBenchmark);
     el('nav-play').addEventListener('click', openPlayMode);
     el('nav-builder').addEventListener('click', openWorldBuilder);
     el('compare-run').addEventListener('click', runComparison);
+    el('analytics-run-btn')?.addEventListener('click', runAnalytics);
     el('benchmark-run').addEventListener('click', runBenchmark);
     el('clear-history').addEventListener('click', clearHistory);
     el('play-new').addEventListener('click', startPlaySession);
@@ -167,6 +172,7 @@ function bindInteractions() {
     el('save-form').addEventListener('submit', saveCurrentSession);
     el('refresh-saves').addEventListener('click', refreshSaves);
     el('builder-close').addEventListener('click', () => dom.builderDialog.close());
+    el('analytics-close')?.addEventListener('click', () => dom.analyticsDialog.close());
     el('builder-form').addEventListener('submit', createWorld);
     el('builder-world-title').addEventListener('input', syncBuilderSlug);
     el('builder-world-id').addEventListener('input', () => { state.builderIdTouched = true; });
@@ -1139,6 +1145,29 @@ async function researchCityTechnology(technology) {
     }
 }
 
+async function makeCivicDecision(dilemma, option) {
+    const play = state.play;
+    if (!play.sessionId || play.requestInFlight || play.data?.completed || !play.data?.city) return;
+    play.requestInFlight = true;
+    renderCityLayer(play.data.city);
+    try {
+        const data = await api(`/api/play/sessions/${play.sessionId}/decide`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ dilemma, option }),
+        });
+        if (state.play !== play) return;
+        consumePlayUpdate(data);
+        showToast('Civic mandate adopted', `${prettyName(option)} now shapes the city.`);
+        WorldForgeCG.audio.playOverdrive();
+    } catch (error) {
+        showToast('Council decision rejected', error.message, 'error');
+    } finally {
+        if (state.play !== play) return;
+        play.requestInFlight = false;
+        renderCityLayer(play.data?.city);
+    }
+}
+
 function renderCityLayer(city) {
     const panel = el('city-layer');
     if (!panel) return;
@@ -1199,7 +1228,64 @@ function renderCityLayer(city) {
         node.append(title, branch, button, copy, cost);
         return node;
     }));
+    renderCivicGovernance(city.governance || { factions: [], pendingDilemmas: [], decisions: [] });
     syncCityBuildingSelection();
+}
+
+function renderCivicGovernance(governance) {
+    const factions = el('civic-factions');
+    factions.replaceChildren(...governance.factions.map(faction => {
+        const node = document.createElement('article'); node.className = 'faction-card'; node.title = faction.description;
+        const header = document.createElement('span');
+        const name = document.createElement('b'); name.textContent = faction.name;
+        const value = document.createElement('strong'); value.textContent = `${formatDecimal(faction.support, 0)}%`;
+        header.append(name, value);
+        const meter = document.createElement('i'); meter.style.setProperty('--faction-support', `${Math.max(0, Math.min(100, faction.support))}%`);
+        node.append(header, meter);
+        return node;
+    }));
+
+    const dilemmas = el('civic-dilemmas');
+    const pending = governance.pendingDilemmas || [];
+    dilemmas.replaceChildren(...(pending.length ? pending.map(dilemma => {
+        const card = document.createElement('article'); card.className = 'dilemma-card';
+        const head = document.createElement('div');
+        const title = document.createElement('strong'); title.textContent = dilemma.title;
+        const deadline = document.createElement('small');
+        deadline.textContent = dilemma.deadlineTick == null ? 'Open mandate' : `Resolve by tick ${dilemma.deadlineTick}`;
+        head.append(title, deadline);
+        const copy = document.createElement('p'); copy.textContent = dilemma.description;
+        const options = document.createElement('div'); options.className = 'dilemma-options';
+        options.append(...dilemma.options.map(option => {
+            const button = document.createElement('button'); button.type = 'button';
+            const label = document.createElement('b'); label.textContent = option.label;
+            const description = document.createElement('span'); description.textContent = option.description;
+            const cost = document.createElement('small');
+            const support = Object.entries(option.factionSupport || {}).map(([faction, delta]) => `${delta > 0 ? '+' : ''}${formatDecimal(delta, 0)} ${prettyName(faction)}`).join(' · ');
+            cost.textContent = `${resourceList(option.cost)}${support ? ` · ${support}` : ''}`;
+            button.disabled = !option.affordable || state.play.requestInFlight || state.play.data?.completed;
+            button.addEventListener('click', () => makeCivicDecision(dilemma.id, option.id));
+            button.append(label, description, cost);
+            return button;
+        }));
+        card.append(head, copy, options);
+        return card;
+    }) : [emptyCivicState('No motion is before the council. Advance time or pursue research to reveal new dilemmas.')]);
+
+    const history = el('civic-history');
+    const decisions = governance.decisions || [];
+    history.replaceChildren(...(decisions.length ? decisions.map(decision => {
+        const item = document.createElement('article');
+        const title = document.createElement('b'); title.textContent = decision.title;
+        const choice = document.createElement('span'); choice.textContent = decision.label;
+        item.append(title, choice);
+        return item;
+    }) : [emptyCivicState('No constitutional precedents yet.')]);
+}
+
+function emptyCivicState(message) {
+    const node = document.createElement('p'); node.className = 'civic-empty'; node.textContent = message;
+    return node;
 }
 
 function syncCityBuildingSelection() {
@@ -1649,6 +1735,405 @@ function renderBenchmark(report) {
         wrap.append(bar, label); chart.append(wrap);
     });
     results.append(heading, kpis, chart);
+}
+
+function escapeHtml(text) {
+    if (!text) return '';
+    return String(text)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+}
+
+function openAnalytics() {
+    if (!currentWorld()) return;
+    el('analytics-runs').value = '15';
+    el('analytics-ticks').value = dom.ticks.value || '500';
+    el('analytics-seed').value = dom.seed.value || '42';
+    dom.analyticsDialog.showModal();
+    if (state.analytics.report && state.analytics.report.world === state.worldId) {
+        renderAnalytics(state.analytics.report);
+    }
+}
+
+async function runAnalytics() {
+    let runs, ticks, seed;
+    try {
+        runs = numericInput(el('analytics-runs'), { min: 2, max: 100, name: 'Monte Carlo runs' });
+        ticks = numericInput(el('analytics-ticks'), { min: 50, max: 10000, name: 'Ticks per run' });
+        seed = numericInput(el('analytics-seed'), { min: 0, max: Number.MAX_SAFE_INTEGER, name: 'Base seed' });
+    } catch (error) {
+        showToast('Check Risk Lab settings', error.message, 'error');
+        return;
+    }
+    const button = el('analytics-run-btn');
+    setButtonBusy(button, true, 'Running Monte Carlo…');
+    const results = el('analytics-results');
+    results.replaceChildren(emptyState('◌', 'Monte Carlo sweep in progress', `Simulating ${runs} seeds across ${formatNumber(ticks)} ticks on the deterministic engine.`));
+    try {
+        const report = await api('/api/analyze', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ world: state.worldId, runs, ticks, seed }),
+        });
+        state.analytics.report = report;
+        const resources = Object.keys(report.confidenceBands || {});
+        state.analytics.activeResource = resources[0] || null;
+        renderAnalytics(report);
+        showToast('Monte Carlo sweep complete', `${runs} runs evaluated. Risk profile: ${report.riskLevel}.`);
+    } catch (error) {
+        results.replaceChildren(emptyState('!', 'Analysis failed', error.message));
+    } finally {
+        setButtonBusy(button, false, 'Execute Monte Carlo');
+    }
+}
+
+function drawFanChart(report, resourceName) {
+    if (!report || !report.confidenceBands) return;
+    const bands = report.confidenceBands[resourceName];
+    if (!bands || !bands.length) return;
+
+    const { ctx, width: w, height: h } = prepareCanvas('analytics-fan-chart', 260);
+    const pad = { top: 32, right: 24, bottom: 36, left: 56 };
+    const cw = w - pad.left - pad.right;
+    const ch = h - pad.top - pad.bottom;
+
+    let minVal = Infinity, maxVal = -Infinity;
+    let minTick = bands[0].tick, maxTick = bands[bands.length - 1].tick;
+
+    bands.forEach(pt => {
+        if (pt.min < minVal) minVal = pt.min;
+        if (pt.max > maxVal) maxVal = pt.max;
+    });
+
+    if (minVal > 0) minVal = 0;
+    if (maxVal <= minVal) maxVal = minVal + 1;
+    const valRange = maxVal - minVal;
+    const tickRange = Math.max(1, maxTick - minTick);
+
+    const getX = tick => pad.left + ((tick - minTick) / tickRange) * cw;
+    const getY = val => pad.top + ch - ((val - minVal) / valRange) * ch;
+
+    // Gridlines & Y-axis numbers
+    ctx.lineWidth = 1;
+    ctx.font = '10px ui-monospace, monospace';
+    ctx.textAlign = 'right';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = 'rgba(163, 184, 214, 0.45)';
+
+    const steps = 4;
+    for (let i = 0; i <= steps; i++) {
+        const val = minVal + (valRange * i) / steps;
+        const y = pad.top + ch - (ch * i) / steps;
+        ctx.strokeStyle = 'rgba(163, 184, 214, 0.08)';
+        ctx.beginPath();
+        ctx.moveTo(pad.left, y);
+        ctx.lineTo(pad.left + cw, y);
+        ctx.stroke();
+
+        ctx.fillText(compactNumber(val), pad.left - 8, y);
+    }
+
+    // X-axis tick labels
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'top';
+    const xSteps = Math.min(6, bands.length);
+    for (let i = 0; i < xSteps; i++) {
+        const idx = Math.floor((i / (xSteps - 1)) * (bands.length - 1));
+        const pt = bands[idx];
+        const x = getX(pt.tick);
+        ctx.fillText(`t=${pt.tick}`, x, pad.top + ch + 8);
+    }
+
+    // 1. Draw p10 - p90 area (80% confidence envelope)
+    ctx.beginPath();
+    ctx.moveTo(getX(bands[0].tick), getY(bands[0].p90));
+    for (let i = 1; i < bands.length; i++) {
+        ctx.lineTo(getX(bands[i].tick), getY(bands[i].p90));
+    }
+    for (let i = bands.length - 1; i >= 0; i--) {
+        ctx.lineTo(getX(bands[i].tick), getY(bands[i].p10));
+    }
+    ctx.closePath();
+    ctx.fillStyle = 'rgba(103, 169, 255, 0.16)';
+    ctx.fill();
+
+    // 2. Draw p25 - p75 area (50% confidence envelope)
+    ctx.beginPath();
+    ctx.moveTo(getX(bands[0].tick), getY(bands[0].p75));
+    for (let i = 1; i < bands.length; i++) {
+        ctx.lineTo(getX(bands[i].tick), getY(bands[i].p75));
+    }
+    for (let i = bands.length - 1; i >= 0; i--) {
+        ctx.lineTo(getX(bands[i].tick), getY(bands[i].p25));
+    }
+    ctx.closePath();
+    ctx.fillStyle = 'rgba(103, 169, 255, 0.35)';
+    ctx.fill();
+
+    // 3. Draw min/max dotted boundaries
+    ctx.save();
+    ctx.setLineDash([2, 3]);
+    ctx.strokeStyle = 'rgba(163, 184, 214, 0.35)';
+    ctx.lineWidth = 1;
+
+    ctx.beginPath();
+    ctx.moveTo(getX(bands[0].tick), getY(bands[0].max));
+    for (let i = 1; i < bands.length; i++) {
+        ctx.lineTo(getX(bands[i].tick), getY(bands[i].max));
+    }
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.moveTo(getX(bands[0].tick), getY(bands[0].min));
+    for (let i = 1; i < bands.length; i++) {
+        ctx.lineTo(getX(bands[i].tick), getY(bands[i].min));
+    }
+    ctx.stroke();
+    ctx.restore();
+
+    // 4. Draw median solid line
+    ctx.beginPath();
+    ctx.moveTo(getX(bands[0].tick), getY(bands[0].median));
+    for (let i = 1; i < bands.length; i++) {
+        ctx.lineTo(getX(bands[i].tick), getY(bands[i].median));
+    }
+    ctx.strokeStyle = '#42d3ea';
+    ctx.lineWidth = 2.5;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.stroke();
+
+    // 5. Draw active resource badge and current median
+    const lastPt = bands[bands.length - 1];
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'top';
+    ctx.fillStyle = '#67a9ff';
+    ctx.font = '700 11px ui-monospace, monospace';
+    ctx.fillText(`${resourceName.toUpperCase()} · Median: ${lastPt.median.toFixed(1)} [p10: ${lastPt.p10.toFixed(1)}, p90: ${lastPt.p90.toFixed(1)}]`, pad.left + 4, 10);
+}
+
+function renderAnalytics(report) {
+    const results = el('analytics-results');
+    results.replaceChildren();
+
+    const world = currentWorld();
+    const heading = document.createElement('div');
+    heading.className = 'result-heading';
+    const title = document.createElement('strong');
+    title.textContent = `${world?.title || report.world} · Monte Carlo Risk Report`;
+    const detail = document.createElement('span');
+    detail.textContent = `${report.runs} stochastic runs · ${formatNumber(report.ticksPerRun)} ticks each · seeds ${report.seeds[0]}..=${report.seeds[report.seeds.length - 1]}`;
+    heading.append(title, detail);
+
+    // Headline KPIs
+    const kpis = document.createElement('div');
+    kpis.className = 'analytics-kpis';
+
+    const resDist = report.resilienceDistribution;
+    const kpiResilience = document.createElement('div');
+    kpiResilience.className = 'analytics-kpi';
+    kpiResilience.innerHTML = `<span>Resilience Score</span><strong>${resDist.mean.toFixed(1)} <small>(±${resDist.stdDev.toFixed(1)})</small></strong><small>Median: ${resDist.median.toFixed(1)} · p10–p90: ${resDist.p10.toFixed(0)}–${resDist.p90.toFixed(0)}</small>`;
+
+    const kpiRisk = document.createElement('div');
+    kpiRisk.className = 'analytics-kpi';
+    const riskClass = report.riskLevel.toLowerCase();
+    kpiRisk.innerHTML = `<span>Risk Profile</span><strong><span class="risk-badge ${riskClass}">${report.riskLevel}</span></strong><small>${report.blackSwanRuns} shock runs &lt;35/100</small>`;
+
+    const passedObjs = Object.values(report.objectiveSuccessRates).filter(r => r >= 0.95).length;
+    const totalObjs = Object.keys(report.objectiveSuccessRates).length;
+    const kpiObjectives = document.createElement('div');
+    kpiObjectives.className = 'analytics-kpi';
+    kpiObjectives.innerHTML = `<span>Objective Resilience</span><strong>${passedObjs} / ${totalObjs} Robust</strong><small>${((passedObjs/Math.max(1, totalObjs))*100).toFixed(0)}% scenarios secure</small>`;
+
+    const topBottleneck = report.bottlenecks[0];
+    const kpiBottleneck = document.createElement('div');
+    kpiBottleneck.className = 'analytics-kpi';
+    kpiBottleneck.innerHTML = `<span>Primary Constraint</span><strong>${topBottleneck ? prettyName(topBottleneck.entity) : 'None'}</strong><small>${topBottleneck ? 'Score ' + topBottleneck.bottleneckScore.toFixed(1) : 'Flow optimal'}</small>`;
+
+    kpis.append(kpiResilience, kpiRisk, kpiObjectives, kpiBottleneck);
+
+    // Primary Vulnerability banner
+    const alert = document.createElement('div');
+    alert.className = `analytics-vulnerability-alert ${riskClass}`;
+    alert.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 9 17H3L12 3Zm0 6v5m0 3v.1" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg><div><strong>Diagnosis:</strong> ${escapeHtml(report.primaryVulnerability)}</div>`;
+
+    // Fan Chart Section
+    const chartSection = document.createElement('div');
+    chartSection.className = 'analytics-section';
+    const chartHead = document.createElement('div');
+    chartHead.className = 'analytics-section-head';
+    chartHead.innerHTML = `<h3>Stochastic Confidence Envelopes</h3>`;
+
+    const chartControls = document.createElement('div');
+    chartControls.className = 'fan-chart-controls';
+    const select = document.createElement('select');
+    select.id = 'fan-resource-select';
+    select.className = 'field';
+    const resKeys = Object.keys(report.confidenceBands || {});
+    resKeys.forEach(res => {
+        const opt = document.createElement('option');
+        opt.value = res;
+        opt.textContent = `${prettyName(res)}`;
+        if (res === state.analytics.activeResource) opt.selected = true;
+        select.append(opt);
+    });
+    select.addEventListener('change', () => {
+        state.analytics.activeResource = select.value;
+        drawFanChart(report, select.value);
+    });
+    chartControls.append(select);
+    chartHead.append(chartControls);
+
+    const canvasWrap = document.createElement('div');
+    canvasWrap.className = 'fan-chart-wrap';
+    const canvas = document.createElement('canvas');
+    canvas.id = 'analytics-fan-chart';
+    canvasWrap.append(canvas);
+
+    const legend = document.createElement('div');
+    legend.className = 'fan-chart-legend';
+    legend.innerHTML = `
+        <span><i class="fan-legend-swatch fan-swatch-p90"></i> p10–p90 (80% Envelope)</span>
+        <span><i class="fan-legend-swatch fan-swatch-p75"></i> p25–p75 (50% Envelope)</span>
+        <span><i class="fan-legend-swatch fan-swatch-median"></i> Median Path</span>
+        <span><i class="fan-legend-swatch fan-swatch-minmax"></i> Min–Max Bounds</span>
+    `;
+    chartSection.append(chartHead, canvasWrap, legend);
+
+    // Objective Success Rates
+    const objSection = document.createElement('div');
+    objSection.className = 'analytics-section';
+    objSection.innerHTML = `<div class="analytics-section-head"><h3>Scenario Objectives Success Probability</h3><span>Across ${report.runs} independent seeds</span></div>`;
+    const objGrid = document.createElement('div');
+    objGrid.className = 'analytics-objectives-grid';
+    for (const [name, rate] of Object.entries(report.objectiveSuccessRates)) {
+        const pct = Math.round(rate * 100);
+        const card = document.createElement('div');
+        card.className = 'analytics-objective-card';
+        const color = pct >= 95 ? 'var(--green)' : pct >= 70 ? 'var(--blue)' : 'var(--red)';
+        card.innerHTML = `
+            <div class="analytics-obj-head"><span>${escapeHtml(name)}</span><strong style="color: ${color}">${pct}%</strong></div>
+            <div class="analytics-obj-bar"><div class="analytics-obj-fill" style="width: ${pct}%; background: ${color};"></div></div>
+            <div class="analytics-obj-meta"><span>${pct >= 95 ? 'Robust' : pct >= 70 ? 'Moderate' : 'Fragile'}</span><span>${pct === 100 ? 'Zero failures' : (100 - pct) + '% failure rate'}</span></div>
+        `;
+        objGrid.append(card);
+    }
+    objSection.append(objGrid);
+
+    // Bottlenecks Section
+    const bSection = document.createElement('div');
+    bSection.className = 'analytics-section';
+    bSection.innerHTML = `<div class="analytics-section-head"><h3>Systemic Bottleneck Diagnosis</h3><span>Ranked by friction &amp; starvation impact</span></div>`;
+    const bList = document.createElement('div');
+    bList.className = 'bottleneck-rank-list';
+    report.bottlenecks.forEach((b, idx) => {
+        const row = document.createElement('div');
+        row.className = 'bottleneck-row';
+        const rankClass = idx === 0 ? 'rank-1' : idx === 1 ? 'rank-2' : 'rank-other';
+        const scorePct = Math.min(100, Math.round(b.bottleneckScore * 10));
+        const barColor = b.bottleneckScore >= 20 ? 'var(--red)' : b.bottleneckScore >= 8 ? 'var(--amber)' : 'var(--green)';
+        row.innerHTML = `
+            <span class="bottleneck-rank ${rankClass}">#${idx + 1}</span>
+            <div class="bottleneck-entity"><strong>${prettyName(b.entity)}</strong><small>${b.shortageCount} shortages · ${(b.starvationRatio * 100).toFixed(0)}% starved</small></div>
+            <div class="bottleneck-desc">${escapeHtml(b.impactSummary)}</div>
+            <div class="bottleneck-meter-wrap">
+                <strong style="color: ${barColor}">${b.bottleneckScore.toFixed(1)}</strong>
+                <div class="bottleneck-bar"><div class="bottleneck-fill" style="width: ${scorePct}%; background: ${barColor}"></div></div>
+            </div>
+        `;
+        bList.append(row);
+    });
+    bSection.append(bList);
+
+    // Tables Split: Resource Elasticity + Link Elasticity
+    const tablesSection = document.createElement('div');
+    tablesSection.className = 'analytics-section';
+    tablesSection.innerHTML = `<div class="analytics-section-head"><h3>Flow Elasticity &amp; Capacity Margins</h3></div>`;
+    const tablesSplit = document.createElement('div');
+    tablesSplit.className = 'analytics-tables-split';
+
+    // Resource Buffer Elasticity Table
+    const resWrap = document.createElement('div');
+    resWrap.className = 'analytics-table-wrap';
+    resWrap.innerHTML = `
+        <table class="analytics-table">
+            <thead><tr><th>Resource</th><th class="num">Burn / t</th><th class="num">Replenish</th><th class="num">Buffer Runway</th></tr></thead>
+            <tbody>
+                ${report.resourceElasticity.map(r => `
+                    <tr>
+                        <td><strong>${prettyName(r.resource)}</strong></td>
+                        <td class="num">${r.burnRate.toFixed(2)}</td>
+                        <td class="num" style="color: ${r.replenishmentRatio >= 1.0 ? 'var(--green)' : 'var(--amber)'}">${r.replenishmentRatio.toFixed(2)}x</td>
+                        <td class="num">${r.bufferRunwayTicks >= 9999 ? '∞' : r.bufferRunwayTicks.toFixed(0) + ' t'}</td>
+                    </tr>
+                `).join('')}
+            </tbody>
+        </table>
+    `;
+
+    // Link Elasticity Table
+    const linkWrap = document.createElement('div');
+    linkWrap.className = 'analytics-table-wrap';
+    linkWrap.innerHTML = `
+        <table class="analytics-table">
+            <thead><tr><th>Conduit</th><th>Res</th><th class="num">Transferred</th><th class="num">Congestion</th></tr></thead>
+            <tbody>
+                ${report.linkElasticity.map(l => `
+                    <tr>
+                        <td><strong>${prettyName(l.from)} → ${prettyName(l.to)}</strong></td>
+                        <td>${prettyName(l.resource)}</td>
+                        <td class="num">${formatNumber(l.totalTransferred)} / ${formatNumber(l.maxCapacity)}</td>
+                        <td class="num" style="color: ${l.congestionRatio > 0.3 ? 'var(--red)' : l.congestionRatio > 0.1 ? 'var(--amber)' : 'var(--text-muted)'}">${(l.congestionRatio * 100).toFixed(0)}%</td>
+                    </tr>
+                `).join('')}
+            </tbody>
+        </table>
+    `;
+    tablesSplit.append(resWrap, linkWrap);
+    tablesSection.append(tablesSplit);
+
+    // Cross-Resource Pearson Correlation Matrix Heatmap
+    const corrSection = document.createElement('div');
+    corrSection.className = 'analytics-section';
+    corrSection.innerHTML = `<div class="analytics-section-head"><h3>Cross-Resource Pearson Correlation Matrix</h3><span>Inverse (&lt;0) vs coupled (&gt;0) systemic dependencies</span></div>`;
+
+    const matrix = report.correlationMatrix;
+    const resources = Object.keys(matrix);
+    const corrWrap = document.createElement('div');
+    corrWrap.className = 'analytics-table-wrap';
+
+    let tableHtml = `<table class="correlation-matrix-table"><thead><tr><th></th>${resources.map(r => `<th>${prettyName(r)}</th>`).join('')}</tr></thead><tbody>`;
+    resources.forEach(rA => {
+        tableHtml += `<tr><th>${prettyName(rA)}</th>`;
+        resources.forEach(rB => {
+            const val = matrix[rA]?.[rB] ?? 0;
+            let bgColor = 'rgba(255,255,255,0.02)';
+            let textColor = 'var(--text-muted)';
+            if (val > 0.2) {
+                bgColor = `rgba(66, 211, 234, ${Math.min(0.6, val * 0.5)})`;
+                textColor = 'var(--cyan)';
+            } else if (val < -0.2) {
+                bgColor = `rgba(255, 111, 124, ${Math.min(0.6, Math.abs(val) * 0.5)})`;
+                textColor = 'var(--red)';
+            }
+            tableHtml += `<td><div class="correlation-cell" style="background: ${bgColor}; color: ${textColor}">${val.toFixed(2)}</div></td>`;
+        });
+        tableHtml += `</tr>`;
+    });
+    tableHtml += `</tbody></table>`;
+    corrWrap.innerHTML = tableHtml;
+    corrSection.append(corrWrap);
+
+    results.append(heading, kpis, alert, chartSection, objSection, bSection, tablesSection, corrSection);
+
+    // Initial Fan Chart render
+    const activeRes = state.analytics.activeResource || resKeys[0];
+    if (activeRes) {
+        setTimeout(() => drawFanChart(report, activeRes), 20);
+    }
 }
 
 function setButtonBusy(button, busy, label) {

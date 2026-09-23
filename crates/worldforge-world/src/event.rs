@@ -52,6 +52,18 @@ pub enum EventType {
         population: Fixed64,
         housing: u64,
     },
+    CivicDilemmaOpened {
+        dilemma: String,
+        deadline_tick: Option<u64>,
+    },
+    PlayerCivicDecision {
+        dilemma: String,
+        option: String,
+    },
+    CivicDecisionResolved {
+        dilemma: String,
+        option: String,
+    },
     ObjectiveUpdated {
         objective: String,
         status: String,
@@ -137,6 +149,19 @@ impl SimulationEvent {
                 population,
                 housing,
             } => format!("population grew by {amount} to {population} ({housing} housing)"),
+            EventType::CivicDilemmaOpened {
+                dilemma,
+                deadline_tick,
+            } => deadline_tick.map_or_else(
+                || format!("civic dilemma opened: {dilemma}"),
+                |deadline| format!("civic dilemma opened: {dilemma} (deadline t{deadline})"),
+            ),
+            EventType::PlayerCivicDecision { dilemma, option } => {
+                format!("civic decision: {dilemma} → {option}")
+            }
+            EventType::CivicDecisionResolved { dilemma, option } => {
+                format!("civic deadline resolved: {dilemma} → {option}")
+            }
             EventType::ObjectiveUpdated { objective, status } => {
                 format!("objective '{}': {}", objective, status)
             }

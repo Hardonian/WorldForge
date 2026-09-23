@@ -112,6 +112,23 @@ impl Fixed64 {
     pub fn max(self, other: Self) -> Self {
         Self(self.0.max(other.0))
     }
+
+    /// Deterministic integer square root using Q32.32 representation.
+    ///
+    /// If self < 0, returns None. Otherwise returns exact integer floor of sqrt.
+    pub fn checked_sqrt(self) -> Option<Self> {
+        if self.0 < 0 {
+            return None;
+        }
+        let shifted = (self.0 as u128) << FRAC_BITS;
+        let root = shifted.isqrt();
+        Some(Self(root as i64))
+    }
+
+    /// Saturating square root. If negative, returns ZERO.
+    pub fn sqrt(self) -> Self {
+        self.checked_sqrt().unwrap_or(Self::ZERO)
+    }
 }
 
 impl fmt::Debug for Fixed64 {
@@ -277,5 +294,17 @@ mod tests {
         assert_eq!(Fixed64::MIN - Fixed64::ONE, Fixed64::MIN);
         assert_eq!(Fixed64::MAX * Fixed64::from_int(2), Fixed64::MAX);
         assert_eq!(-Fixed64::MIN, Fixed64::MAX);
+    }
+
+    #[test]
+    fn integer_sqrt_precision() {
+        assert_eq!(Fixed64::ZERO.sqrt(), Fixed64::ZERO);
+        assert_eq!(Fixed64::ONE.sqrt(), Fixed64::ONE);
+        assert_eq!(Fixed64::from_int(4).sqrt(), Fixed64::from_int(2));
+        assert_eq!(Fixed64::from_int(9).sqrt(), Fixed64::from_int(3));
+        assert_eq!(Fixed64::from_int(16).sqrt(), Fixed64::from_int(4));
+        assert_eq!(Fixed64::from_int(100).sqrt(), Fixed64::from_int(10));
+        assert_eq!(Fixed64::from_ratio(1, 4).sqrt(), Fixed64::from_ratio(1, 2));
+        assert_eq!(Fixed64::from_int(-4).sqrt(), Fixed64::ZERO);
     }
 }

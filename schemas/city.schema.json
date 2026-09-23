@@ -89,6 +89,41 @@
         },
         "additionalProperties": false
       }
+    },
+    "factions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "name"],
+        "properties": {
+          "id": { "$ref": "#/definitions/id" },
+          "name": { "type": "string", "minLength": 1 },
+          "description": { "type": "string" },
+          "initial_support": { "type": "number", "minimum": 0, "maximum": 100 }
+        },
+        "additionalProperties": false
+      }
+    },
+    "dilemmas": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "title", "options"],
+        "properties": {
+          "id": { "$ref": "#/definitions/id" },
+          "title": { "type": "string", "minLength": 1 },
+          "description": { "type": "string" },
+          "deadline_ticks": { "type": "integer", "minimum": 1 },
+          "default_option": { "$ref": "#/definitions/id" },
+          "trigger": { "$ref": "#/definitions/civicTrigger" },
+          "options": {
+            "type": "array",
+            "minItems": 2,
+            "items": { "$ref": "#/definitions/civicOption" }
+          }
+        },
+        "additionalProperties": false
+      }
     }
   },
   "additionalProperties": false,
@@ -96,6 +131,46 @@
     "id": { "type": "string", "pattern": "^[a-z0-9](?:[a-z0-9_-]{0,62}[a-z0-9])?$" },
     "ids": { "type": "array", "items": { "$ref": "#/definitions/id" }, "uniqueItems": true },
     "resources": { "type": "object", "additionalProperties": { "type": "number", "exclusiveMinimum": 0 } },
-    "multipliers": { "type": "object", "additionalProperties": { "type": "number", "minimum": 0.1, "maximum": 10 } }
+    "multipliers": { "type": "object", "additionalProperties": { "type": "number", "minimum": 0.1, "maximum": 10 } },
+    "signedResources": { "type": "object", "additionalProperties": { "type": "number", "minimum": -100, "maximum": 100 } },
+    "choices": { "type": "object", "additionalProperties": { "$ref": "#/definitions/id" } },
+    "civicTrigger": {
+      "type": "object",
+      "properties": {
+        "tick": { "type": "integer", "minimum": 0 },
+        "resource_below": { "$ref": "#/definitions/resources" },
+        "resource_above": { "$ref": "#/definitions/resources" },
+        "requires_technologies": { "$ref": "#/definitions/ids" },
+        "requires_choices": { "$ref": "#/definitions/choices" },
+        "excludes_choices": { "$ref": "#/definitions/choices" }
+      },
+      "additionalProperties": false
+    },
+    "civicEffects": {
+      "type": "object",
+      "properties": {
+        "resource_multipliers": { "$ref": "#/definitions/multipliers" },
+        "building_multipliers": { "$ref": "#/definitions/multipliers" },
+        "housing_multiplier": { "type": "number", "minimum": 0.1, "maximum": 10 },
+        "jobs_multiplier": { "type": "number", "minimum": 0.1, "maximum": 10 },
+        "population_growth_multiplier": { "type": "number", "minimum": 0.1, "maximum": 10 },
+        "wellbeing_bonus": { "type": "number" }
+      },
+      "additionalProperties": false
+    },
+    "civicOption": {
+      "type": "object",
+      "required": ["id", "label"],
+      "properties": {
+        "id": { "$ref": "#/definitions/id" },
+        "label": { "type": "string", "minLength": 1 },
+        "description": { "type": "string" },
+        "cost": { "$ref": "#/definitions/resources" },
+        "grants": { "$ref": "#/definitions/resources" },
+        "faction_support": { "$ref": "#/definitions/signedResources" },
+        "effects": { "$ref": "#/definitions/civicEffects" }
+      },
+      "additionalProperties": false
+    }
   }
 }

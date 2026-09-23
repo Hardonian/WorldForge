@@ -75,6 +75,10 @@ struct InterventionRecord {
     district: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     technology: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    dilemma: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    option: Option<String>,
 }
 
 fn default_capacity_action() -> String {
@@ -113,6 +117,24 @@ struct BenchmarkRequest {
 }
 
 #[derive(Deserialize)]
+struct AnalyzeRequest {
+    world: String,
+    ticks: u64,
+    #[serde(default = "default_analyze_seed")]
+    seed: u64,
+    #[serde(default = "default_analyze_runs")]
+    runs: usize,
+}
+
+fn default_analyze_seed() -> u64 {
+    42
+}
+
+fn default_analyze_runs() -> usize {
+    20
+}
+
+#[derive(Deserialize)]
 struct StepRequest {
     #[serde(default = "default_step_ticks")]
     ticks: u64,
@@ -133,6 +155,12 @@ struct ConstructRequest {
 #[derive(Deserialize)]
 struct ResearchRequest {
     technology: String,
+}
+
+#[derive(Deserialize)]
+struct DecisionRequest {
+    dilemma: String,
+    option: String,
 }
 
 #[derive(Deserialize)]
@@ -347,6 +375,15 @@ fn handle_connection(stream: &mut TcpStream, state: &ServerState) -> Result<(), 
             let report = benchmark_report(&world_path, &request)?;
             respond_json(stream, "200 OK", &report)
         }
+        ("POST", "/api/analyze") => {
+            require_json_content_type(&header)?;
+            let request: AnalyzeRequest = parse_json(body)?;
+            validate_ticks(request.ticks)?;
+            let runs = request.runs.clamp(1, 100);
+            let world_path = resolve_world(&state.worlds_dir, &request.world)?;
+            let report = worldforge_runtime::run_monte_carlo(&world_path, &request.world, request.ticks, request.seed, runs)?;
+            respond_json(stream, "200 OK", &serde_json::to_value(&report).map_err(|e| WorldForgeError::new(worldforge_core::ErrorCode::InternalError, e.to_string()))?)
+        }
         ("POST", "/api/play/sessions") => {
             require_json_content_type(&header)?;
             let request: RunRequest = parse_json(body)?;
@@ -396,6 +433,15 @@ fn handle_connection(stream: &mut TcpStream, state: &ServerState) -> Result<(), 
             let request: ResearchRequest = parse_json(body)?;
             let id = play_action_id(route, "research").unwrap_or_default();
             let response = research_in_play_session(state, id, request)?;
+            respond_json(stream, "200 OK", &response)
+        }
+        ("POST", route)
+            if route.ends_with("/decide") && play_action_id(route, "decide").is_some() =>
+        {
+            require_json_content_type(&header)?;
+            let request: DecisionRequest = parse_json(body)?;
+            let id = play_action_id(route, "decide").unwrap_or_default();
+            let response = decide_in_play_session(state, id, request)?;
             respond_json(stream, "200 OK", &response)
         }
         ("GET", route)
@@ -564,6 +610,8 @@ fn intervene_play_session(
             building: None,
             district: None,
             technology: None,
+            dilemma: None,
+            option: None,
         });
         Ok(play_document(
             id,
@@ -593,6 +641,8 @@ fn construct_in_play_session(
             building: Some(request.building),
             district: Some(request.district),
             technology: None,
+            dilemma: None,
+            option: None,
         });
         Ok(play_document(
             id,
@@ -620,6 +670,39 @@ fn research_in_play_session(
             building: None,
             district: None,
             technology: Some(request.technology),
+            dilemma: None,
+            option: None,
+        });
+        Ok(play_document(
+            id,
+            &session.world,
+            &progress,
+            session.runtime.replay(),
+            false,
+        ))
+    })
+}
+
+fn decide_in_play_session(
+    state: &ServerState,
+    id: &str,
+    request: DecisionRequest,
+) -> Result<Value, WorldForgeError> {
+    with_play_session(state, id, |session| {
+        let tick = session.runtime.current_progress().current_tick;
+        let progress = session
+            .runtime
+            .make_civic_decision(&request.dilemma, &request.option)?;
+        session.interventions.push(InterventionRecord {
+            tick,
+            action: "decision".to_string(),
+            entity: None,
+            capacity: None,
+            building: None,
+            district: None,
+            technology: None,
+            dilemma: Some(request.dilemma),
+            option: Some(request.option),
         });
         Ok(play_document(
             id,
@@ -830,6 +913,20 @@ fn load_save(state: &ServerState, id: &str) -> Result<Value, WorldForgeError> {
                     )
                 })?,
             )?,
+            "decision" => runtime.make_civic_decision(
+                intervention.dilemma.as_deref().ok_or_else(|| {
+                    WorldForgeError::new(
+                        ErrorCode::ReplayFormatInvalid,
+                        "civic decision is missing its dilemma",
+                    )
+                })?,
+                intervention.option.as_deref().ok_or_else(|| {
+                    WorldForgeError::new(
+                        ErrorCode::ReplayFormatInvalid,
+                        "civic decision is missing its option",
+                    )
+                })?,
+            )?,
             _ => {
                 return Err(WorldForgeError::new(
                     ErrorCode::ReplayFormatInvalid,
@@ -1009,6 +1106,10 @@ fn validate_save_game(save: &SaveGame, expected_id: &str) -> Result<(), WorldFor
                 .technology
                 .as_deref()
                 .is_some_and(valid_action_id),
+            "decision" => {
+                intervention.dilemma.as_deref().is_some_and(valid_action_id)
+                    && intervention.option.as_deref().is_some_and(valid_action_id)
+            }
             _ => false,
         };
         if intervention.tick > save.current_tick
@@ -1274,6 +1375,19 @@ fn event_document(event: &SimulationEvent) -> Value {
             "population".to_string(),
             population.to_f64_lossy(),
         ),
+        EventType::CivicDilemmaOpened {
+            dilemma,
+            deadline_tick,
+        } => (
+            "governance",
+            "council".to_string(),
+            dilemma.clone(),
+            deadline_tick.map_or(0.0, |tick| tick as f64),
+        ),
+        EventType::PlayerCivicDecision { dilemma, option }
+        | EventType::CivicDecisionResolved { dilemma, option } => {
+            ("governance", dilemma.clone(), option.clone(), 1.0)
+        }
         EventType::ObjectiveUpdated { objective, .. } => {
             ("system", "objective".to_string(), objective.clone(), 0.0)
         }
@@ -1717,6 +1831,52 @@ prerequisites = ["civic-learning"]
 research = 65.0
 [technologies.effects.resource_multipliers]
 food = 1.25
+
+[[factions]]
+id = "residents-council"
+name = "Residents Council"
+description = "Households organizing for security, services, and accountable growth."
+initial_support = 56.0
+
+[[factions]]
+id = "innovation-league"
+name = "Innovation League"
+description = "Builders and researchers pressing for ambitious urban experiments."
+initial_support = 52.0
+
+[[dilemmas]]
+id = "founding-charter"
+title = "Choose the City's Founding Charter"
+description = "Set the values that will steer the first generation of development."
+deadline_ticks = 12
+default_option = "innovation-district"
+[dilemmas.trigger]
+tick = 5
+
+[[dilemmas.options]]
+id = "neighborhood-commons"
+label = "Neighborhood commons"
+description = "Prioritize shared land, housing capacity, and public life."
+[dilemmas.options.cost]
+credits = 150.0
+[dilemmas.options.faction_support]
+residents-council = 12.0
+innovation-league = -4.0
+[dilemmas.options.effects]
+housing_multiplier = 1.15
+wellbeing_bonus = 5.0
+
+[[dilemmas.options]]
+id = "innovation-district"
+label = "Innovation district"
+description = "Give new ventures room to move and compound productive capacity."
+[dilemmas.options.faction_support]
+innovation-league = 12.0
+residents-council = -5.0
+[dilemmas.options.effects]
+jobs_multiplier = 1.18
+[dilemmas.options.effects.resource_multipliers]
+research = 1.15
 "#,
     )
 }
@@ -2264,7 +2424,17 @@ mod tests {
             },
         )
         .unwrap();
-        step_play_session(&state, original_id, 4).unwrap();
+        step_play_session(&state, original_id, 5).unwrap();
+        let decided = decide_in_play_session(
+            &state,
+            original_id,
+            DecisionRequest {
+                dilemma: "growth-charter".to_string(),
+                option: "civic-land-trust".to_string(),
+            },
+        )
+        .unwrap();
+        assert_eq!(decided["recentEvents"][0]["type"], "governance");
         let save = save_play_session(
             &state,
             SaveRequest {
@@ -2276,7 +2446,11 @@ mod tests {
         .unwrap();
         let original_final = step_play_session(&state, original_id, 20).unwrap();
         let resumed = load_save(&state, &save.id).unwrap();
-        assert_eq!(resumed["city"]["housing"], 90);
+        assert_eq!(resumed["city"]["housing"], 106);
+        assert_eq!(
+            resumed["city"]["governance"]["decisions"][0]["option"],
+            "civic-land-trust"
+        );
         let resumed_id = resumed["sessionId"].as_str().unwrap();
         let resumed_final = step_play_session(&state, resumed_id, 20).unwrap();
         assert_eq!(

@@ -21,6 +21,7 @@ pub mod hash;
 pub mod id;
 pub mod rng;
 pub mod serial;
+pub mod stats;
 pub mod time;
 pub mod version;
 
@@ -30,6 +31,7 @@ pub use fixed::Fixed64;
 pub use hash::Fingerprint;
 pub use id::*;
 pub use rng::DeterministicRng;
+pub use stats::SeriesSummary;
 pub use time::Tick;
 pub use version::{EngineVersion, FormatVersion};
 

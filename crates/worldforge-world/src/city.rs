@@ -23,6 +23,10 @@ pub struct CityConfig {
     pub buildings: Vec<BuildingDefinition>,
     #[serde(default)]
     pub technologies: Vec<TechnologyDefinition>,
+    #[serde(default)]
+    pub factions: Vec<CivicFaction>,
+    #[serde(default)]
+    pub dilemmas: Vec<CivicDilemma>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -105,6 +109,80 @@ pub struct TechnologyEffects {
     pub wellbeing_bonus: f64,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CivicFaction {
+    pub id: String,
+    pub name: String,
+    #[serde(default)]
+    pub description: String,
+    #[serde(default = "default_faction_support")]
+    pub initial_support: f64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CivicDilemma {
+    pub id: String,
+    pub title: String,
+    #[serde(default)]
+    pub description: String,
+    #[serde(default)]
+    pub trigger: CivicTrigger,
+    #[serde(default)]
+    pub deadline_ticks: Option<u64>,
+    #[serde(default)]
+    pub default_option: Option<String>,
+    #[serde(default)]
+    pub options: Vec<CivicOption>,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct CivicTrigger {
+    #[serde(default)]
+    pub tick: u64,
+    #[serde(default)]
+    pub resource_below: BTreeMap<String, f64>,
+    #[serde(default)]
+    pub resource_above: BTreeMap<String, f64>,
+    #[serde(default)]
+    pub requires_technologies: Vec<String>,
+    #[serde(default)]
+    pub requires_choices: BTreeMap<String, String>,
+    #[serde(default)]
+    pub excludes_choices: BTreeMap<String, String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CivicOption {
+    pub id: String,
+    pub label: String,
+    #[serde(default)]
+    pub description: String,
+    #[serde(default)]
+    pub cost: BTreeMap<String, f64>,
+    #[serde(default)]
+    pub grants: BTreeMap<String, f64>,
+    #[serde(default)]
+    pub faction_support: BTreeMap<String, f64>,
+    #[serde(default)]
+    pub effects: CivicEffects,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct CivicEffects {
+    #[serde(default)]
+    pub resource_multipliers: BTreeMap<String, f64>,
+    #[serde(default)]
+    pub building_multipliers: BTreeMap<String, f64>,
+    #[serde(default)]
+    pub housing_multiplier: f64,
+    #[serde(default)]
+    pub jobs_multiplier: f64,
+    #[serde(default)]
+    pub population_growth_multiplier: f64,
+    #[serde(default)]
+    pub wellbeing_bonus: f64,
+}
+
 fn default_population_resource() -> String {
     "population".to_string()
 }
@@ -115,6 +193,10 @@ const fn default_footprint() -> u32 {
 
 const fn default_max_count() -> u32 {
     100
+}
+
+const fn default_faction_support() -> f64 {
+    50.0
 }
 
 impl CityConfig {
@@ -298,8 +380,208 @@ impl CityConfig {
             }
         }
         validate_technology_dag(&self.technologies)?;
+        let mut faction_ids = BTreeSet::new();
+        for faction in &self.factions {
+            validate_id(&faction.id, "faction id")?;
+            if faction.name.trim().is_empty()
+                || !faction.initial_support.is_finite()
+                || !(0.0..=100.0).contains(&faction.initial_support)
+            {
+                return Err(city_error(format!(
+                    "faction '{}' needs a name and support between 0 and 100",
+                    faction.id
+                )));
+            }
+            if !faction_ids.insert(faction.id.as_str()) {
+                return Err(city_error(format!("duplicate faction '{}'", faction.id)));
+            }
+        }
+
+        let mut dilemma_ids = BTreeSet::new();
+        let mut dilemma_options = BTreeMap::<&str, BTreeSet<&str>>::new();
+        for dilemma in &self.dilemmas {
+            validate_id(&dilemma.id, "dilemma id")?;
+            if dilemma.title.trim().is_empty() || dilemma.options.len() < 2 {
+                return Err(city_error(format!(
+                    "dilemma '{}' needs a title and at least two options",
+                    dilemma.id
+                )));
+            }
+            if !dilemma_ids.insert(dilemma.id.as_str()) {
+                return Err(city_error(format!("duplicate dilemma '{}'", dilemma.id)));
+            }
+            if dilemma.deadline_ticks == Some(0) {
+                return Err(city_error(format!(
+                    "dilemma '{}' deadline must be at least one tick",
+                    dilemma.id
+                )));
+            }
+            let mut option_ids = BTreeSet::new();
+            for option in &dilemma.options {
+                validate_id(&option.id, "civic option id")?;
+                if option.label.trim().is_empty() || !option_ids.insert(option.id.as_str()) {
+                    return Err(city_error(format!(
+                        "dilemma '{}' has an invalid or duplicate option '{}'",
+                        dilemma.id, option.id
+                    )));
+                }
+                validate_amounts(
+                    &option.cost,
+                    &format!("dilemma '{}.{}' cost", dilemma.id, option.id),
+                )?;
+                validate_amounts(
+                    &option.grants,
+                    &format!("dilemma '{}.{}' grants", dilemma.id, option.id),
+                )?;
+                for (faction, change) in &option.faction_support {
+                    if !faction_ids.contains(faction.as_str())
+                        || !change.is_finite()
+                        || !(-100.0..=100.0).contains(change)
+                    {
+                        return Err(city_error(format!(
+                            "dilemma '{}.{}' has invalid faction effect '{}'",
+                            dilemma.id, option.id, faction
+                        )));
+                    }
+                }
+                validate_civic_effects(
+                    &option.effects,
+                    &building_ids,
+                    &format!("dilemma '{}.{}'", dilemma.id, option.id),
+                )?;
+            }
+            if let Some(default) = &dilemma.default_option {
+                let default_choice = dilemma
+                    .options
+                    .iter()
+                    .find(|option| option.id == *default)
+                    .ok_or_else(|| {
+                        city_error(format!(
+                            "dilemma '{}' has unknown default option '{}'",
+                            dilemma.id, default
+                        ))
+                    })?;
+                if dilemma.deadline_ticks.is_none() || !default_choice.cost.is_empty() {
+                    return Err(city_error(format!(
+                        "dilemma '{}' default requires a deadline and must have no cost",
+                        dilemma.id
+                    )));
+                }
+            } else if dilemma.deadline_ticks.is_some() {
+                return Err(city_error(format!(
+                    "dilemma '{}' has a deadline but no default option",
+                    dilemma.id
+                )));
+            }
+            dilemma_options.insert(dilemma.id.as_str(), option_ids);
+        }
+        for dilemma in &self.dilemmas {
+            validate_amounts(
+                &dilemma.trigger.resource_below,
+                &format!("dilemma '{}' resource_below", dilemma.id),
+            )?;
+            validate_amounts(
+                &dilemma.trigger.resource_above,
+                &format!("dilemma '{}' resource_above", dilemma.id),
+            )?;
+            for technology in &dilemma.trigger.requires_technologies {
+                if !technology_ids.contains(technology.as_str()) {
+                    return Err(city_error(format!(
+                        "dilemma '{}' requires unknown technology '{}'",
+                        dilemma.id, technology
+                    )));
+                }
+            }
+            for (required_dilemma, option) in dilemma
+                .trigger
+                .requires_choices
+                .iter()
+                .chain(dilemma.trigger.excludes_choices.iter())
+            {
+                if required_dilemma == &dilemma.id
+                    || !dilemma_options
+                        .get(required_dilemma.as_str())
+                        .is_some_and(|options| options.contains(option.as_str()))
+                {
+                    return Err(city_error(format!(
+                        "dilemma '{}' references unknown choice '{}={}'",
+                        dilemma.id, required_dilemma, option
+                    )));
+                }
+            }
+        }
+        validate_dilemma_dag(&self.dilemmas)?;
         Ok(())
     }
+}
+
+fn validate_civic_effects(
+    effects: &CivicEffects,
+    building_ids: &BTreeSet<&str>,
+    context: &str,
+) -> Result<(), WorldForgeError> {
+    for (building, multiplier) in &effects.building_multipliers {
+        if !building_ids.contains(building.as_str()) {
+            return Err(city_error(format!(
+                "{context} modifies unknown building '{building}'"
+            )));
+        }
+        validate_multiplier(*multiplier, "civic building multiplier")?;
+    }
+    for multiplier in effects.resource_multipliers.values() {
+        validate_multiplier(*multiplier, "civic resource multiplier")?;
+    }
+    for (value, label) in [
+        (effects.housing_multiplier, "civic housing multiplier"),
+        (effects.jobs_multiplier, "civic jobs multiplier"),
+        (
+            effects.population_growth_multiplier,
+            "civic population growth multiplier",
+        ),
+    ] {
+        if value != 0.0 {
+            validate_multiplier(value, label)?;
+        }
+    }
+    if !effects.wellbeing_bonus.is_finite() {
+        return Err(city_error(format!(
+            "{context} wellbeing bonus must be finite"
+        )));
+    }
+    Ok(())
+}
+
+fn validate_dilemma_dag(dilemmas: &[CivicDilemma]) -> Result<(), WorldForgeError> {
+    fn visit<'a>(
+        id: &'a str,
+        by_id: &BTreeMap<&'a str, &'a CivicDilemma>,
+        visiting: &mut BTreeSet<&'a str>,
+        visited: &mut BTreeSet<&'a str>,
+    ) -> Result<(), WorldForgeError> {
+        if visited.contains(id) {
+            return Ok(());
+        }
+        if !visiting.insert(id) {
+            return Err(city_error(format!("civic dilemma cycle at '{id}'")));
+        }
+        for dependency in by_id[id].trigger.requires_choices.keys() {
+            visit(dependency, by_id, visiting, visited)?;
+        }
+        visiting.remove(id);
+        visited.insert(id);
+        Ok(())
+    }
+
+    let by_id = dilemmas
+        .iter()
+        .map(|dilemma| (dilemma.id.as_str(), dilemma))
+        .collect::<BTreeMap<_, _>>();
+    let mut visiting = BTreeSet::new();
+    let mut visited = BTreeSet::new();
+    for id in by_id.keys() {
+        visit(id, &by_id, &mut visiting, &mut visited)?;
+    }
+    Ok(())
 }
 
 fn validate_technology_dag(technologies: &[TechnologyDefinition]) -> Result<(), WorldForgeError> {
@@ -436,6 +718,48 @@ mod tests {
             research = 20.0
             [technologies.effects.resource_multipliers]
             research = 1.5
+
+            [[factions]]
+            id = "residents"
+            name = "Residents"
+
+            [[dilemmas]]
+            id = "charter"
+            title = "Founding Charter"
+            deadline_ticks = 5
+            default_option = "open"
+            [dilemmas.trigger]
+            tick = 2
+
+            [[dilemmas.options]]
+            id = "commons"
+            label = "Build a commons"
+            [dilemmas.options.cost]
+            credits = 5.0
+            [dilemmas.options.faction_support]
+            residents = 10.0
+            [dilemmas.options.effects]
+            housing_multiplier = 1.2
+
+            [[dilemmas.options]]
+            id = "open"
+            label = "Open development"
+            [dilemmas.options.effects.resource_multipliers]
+            research = 1.1
+
+            [[dilemmas]]
+            id = "second-charter"
+            title = "Second Charter"
+            [dilemmas.trigger.requires_choices]
+            charter = "commons"
+
+            [[dilemmas.options]]
+            id = "steady"
+            label = "Stay steady"
+
+            [[dilemmas.options]]
+            id = "change"
+            label = "Change course"
         "#;
         CityConfig::from_toml(source)
             .unwrap()
@@ -447,6 +771,15 @@ mod tests {
             "id = \"networks\"\n            prerequisites = [\"automation\"]\n            name",
         );
         assert!(CityConfig::from_toml(&cyclic)
+            .unwrap()
+            .validate(&entities())
+            .is_err());
+
+        let invalid_choice = source.replace(
+            "charter = \"commons\"",
+            "charter = \"not-an-option\"",
+        );
+        assert!(CityConfig::from_toml(&invalid_choice)
             .unwrap()
             .validate(&entities())
             .is_err());

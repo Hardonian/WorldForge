@@ -316,3 +316,143 @@ research = 1.25
 food = 1.25
 clean_water = 1.25
 power = 1.25
+
+[[factions]]
+id = "commons-assembly"
+name = "Commons Assembly"
+description = "Neighborhood delegates seeking shared prosperity and a humane pace of change."
+initial_support = 58.0
+
+[[factions]]
+id = "builders-guild"
+name = "Builders Guild"
+description = "Makers, operators, and investors who prize momentum and productive capacity."
+initial_support = 52.0
+
+[[factions]]
+id = "ecological-council"
+name = "Ecological Council"
+description = "Watershed stewards defending long-term resilience and living systems."
+initial_support = 55.0
+
+[[factions]]
+id = "systems-lab"
+name = "Systems Lab"
+description = "Researchers who want the city to learn from every experiment."
+initial_support = 50.0
+
+[[dilemmas]]
+id = "growth-charter"
+title = "Who Owns the Next Neighborhood?"
+description = "The first expansion charter will decide whether land is treated as a civic commons or an engine of rapid private development."
+deadline_ticks = 12
+default_option = "open-development"
+[dilemmas.trigger]
+tick = 4
+
+[[dilemmas.options]]
+id = "civic-land-trust"
+label = "Found a civic land trust"
+description = "Pay now to keep housing permanently affordable and growth accountable to residents."
+[dilemmas.options.cost]
+credits = 240.0
+[dilemmas.options.faction_support]
+commons-assembly = 12.0
+ecological-council = 6.0
+builders-guild = -7.0
+[dilemmas.options.effects]
+housing_multiplier = 1.18
+population_growth_multiplier = 0.9
+wellbeing_bonus = 5.0
+
+[[dilemmas.options]]
+id = "open-development"
+label = "Open the development market"
+description = "Remove barriers, accelerate investment, and accept sharper distributional tension."
+[dilemmas.options.faction_support]
+builders-guild = 13.0
+systems-lab = 3.0
+commons-assembly = -8.0
+[dilemmas.options.effects]
+jobs_multiplier = 1.2
+population_growth_multiplier = 1.12
+[dilemmas.options.effects.resource_multipliers]
+credits = 1.18
+
+[[dilemmas]]
+id = "commons-mandate"
+title = "How Deep Should Local Democracy Go?"
+description = "The land trust needs an operating constitution: fast elected stewardship or slower direct neighborhood control."
+deadline_ticks = 16
+default_option = "elected-stewards"
+[dilemmas.trigger]
+tick = 12
+[dilemmas.trigger.requires_choices]
+growth-charter = "civic-land-trust"
+
+[[dilemmas.options]]
+id = "block-assemblies"
+label = "Empower block assemblies"
+description = "Trade speed for legitimacy and make every neighborhood a governing cell."
+[dilemmas.options.cost]
+credits = 150.0
+[dilemmas.options.faction_support]
+commons-assembly = 14.0
+builders-guild = -5.0
+[dilemmas.options.effects]
+wellbeing_bonus = 8.0
+population_growth_multiplier = 0.92
+
+[[dilemmas.options]]
+id = "elected-stewards"
+label = "Elect professional stewards"
+description = "Preserve public ownership while giving trained stewards room to act."
+[dilemmas.options.faction_support]
+commons-assembly = 5.0
+systems-lab = 7.0
+[dilemmas.options.effects]
+housing_multiplier = 1.08
+jobs_multiplier = 1.05
+
+[[dilemmas]]
+id = "automation-compact"
+title = "The Automation Dividend"
+description = "Rapid private expansion has made autonomous logistics inevitable. Who receives the productivity dividend?"
+deadline_ticks = 16
+default_option = "guild-automation"
+[dilemmas.trigger]
+tick = 12
+[dilemmas.trigger.requires_choices]
+growth-charter = "open-development"
+
+[[dilemmas.options]]
+id = "public-dividend"
+label = "Create a public automation dividend"
+description = "Tax automated output and return the gain as services, research, and leisure."
+[dilemmas.options.cost]
+credits = 180.0
+[dilemmas.options.grants]
+research = 35.0
+[dilemmas.options.faction_support]
+commons-assembly = 10.0
+systems-lab = 8.0
+builders-guild = -6.0
+[dilemmas.options.effects]
+wellbeing_bonus = 7.0
+jobs_multiplier = 0.92
+[dilemmas.options.effects.resource_multipliers]
+research = 1.2
+
+[[dilemmas.options]]
+id = "guild-automation"
+label = "Let the guild automate freely"
+description = "Maximize productive output and trust new industries to absorb displaced workers."
+[dilemmas.options.faction_support]
+builders-guild = 12.0
+systems-lab = 4.0
+commons-assembly = -9.0
+[dilemmas.options.effects]
+jobs_multiplier = 0.78
+[dilemmas.options.effects.resource_multipliers]
+credits = 1.32
+materials = 1.2

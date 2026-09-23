@@ -18,6 +18,7 @@ World Forge is a simulation operating system for building games, simulations, wo
 | Resource economy | ✅ Implemented | Production, transfer, conservation, prices |
 | City construction | ✅ Implemented | District slots, costs, upkeep, yields, housing, jobs, wellbeing, population growth, co-location synergies |
 | Research trees | ✅ Implemented | Data-driven branches, prerequisites, exclusions, unlocks, and systemic multipliers |
+| Civic governance | ✅ Implemented | Factions, timed dilemmas, branching mandates, support shifts, defaults, and persistent systemic consequences |
 | Objective system | ✅ Implemented | Evaluate pass/fail conditions per scenario |
 | Replay artifacts | ✅ Implemented | CBOR-serialized with tamper detection |
 | Proof chain | ✅ Implemented | Event hash chains with verification |
@@ -107,7 +108,7 @@ cargo run -p worldforge-cli -- run examples/supply-chain --seed 42 --ticks 1000
 
 `examples/micro-city` is now a player-directed city rather than a passive scenario. Its four districts have finite land budgets; eight building types consume construction resources and ongoing upkeep; tagged neighbors create local production synergies; housing supports population growth; and jobs and wellbeing respond to the built form.
 
-Nine technologies span knowledge, habitat, ecology, energy, and synthesis. Paths cross-link, unlock new buildings, transform resource yields, and include an exclusive choice between autonomous and human-scale power systems. Construction, research, and capacity choices are deterministic events preserved by saves, replay re-execution, state fingerprints, and the proof chain. See [city systems and research](docs/city-systems.md).
+Nine technologies span knowledge, habitat, ecology, energy, and synthesis. Paths cross-link, unlock new buildings, transform resource yields, and include an exclusive choice between autonomous and human-scale power systems. Four civic factions contest a branching campaign of timed dilemmas: development policy opens different successor crises, shifts support, and permanently rewrites growth, housing, employment, wellbeing, and production. Construction, research, governance, and capacity choices are deterministic events preserved by saves, replay re-execution, state fingerprints, and the proof chain. See [city systems, research, and governance](docs/city-systems.md).
 
 ## Verification
 

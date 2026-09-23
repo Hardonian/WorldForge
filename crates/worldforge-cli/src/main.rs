@@ -93,6 +93,21 @@ enum Command {
         reps: u32,
     },
 
+    /// Run Monte Carlo risk analysis and systemic bottleneck diagnosis
+    Analyze {
+        /// Path to the world directory
+        path: PathBuf,
+        /// Number of ticks per run
+        #[arg(long, default_value = "500")]
+        ticks: u64,
+        /// Starting random seed
+        #[arg(long, default_value = "42")]
+        seed: u64,
+        /// Number of Monte Carlo runs
+        #[arg(long, default_value = "20")]
+        runs: usize,
+    },
+
     /// Serve the browser dashboard backed by the real simulation engine
     Dashboard {
         /// Local address to bind
@@ -181,6 +196,12 @@ fn main() -> ExitCode {
             output_path,
         } => commands::export(&path, ticks, seed, output_path.as_deref()),
         Command::Benchmark { path, ticks, reps } => commands::benchmark(&path, ticks, reps),
+        Command::Analyze {
+            path,
+            ticks,
+            seed,
+            runs,
+        } => commands::analyze(&path, ticks, seed, runs, &cli.output),
         Command::Dashboard {
             bind,
             worlds_dir,

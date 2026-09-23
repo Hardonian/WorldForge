@@ -11,6 +11,8 @@
 - Added live Simulation Studio construction controls, district utilization, civic vitals, affordability feedback, and an interactive research constellation.
 - Expanded `micro-city` into a four-district, eight-building, nine-technology playable city and taught generated city templates to emit city rules.
 - Added a city-system JSON schema, content-authoring documentation, graph-cycle validation, and end-to-end regression coverage.
+- Added data-driven civic factions, triggerable and timed dilemmas, branching successor choices, automatic defaults, treasury exchanges, support shifts, and permanent city-system effects.
+- Added proof-chained governance events, replay/save restoration, a live Council Chamber interface, and a three-dilemma branching campaign for `micro-city`.
 
 ### Local world inheritance
 

@@ -454,6 +454,7 @@ pub fn replay_run(file: &Path) -> Result<(), WorldForgeError> {
                 EventType::PlayerCapacityChanged { .. }
                     | EventType::BuildingConstructed { .. }
                     | EventType::TechnologyUnlocked { .. }
+                    | EventType::PlayerCivicDecision { .. }
             )
         })
         .collect::<Vec<_>>();
@@ -484,6 +485,9 @@ pub fn replay_run(file: &Path) -> Result<(), WorldForgeError> {
             }
             EventType::TechnologyUnlocked { technology, .. } => {
                 runtime.research_technology(technology)?;
+            }
+            EventType::PlayerCivicDecision { dilemma, option } => {
+                runtime.make_civic_decision(dilemma, option)?;
             }
             _ => unreachable!("filtered player action"),
         }
@@ -593,6 +597,7 @@ fn simulation_export_with_event_limit(
         ("system", result.event_type_counts.system),
         ("construction", result.event_type_counts.construction),
         ("research", result.event_type_counts.research),
+        ("governance", result.event_type_counts.governance),
     ]);
     let retained_events = runtime.retained_events();
     let event_start = result.event_count.saturating_sub(retained_events.len());
@@ -681,6 +686,19 @@ fn simulation_export_with_event_limit(
                     "population".to_string(),
                     population.to_f64_lossy(),
                 ),
+                EventType::CivicDilemmaOpened {
+                    dilemma,
+                    deadline_tick,
+                } => (
+                    "governance",
+                    "council".to_string(),
+                    dilemma.clone(),
+                    deadline_tick.map_or(0.0, |tick| tick as f64),
+                ),
+                EventType::PlayerCivicDecision { dilemma, option }
+                | EventType::CivicDecisionResolved { dilemma, option } => {
+                    ("governance", dilemma.clone(), option.clone(), 1.0)
+                }
                 EventType::ObjectiveUpdated { objective, .. } => {
                     ("system", "objective".to_string(), objective.clone(), 0.0)
                 }
@@ -820,6 +838,112 @@ pub fn benchmark(path: &Path, ticks: u64, reps: u32) -> Result<(), WorldForgeErr
     Ok(())
 }
 
+pub fn analyze(
+    path: &Path,
+    ticks: u64,
+    seed: u64,
+    runs: usize,
+    format: &OutputFormat,
+) -> Result<(), WorldForgeError> {
+    let resolved = worldforge_package::resolve_world(path)?;
+    let world_name = path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or("world");
+
+    let report =
+        worldforge_runtime::run_monte_carlo(&resolved.path, world_name, ticks, seed, runs)?;
+
+    match format {
+        OutputFormat::Json => {
+            println!("{}", serde_json::to_string_pretty(&report).unwrap());
+        }
+        OutputFormat::Text => {
+            println!("World Forge Monte Carlo & Risk Analysis");
+            println!("========================================");
+            println!("  World:        {}", report.world);
+            println!("  Runs:         {}", report.runs);
+            println!("  Ticks/run:    {}", report.ticks);
+            println!(
+                "  Seeds:        {}..={}",
+                report.seed_range.0, report.seed_range.1
+            );
+            println!("  Risk Profile: {}", report.risk_level);
+            println!();
+
+            println!("Resilience Score Distribution:");
+            println!(
+                "  Mean:    {:.1}/100 (±{:.1})",
+                report.resilience_summary.mean.to_f64_lossy(),
+                report.resilience_summary.std_dev.to_f64_lossy()
+            );
+            println!(
+                "  Median:  {:.1}/100",
+                report.resilience_summary.median.to_f64_lossy()
+            );
+            println!(
+                "  p10–p90: {:.1} – {:.1}",
+                report.resilience_summary.p10.to_f64_lossy(),
+                report.resilience_summary.p90.to_f64_lossy()
+            );
+            println!(
+                "  Min–Max: {:.1} – {:.1}",
+                report.resilience_summary.min.to_f64_lossy(),
+                report.resilience_summary.max.to_f64_lossy()
+            );
+            if report.black_swan_runs > 0 {
+                println!(
+                    "  Alert:   {} critical shock runs (resilience < 35)",
+                    report.black_swan_runs
+                );
+            }
+            println!();
+
+            println!("Objective Success Rates:");
+            for (obj, rate) in &report.objective_success_rates {
+                let pct = rate * 100.0;
+                let status = if pct >= 99.0 {
+                    "✓ Durable"
+                } else if pct >= 50.0 {
+                    "~ Sensitive"
+                } else {
+                    "✗ Fragile"
+                };
+                println!("  {:<35} {:>5.1}%  {}", obj, pct, status);
+            }
+            println!();
+
+            println!("Systemic Bottleneck Diagnosis (ranked by constraint severity):");
+            for (idx, b) in report.bottlenecks.iter().enumerate().take(5) {
+                println!(
+                    "  {}. {:<16} [Score: {:>4.1}] {}",
+                    idx + 1,
+                    b.entity,
+                    b.bottleneck_score,
+                    b.impact_summary
+                );
+            }
+            println!();
+
+            println!("Resource Buffer Elasticity:");
+            for r in &report.resource_elasticity {
+                let runway = if r.buffer_runway_ticks >= 999.0 {
+                    "∞ runway".to_string()
+                } else {
+                    format!("{:.0} ticks runway", r.buffer_runway_ticks)
+                };
+                println!(
+                    "  {:<16} Burn: {:>5.2}/t · Replenish ratio: {:>4.2}x · {}",
+                    r.resource, r.burn_rate, r.replenishment_ratio, runway
+                );
+            }
+            println!();
+            println!("Summary: {}", report.primary_vulnerability);
+        }
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -829,13 +953,18 @@ mod tests {
         let world = Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../..")
             .join("examples/micro-city");
-        let mut runtime = worldforge_runtime::SimulationRuntime::load(&world, 99, Some(8)).unwrap();
+        let mut runtime =
+            worldforge_runtime::SimulationRuntime::load(&world, 99, Some(10)).unwrap();
         runtime.research_technology("solar-weave").unwrap();
         runtime
             .construct_building("solar-canopy", "sun-belt")
             .unwrap();
         runtime.set_capacity("coal-plant", 0.75).unwrap();
-        runtime.step(8).unwrap();
+        runtime.step(5).unwrap();
+        runtime
+            .make_civic_decision("growth-charter", "civic-land-trust")
+            .unwrap();
+        runtime.step(5).unwrap();
         let replay = runtime.take_replay().unwrap();
         let path = std::env::temp_dir().join(format!(
             "worldforge-city-replay-{}.replay",

@@ -18,6 +18,12 @@ use worldforge_proof::RunProof;
 use worldforge_replay::{ReplayArtifact, ReplayWriter};
 use worldforge_world::*;
 
+pub mod analytics;
+pub use analytics::{
+    run_monte_carlo, BottleneckDiagnosis, EnvelopePoint, LinkElasticity, MonteCarloReport,
+    ResourceElasticity,
+};
+
 const MAX_RECENT_EVENTS: usize = 256;
 /// Charts cannot display millions of distinct samples, and retaining one map
 /// per tick makes long simulations memory-bound. Keep enough points for a
@@ -68,6 +74,7 @@ pub struct RunEventCounts {
     pub system: usize,
     pub construction: usize,
     pub research: usize,
+    pub governance: usize,
 }
 
 impl RunEventCounts {
@@ -84,6 +91,9 @@ impl RunEventCounts {
             | EventType::SimulationDegraded { .. } => self.system += 1,
             EventType::BuildingConstructed { .. } => self.construction += 1,
             EventType::TechnologyUnlocked { .. } => self.research += 1,
+            EventType::CivicDilemmaOpened { .. }
+            | EventType::PlayerCivicDecision { .. }
+            | EventType::CivicDecisionResolved { .. } => self.governance += 1,
         }
     }
 }
@@ -176,6 +186,7 @@ pub struct CityProgress {
     pub districts: Vec<CityDistrictProgress>,
     pub buildings: Vec<CityBuildingProgress>,
     pub technologies: Vec<CityTechnologyProgress>,
+    pub governance: CityGovernanceProgress,
 }
 
 #[derive(Debug, Clone, serde::Serialize)]
@@ -226,11 +237,63 @@ pub struct CityTechnologyProgress {
     pub affordable: bool,
 }
 
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CityGovernanceProgress {
+    pub factions: Vec<CivicFactionProgress>,
+    pub pending_dilemmas: Vec<CivicDilemmaProgress>,
+    pub decisions: Vec<CivicDecisionProgress>,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CivicFactionProgress {
+    pub id: String,
+    pub name: String,
+    pub description: String,
+    pub support: f64,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CivicDilemmaProgress {
+    pub id: String,
+    pub title: String,
+    pub description: String,
+    pub opened_tick: u64,
+    pub deadline_tick: Option<u64>,
+    pub options: Vec<CivicOptionProgress>,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CivicOptionProgress {
+    pub id: String,
+    pub label: String,
+    pub description: String,
+    pub cost: BTreeMap<String, f64>,
+    pub grants: BTreeMap<String, f64>,
+    pub faction_support: BTreeMap<String, f64>,
+    pub affordable: bool,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CivicDecisionProgress {
+    pub dilemma: String,
+    pub title: String,
+    pub option: String,
+    pub label: String,
+}
+
 #[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
 struct CityRuntimeState {
     /// `district/building` -> constructed count. IDs cannot contain `/`.
     placements: BTreeMap<String, u32>,
     unlocked_technologies: BTreeSet<String>,
+    faction_support: BTreeMap<String, Fixed64>,
+    opened_dilemmas: BTreeMap<String, u64>,
+    decisions: BTreeMap<String, String>,
 }
 
 impl worldforge_ecs::Component for CityRuntimeState {
@@ -450,7 +513,27 @@ impl SimulationRuntime {
             .as_ref()
             .and_then(|city| entity_id_map.get(&city.treasury).copied());
         if let (Some(city), Some(treasury_id)) = (&city_config, city_treasury_id) {
-            ecs_world.insert_component(treasury_id, CityRuntimeState::default());
+            let mut city_state = CityRuntimeState {
+                faction_support: city
+                    .factions
+                    .iter()
+                    .map(|faction| {
+                        (
+                            faction.id.clone(),
+                            Fixed64::from_f64_lossy(faction.initial_support),
+                        )
+                    })
+                    .collect(),
+                ..CityRuntimeState::default()
+            };
+            if let Some(inventory) = ecs_world.get_component::<Inventory>(&treasury_id) {
+                for dilemma in &city.dilemmas {
+                    if civic_trigger_met(city, &city_state, inventory, dilemma, 0) {
+                        city_state.opened_dilemmas.insert(dilemma.id.clone(), 0);
+                    }
+                }
+            }
+            ecs_world.insert_component(treasury_id, city_state);
             let mut track = |resource: &String| {
                 if tracked_resource_set.insert(resource.clone()) {
                     tracked_resources.push(resource.clone());
@@ -473,6 +556,21 @@ impl SimulationRuntime {
             for technology in &city.technologies {
                 for resource in technology.cost.keys() {
                     track(resource);
+                }
+            }
+            for dilemma in &city.dilemmas {
+                for resource in dilemma
+                    .trigger
+                    .resource_below
+                    .keys()
+                    .chain(dilemma.trigger.resource_above.keys())
+                {
+                    track(resource);
+                }
+                for option in &dilemma.options {
+                    for resource in option.cost.keys().chain(option.grants.keys()) {
+                        track(resource);
+                    }
                 }
             }
         }
@@ -621,6 +719,7 @@ impl SimulationRuntime {
             self.world.set_tick(tick);
 
             let mut tick_events = self.apply_scheduled_events(tick_num)?;
+            tick_events.extend(self.update_civic_dilemmas(tick)?);
 
             run_production(&mut self.world, &self.entity_ids, tick, &mut tick_events);
             tick_events.extend(self.run_city_economy(tick)?);
@@ -944,6 +1043,32 @@ impl SimulationRuntime {
         Ok(self.progress_with_events(vec![event]))
     }
 
+    /// Resolve a currently pending civic dilemma. Choices can immediately
+    /// exchange resources and permanently reshape faction support and city
+    /// simulation multipliers.
+    pub fn make_civic_decision(
+        &mut self,
+        dilemma_id: &str,
+        option_id: &str,
+    ) -> Result<RunProgress, WorldForgeError> {
+        self.ensure_player_action_allowed()?;
+        let city = self.city_config.clone().ok_or_else(|| {
+            WorldForgeError::new(
+                ErrorCode::ScenarioInvalid,
+                "this world has no civic governance rules",
+            )
+        })?;
+        let treasury_id = self.city_treasury_id.ok_or_else(|| {
+            WorldForgeError::new(ErrorCode::RuntimeInitFailed, "city treasury is unavailable")
+        })?;
+        let event =
+            self.resolve_civic_option(&city, treasury_id, dilemma_id, option_id, true, true)?;
+        self.record_player_event(event.clone());
+        self.refresh_resource_totals(self.world.current_tick().value());
+        self.state_fingerprint = self.world.fingerprint();
+        Ok(self.progress_with_events(vec![event]))
+    }
+
     fn ensure_player_action_allowed(&self) -> Result<(), WorldForgeError> {
         if self.state == RunState::Completed || matches!(self.state, RunState::Failed { .. }) {
             return Err(WorldForgeError::new(
@@ -960,6 +1085,180 @@ impl SimulationRuntime {
         }
         self.event_count += 1;
         self.event_type_counts.record(&event);
+    }
+
+    fn update_civic_dilemmas(
+        &mut self,
+        tick: Tick,
+    ) -> Result<Vec<SimulationEvent>, WorldForgeError> {
+        let (Some(city), Some(treasury_id)) = (self.city_config.clone(), self.city_treasury_id)
+        else {
+            return Ok(Vec::new());
+        };
+        if city.dilemmas.is_empty() {
+            return Ok(Vec::new());
+        }
+        let state = self
+            .world
+            .get_component::<CityRuntimeState>(&treasury_id)
+            .cloned()
+            .ok_or_else(|| action_error("city governance state is unavailable"))?;
+        let inventory = self
+            .world
+            .get_component::<Inventory>(&treasury_id)
+            .ok_or_else(|| action_error("city treasury inventory is unavailable"))?;
+        let newly_opened = city
+            .dilemmas
+            .iter()
+            .filter(|dilemma| {
+                !state.decisions.contains_key(&dilemma.id)
+                    && !state.opened_dilemmas.contains_key(&dilemma.id)
+                    && civic_trigger_met(&city, &state, inventory, dilemma, tick.value())
+            })
+            .map(|dilemma| dilemma.id.clone())
+            .collect::<Vec<_>>();
+
+        let mut events = Vec::new();
+        if !newly_opened.is_empty() {
+            let state = self
+                .world
+                .get_component_mut::<CityRuntimeState>(&treasury_id)
+                .expect("validated city governance state");
+            for dilemma_id in newly_opened {
+                let dilemma = city
+                    .dilemmas
+                    .iter()
+                    .find(|dilemma| dilemma.id == dilemma_id)
+                    .expect("validated dilemma");
+                state
+                    .opened_dilemmas
+                    .insert(dilemma_id.clone(), tick.value());
+                events.push(SimulationEvent::new(
+                    tick,
+                    EventType::CivicDilemmaOpened {
+                        dilemma: dilemma_id,
+                        deadline_tick: dilemma
+                            .deadline_ticks
+                            .map(|duration| tick.value().saturating_add(duration)),
+                    },
+                ));
+            }
+        }
+
+        let state = self
+            .world
+            .get_component::<CityRuntimeState>(&treasury_id)
+            .cloned()
+            .expect("validated city governance state");
+        let due = state
+            .opened_dilemmas
+            .iter()
+            .filter_map(|(dilemma_id, opened_tick)| {
+                let dilemma = city
+                    .dilemmas
+                    .iter()
+                    .find(|dilemma| dilemma.id == *dilemma_id)?;
+                let deadline = opened_tick.checked_add(dilemma.deadline_ticks?)?;
+                (tick.value() >= deadline).then(|| {
+                    (
+                        dilemma_id.clone(),
+                        dilemma
+                            .default_option
+                            .as_ref()
+                            .expect("validated default")
+                            .clone(),
+                    )
+                })
+            })
+            .collect::<Vec<_>>();
+        for (dilemma, option) in due {
+            events.push(self.resolve_civic_option(
+                &city,
+                treasury_id,
+                &dilemma,
+                &option,
+                false,
+                false,
+            )?);
+        }
+        Ok(events)
+    }
+
+    fn resolve_civic_option(
+        &mut self,
+        city: &CityConfig,
+        treasury_id: EntityId,
+        dilemma_id: &str,
+        option_id: &str,
+        charge_cost: bool,
+        player: bool,
+    ) -> Result<SimulationEvent, WorldForgeError> {
+        let dilemma = city
+            .dilemmas
+            .iter()
+            .find(|dilemma| dilemma.id == dilemma_id)
+            .ok_or_else(|| action_error(format!("civic dilemma '{dilemma_id}' does not exist")))?;
+        let option = dilemma
+            .options
+            .iter()
+            .find(|option| option.id == option_id)
+            .ok_or_else(|| {
+                action_error(format!(
+                    "civic option '{option_id}' does not exist for '{dilemma_id}'"
+                ))
+            })?;
+        let state = self
+            .world
+            .get_component::<CityRuntimeState>(&treasury_id)
+            .ok_or_else(|| action_error("city governance state is unavailable"))?;
+        if state.decisions.contains_key(dilemma_id)
+            || !state.opened_dilemmas.contains_key(dilemma_id)
+        {
+            return Err(action_error(format!(
+                "civic dilemma '{dilemma_id}' is not pending"
+            )));
+        }
+        if charge_cost {
+            spend_resources(&mut self.world, treasury_id, &option.cost)?;
+        }
+        if !option.grants.is_empty() {
+            let inventory = self
+                .world
+                .get_component_mut::<Inventory>(&treasury_id)
+                .expect("validated city treasury inventory");
+            for (resource, amount) in &option.grants {
+                inventory.add(resource, Fixed64::from_f64_lossy(*amount));
+            }
+        }
+        let state = self
+            .world
+            .get_component_mut::<CityRuntimeState>(&treasury_id)
+            .expect("validated city governance state");
+        for (faction, change) in &option.faction_support {
+            let support = state
+                .faction_support
+                .entry(faction.clone())
+                .or_insert(Fixed64::from_int(50));
+            *support = (*support + Fixed64::from_f64_lossy(*change))
+                .max(Fixed64::ZERO)
+                .min(Fixed64::from_int(100));
+        }
+        state.opened_dilemmas.remove(dilemma_id);
+        state
+            .decisions
+            .insert(dilemma_id.to_string(), option_id.to_string());
+        let event_type = if player {
+            EventType::PlayerCivicDecision {
+                dilemma: dilemma_id.to_string(),
+                option: option_id.to_string(),
+            }
+        } else {
+            EventType::CivicDecisionResolved {
+                dilemma: dilemma_id.to_string(),
+                option: option_id.to_string(),
+            }
+        };
+        Ok(SimulationEvent::new(self.world.current_tick(), event_type))
     }
 
     fn finalize(&mut self) -> Result<(), WorldForgeError> {
@@ -1254,6 +1553,75 @@ impl SimulationRuntime {
                 }
             })
             .collect();
+        let governance = CityGovernanceProgress {
+            factions: city
+                .factions
+                .iter()
+                .map(|faction| CivicFactionProgress {
+                    id: faction.id.clone(),
+                    name: faction.name.clone(),
+                    description: faction.description.clone(),
+                    support: state
+                        .faction_support
+                        .get(&faction.id)
+                        .copied()
+                        .unwrap_or(Fixed64::from_f64_lossy(faction.initial_support))
+                        .to_f64_lossy(),
+                })
+                .collect(),
+            pending_dilemmas: state
+                .opened_dilemmas
+                .iter()
+                .filter_map(|(dilemma_id, opened_tick)| {
+                    let dilemma = city
+                        .dilemmas
+                        .iter()
+                        .find(|dilemma| dilemma.id == *dilemma_id)?;
+                    Some(CivicDilemmaProgress {
+                        id: dilemma.id.clone(),
+                        title: dilemma.title.clone(),
+                        description: dilemma.description.clone(),
+                        opened_tick: *opened_tick,
+                        deadline_tick: dilemma
+                            .deadline_ticks
+                            .map(|duration| opened_tick.saturating_add(duration)),
+                        options: dilemma
+                            .options
+                            .iter()
+                            .map(|option| CivicOptionProgress {
+                                id: option.id.clone(),
+                                label: option.label.clone(),
+                                description: option.description.clone(),
+                                cost: option.cost.clone(),
+                                grants: option.grants.clone(),
+                                faction_support: option.faction_support.clone(),
+                                affordable: resources_available(inventory, &option.cost),
+                            })
+                            .collect(),
+                    })
+                })
+                .collect(),
+            decisions: state
+                .decisions
+                .iter()
+                .filter_map(|(dilemma_id, option_id)| {
+                    let dilemma = city
+                        .dilemmas
+                        .iter()
+                        .find(|dilemma| dilemma.id == *dilemma_id)?;
+                    let option = dilemma
+                        .options
+                        .iter()
+                        .find(|option| option.id == *option_id)?;
+                    Some(CivicDecisionProgress {
+                        dilemma: dilemma.id.clone(),
+                        title: dilemma.title.clone(),
+                        option: option.id.clone(),
+                        label: option.label.clone(),
+                    })
+                })
+                .collect(),
+        };
         Some(CityProgress {
             treasury: city.treasury.clone(),
             population,
@@ -1264,6 +1632,7 @@ impl SimulationRuntime {
             districts,
             buildings,
             technologies,
+            governance,
         })
     }
 
@@ -1372,8 +1741,10 @@ impl SimulationRuntime {
                 .expect("validated city treasury inventory");
             let current = inventory.get(&city.population_resource);
             let capacity = Fixed64::from_f64_lossy(stats.0 as f64);
-            let growth = Fixed64::from_f64_lossy(city.population_growth_per_tick)
-                .min((capacity - current).max(Fixed64::ZERO));
+            let growth = Fixed64::from_f64_lossy(
+                city.population_growth_per_tick * civic_population_growth_multiplier(&city, &state),
+            )
+            .min((capacity - current).max(Fixed64::ZERO));
             if growth > Fixed64::ZERO {
                 let can_grow = city.population_needs.iter().all(|(resource, per_person)| {
                     inventory.get(resource) >= Fixed64::from_f64_lossy(*per_person) * growth
@@ -1657,6 +2028,14 @@ fn city_output_multiplier(
             multiplier *= *value;
         }
     }
+    for option in chosen_civic_options(city, state) {
+        if let Some(value) = option.effects.building_multipliers.get(&building.id) {
+            multiplier *= *value;
+        }
+        if let Some(value) = option.effects.resource_multipliers.get(resource) {
+            multiplier *= *value;
+        }
+    }
     if let Some(tags) = district_tags.get(district_id) {
         for synergy in &building.synergies {
             if tags.get(&synergy.with_tag).copied().unwrap_or_default() > 0 {
@@ -1700,11 +2079,88 @@ fn city_stats(city: &CityConfig, state: &CityRuntimeState) -> (u64, u64, f64) {
         }
         wellbeing += technology.effects.wellbeing_bonus;
     }
+    for option in chosen_civic_options(city, state) {
+        if option.effects.housing_multiplier > 0.0 {
+            housing_multiplier *= option.effects.housing_multiplier;
+        }
+        if option.effects.jobs_multiplier > 0.0 {
+            jobs_multiplier *= option.effects.jobs_multiplier;
+        }
+        wellbeing += option.effects.wellbeing_bonus;
+    }
     (
         (housing as f64 * housing_multiplier).round().max(0.0) as u64,
         (jobs as f64 * jobs_multiplier).round().max(0.0) as u64,
         wellbeing,
     )
+}
+
+fn chosen_civic_options<'a>(
+    city: &'a CityConfig,
+    state: &CityRuntimeState,
+) -> Vec<&'a CivicOption> {
+    state
+        .decisions
+        .iter()
+        .filter_map(|(dilemma_id, option_id)| {
+            city.dilemmas
+                .iter()
+                .find(|dilemma| dilemma.id == *dilemma_id)?
+                .options
+                .iter()
+                .find(|option| option.id == *option_id)
+        })
+        .collect()
+}
+
+fn civic_population_growth_multiplier(city: &CityConfig, state: &CityRuntimeState) -> f64 {
+    chosen_civic_options(city, state)
+        .into_iter()
+        .filter_map(|option| {
+            (option.effects.population_growth_multiplier > 0.0)
+                .then_some(option.effects.population_growth_multiplier)
+        })
+        .fold(1.0, |total, multiplier| total * multiplier)
+        .clamp(0.1, 100.0)
+}
+
+fn civic_trigger_met(
+    _city: &CityConfig,
+    state: &CityRuntimeState,
+    inventory: &Inventory,
+    dilemma: &CivicDilemma,
+    tick: u64,
+) -> bool {
+    tick >= dilemma.trigger.tick
+        && dilemma
+            .trigger
+            .resource_below
+            .iter()
+            .all(|(resource, threshold)| {
+                inventory.get(resource) < Fixed64::from_f64_lossy(*threshold)
+            })
+        && dilemma
+            .trigger
+            .resource_above
+            .iter()
+            .all(|(resource, threshold)| {
+                inventory.get(resource) > Fixed64::from_f64_lossy(*threshold)
+            })
+        && dilemma
+            .trigger
+            .requires_technologies
+            .iter()
+            .all(|technology| state.unlocked_technologies.contains(technology))
+        && dilemma
+            .trigger
+            .requires_choices
+            .iter()
+            .all(|(required, option)| state.decisions.get(required) == Some(option))
+        && dilemma
+            .trigger
+            .excludes_choices
+            .iter()
+            .all(|(excluded, option)| state.decisions.get(excluded) != Some(option))
 }
 
 fn resources_available(inventory: &Inventory, costs: &BTreeMap<String, f64>) -> bool {
@@ -2020,5 +2476,79 @@ goods = 2.0
         };
 
         assert_eq!(play(), play());
+    }
+
+    #[test]
+    fn civic_choices_branch_city_rules_and_remain_deterministic() {
+        let play = || {
+            let mut runtime =
+                SimulationRuntime::load(&example("micro-city"), 314, Some(30)).unwrap();
+            let opened = runtime.step(5).unwrap();
+            assert_eq!(
+                opened.city.as_ref().unwrap().governance.pending_dilemmas[0].id,
+                "growth-charter"
+            );
+
+            let decided = runtime
+                .make_civic_decision("growth-charter", "civic-land-trust")
+                .unwrap();
+            let governance = &decided.city.as_ref().unwrap().governance;
+            assert!(governance.pending_dilemmas.is_empty());
+            assert_eq!(governance.decisions[0].option, "civic-land-trust");
+            assert_eq!(
+                governance
+                    .factions
+                    .iter()
+                    .find(|faction| faction.id == "commons-assembly")
+                    .unwrap()
+                    .support,
+                70.0
+            );
+
+            runtime
+                .construct_building("courtyard-homes", "civic-core")
+                .unwrap();
+            let branched = runtime.step(8).unwrap();
+            let city = branched.city.as_ref().unwrap();
+            assert_eq!(city.housing, 106);
+            assert!(city
+                .governance
+                .pending_dilemmas
+                .iter()
+                .any(|dilemma| dilemma.id == "commons-mandate"));
+            assert!(!city
+                .governance
+                .pending_dilemmas
+                .iter()
+                .any(|dilemma| dilemma.id == "automation-compact"));
+
+            runtime.step(100).unwrap();
+            let result = runtime.completed_result().unwrap();
+            assert!(result.event_type_counts.governance >= 3);
+            (
+                result.final_state_fingerprint,
+                result.proof.event_chain_root,
+            )
+        };
+
+        assert_eq!(play(), play());
+    }
+
+    #[test]
+    fn civic_deadlines_apply_the_declared_default() {
+        let mut runtime = SimulationRuntime::load(&example("micro-city"), 8, Some(20)).unwrap();
+        let progress = runtime.step(17).unwrap();
+        let governance = &progress.city.as_ref().unwrap().governance;
+        assert!(governance
+            .decisions
+            .iter()
+            .any(|decision| decision.dilemma == "growth-charter"
+                && decision.option == "open-development"));
+        runtime.step(100).unwrap();
+        assert!(runtime.retained_events().iter().any(|event| matches!(
+            &event.event_type,
+            EventType::CivicDecisionResolved { dilemma, option }
+                if dilemma == "growth-charter" && option == "open-development"
+        )));
     }
 }
