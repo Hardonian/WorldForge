@@ -648,69 +648,73 @@ impl SimulationRuntime {
         self.replay.as_ref()
     }
 
-    fn apply_scheduled_events(&mut self, tick: u64) -> Result<(), WorldForgeError> {
-        for scheduled in &self.scenario.events {
-            if scheduled.tick == tick {
-                match &scheduled.event_type {
-                    ScheduledEventType::CapacityChange { target, value } => {
-                        if let Some(&entity_id) = self.entity_id_map.get(target) {
-                            if let Some(rule) =
-                                self.world.get_component_mut::<ProductionRule>(&entity_id)
-                            {
-                                let old = rule.capacity;
-                                rule.capacity = Fixed64::from_f64_lossy(*value);
-                                let new = rule.capacity;
-                                let event = SimulationEvent::new(
-                                    Tick::new(tick),
-                                    EventType::CapacityChanged {
-                                        entity: target.clone(),
-                                        old_capacity: old,
-                                        new_capacity: new,
-                                    },
-                                );
-                                if let Some(ref mut writer) = self.replay_writer {
-                                    writer.record_event(event.clone());
-                                }
-                                self.events.push(event);
-                            } else {
-                                return Err(WorldForgeError::new(
-                                    ErrorCode::ScenarioInvalid,
-                                    format!(
-                                        "capacity_change target '{target}' has no production rule"
-                                    ),
-                                ));
-                            }
+    fn apply_scheduled_events(&mut self, tick: u64) -> Result<Vec<SimulationEvent>, WorldForgeError> {
+        let mut events = Vec::new();
+        if let Some(scheduled_events) = self.scheduled_events.get(&tick) {
+            for scheduled in scheduled_events {
+                if let ScheduledEventType::CapacityChange { target, value } = &scheduled.event_type
+                {
+                    if let Some(&entity_id) = self.entity_id_map.get(target) {
+                        if let Some(rule) =
+                            self.world.get_component_mut::<ProductionRule>(&entity_id)
+                        {
+                            let old = rule.capacity;
+                            rule.capacity = Fixed64::from_f64_lossy(*value);
+                            events.push(SimulationEvent::new(
+                                Tick::new(tick),
+                                EventType::CapacityChanged {
+                                    entity: target.clone(),
+                                    old_capacity: old,
+                                    new_capacity: rule.capacity,
+                                },
+                            ));
+                        } else {
+                            return Err(WorldForgeError::new(
+                                ErrorCode::ScenarioInvalid,
+                                format!(
+                                    "capacity_change target '{target}' has no production rule"
+                                ),
+                            ));
                         }
                     }
                 }
             }
         }
-        Ok(())
+        if !events.is_empty() {
+            self.state_fingerprint = self.world.fingerprint();
+        }
+        Ok(events)
     }
 
     fn total_inventory(&self, resource: &str) -> Fixed64 {
-        self.entity_ids
-            .iter()
-            .fold(Fixed64::ZERO, |total, (entity, _)| {
-                total
-                    + self
-                        .world
-                        .get_component::<Inventory>(entity)
-                        .map(|inventory| inventory.get(resource))
-                        .unwrap_or(Fixed64::ZERO)
-            })
+        self.resource_totals
+            .get(resource)
+            .copied()
+            .unwrap_or(Fixed64::ZERO)
+    }
+
+    fn refresh_resource_totals(&mut self) {
+        self.resource_totals.clear();
+        for resource in &self.tracked_resources {
+            self.resource_totals.insert(resource.clone(), Fixed64::ZERO);
+        }
+        for (_, entity_id) in &self.entity_ids {
+            if let Some(inventory) = self.world.get_component::<Inventory>(entity_id) {
+                for (resource, amount) in &inventory.resources {
+                    *self
+                        .resource_totals
+                        .entry(resource.clone())
+                        .or_insert(Fixed64::ZERO) += *amount;
+                }
+            }
+        }
     }
 
     fn resource_snapshot(&self, tick: u64) -> ResourceSnapshot {
         let levels = self
-            .tracked_resources
+            .resource_totals
             .iter()
-            .map(|resource| {
-                (
-                    resource.clone(),
-                    self.total_inventory(resource).to_f64_lossy(),
-                )
-            })
+            .map(|(resource, amount)| (resource.clone(), amount.to_f64_lossy()))
             .collect();
         ResourceSnapshot { tick, levels }
     }
