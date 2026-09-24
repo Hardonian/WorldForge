@@ -161,6 +161,10 @@
                         <span>Ticks</span>
                         <input type="number" id="ticks-input" value="1000" min="1" max="1000000" step="1" inputmode="numeric">
                     </label>
+                    <button id="btn-header-play-game" class="button button-accent launch-city-btn" type="button" title="Launch Visual City Building Simulation (SimCity / Age of Empires / Total War)">
+                        <svg viewBox="0 0 20 20" aria-hidden="true"><path d="m7 5 7 5-7 5V5Z"/></svg>
+                        <span>Play City Game</span>
+                    </button>
                     <button id="run-btn" class="button button-primary" type="submit">
                         <span class="button-icon" aria-hidden="true">
                             <svg class="play-icon" viewBox="0 0 20 20"><path d="m6.5 4 8 6-8 6V4Z"/></svg>
@@ -435,13 +439,21 @@
                             </div>
                             <div class="play-stage-actions">
                                 <div class="view-mode-toggle" role="group" aria-label="Visualization view mode">
-                                    <button type="button" class="view-toggle-btn active" id="btn-view-cg" title="Tactical CG Game View">
+                                    <button type="button" class="view-toggle-btn active" id="btn-view-city" title="Isometric City Builder View (SimCity / Age of Empires)">
+                                        <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 17V7l7-4 7 4v10H3Zm2-2h3v-4H5v4Zm5 0h5V9l-5-2.8L5 9v1h5v5Z"/></svg>
+                                        <span>City View</span>
+                                    </button>
+                                    <button type="button" class="view-toggle-btn" id="btn-view-realm" title="Grand Realm War Room & Geopolitical Atlas (Total War / Shogun)">
+                                        <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 3h12v3H4V3Zm2 5h8v2H6V8Zm-3 4h14v2H3v-2Zm3 4h8v2H6v-2Z"/></svg>
+                                        <span>Realm Atlas</span>
+                                    </button>
+                                    <button type="button" class="view-toggle-btn" id="btn-view-cg" title="Tactical Resource Flow (StarCraft RTS)">
                                         <svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="7"/><path d="M10 3v14M3 10h14"/></svg>
-                                        Tactical CG
+                                        <span>Tactical Flow</span>
                                     </button>
                                     <button type="button" class="view-toggle-btn" id="btn-view-schematic" title="Schematic Topology View">
                                         <svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="5" cy="5" r="3"/><circle cx="15" cy="15" r="3"/><path d="m7 7 6 6"/></svg>
-                                        Schematic
+                                        <span>Schematic</span>
                                     </button>
                                 </div>
                                 <div class="cg-toolbar" id="cg-toolbar">
@@ -469,8 +481,114 @@
                             </div>
                         </div>
                         <div class="play-network-wrap" id="play-network-container">
+                            <!-- 3rd World Farmer Hardship & Survival HUD -->
+                            <div class="city-hardship-hud" id="city-hardship-hud">
+                                <div class="hardship-gauges">
+                                    <div class="hardship-chip" id="hud-drought-chip" title="Drought Severity (3rd World Farmer: water scarcity directly cuts farm yields)">
+                                        <span class="hardship-icon">☀️</span>
+                                        <div class="hardship-meta">
+                                            <small>DROUGHT</small>
+                                            <strong id="hud-drought-val">Normal</strong>
+                                        </div>
+                                    </div>
+                                    <div class="hardship-chip" id="hud-famine-chip" title="Famine Risk (Food reserves vs population consumption)">
+                                        <span class="hardship-icon">🌾</span>
+                                        <div class="hardship-meta">
+                                            <small>FAMINE RISK</small>
+                                            <strong id="hud-famine-val">Low</strong>
+                                        </div>
+                                    </div>
+                                    <div class="hardship-chip threat" id="hud-raid-chip" title="Warlord Raider Incursion Countdown">
+                                        <span class="hardship-icon">⚔️</span>
+                                        <div class="hardship-meta">
+                                            <small>RAID THREAT</small>
+                                            <strong id="hud-raid-val">0%</strong>
+                                        </div>
+                                        <div class="threat-mini-bar"><span id="hud-threat-fill" style="width: 0%"></span></div>
+                                    </div>
+                                </div>
+                                <div class="hardship-tactical-actions">
+                                    <button type="button" class="posture-toggle-btn" id="btn-hud-posture" title="Toggle Defense Garrison: Standard vs Fortified (Protects against raiders)">
+                                        <span class="posture-shield-icon">🛡️</span>
+                                        <span class="posture-copy">
+                                            <small>DEFENSE POSTURE</small>
+                                            <strong id="hud-posture-label">Standard Garrison</strong>
+                                        </span>
+                                    </button>
+                                    <button type="button" class="war-room-hud-btn" id="btn-hud-war-room" title="Open Geopolitical War Room & Realm Atlas (Total War / Shogun)">
+                                        <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 3h12v3H4V3Zm2 5h8v2H6V8Zm-3 4h14v2H3v-2Zm3 4h8v2H6v-2Z"/></svg>
+                                        <span>War Room</span>
+                                    </button>
+                                </div>
+                            </div>
+
                             <canvas id="play-cg-canvas" role="img" aria-label="Tactical CG simulation game view with real-time animations"></canvas>
                             <svg id="play-network" class="hidden" viewBox="0 0 800 420" role="img" aria-label="Live entity and resource network"></svg>
+                            
+                            <!-- SimCity / Age of Empires RTS Quick-Build Dock -->
+                            <div class="city-build-dock" id="city-build-dock" aria-label="Quick Construction Toolbar">
+                                <div class="dock-header">
+                                    <span class="dock-title">🏗️ City Construction</span>
+                                    <span class="dock-hotkey-hint">Click a building, then click a district plot to place</span>
+                                </div>
+                                <div class="dock-cards-scroll">
+                                    <button type="button" class="dock-build-btn" data-building="vertical-farm" title="Vertical Farm: Hydroponic food production (+24 Food, +8 Jobs)">
+                                        <span class="dock-icon">🌾</span>
+                                        <span class="dock-info">
+                                            <strong>Vertical Farm</strong>
+                                            <small>20 Cr · 10 Mat</small>
+                                        </span>
+                                        <span class="dock-hotkey">[1]</span>
+                                    </button>
+                                    <button type="button" class="dock-build-btn" data-building="desal-plant" title="Desalination Plant: High-volume water extraction (+30 Water, +6 Jobs)">
+                                        <span class="dock-icon">💧</span>
+                                        <span class="dock-info">
+                                            <strong>Desal Plant</strong>
+                                            <small>25 Cr · 15 Mat</small>
+                                        </span>
+                                        <span class="dock-hotkey">[2]</span>
+                                    </button>
+                                    <button type="button" class="dock-build-btn" data-building="microgrid-hub" title="Microgrid Hub: Resilient solar/battery energy grid (+40 Power, +5 Jobs)">
+                                        <span class="dock-icon">⚡</span>
+                                        <span class="dock-info">
+                                            <strong>Microgrid Hub</strong>
+                                            <small>30 Cr · 20 Mat</small>
+                                        </span>
+                                        <span class="dock-hotkey">[3]</span>
+                                    </button>
+                                    <button type="button" class="dock-build-btn" data-building="civic-hall" title="Civic Hall: Heart of civic governance and wellbeing (+15 Wellbeing, +20 Housing)">
+                                        <span class="dock-icon">🏛️</span>
+                                        <span class="dock-info">
+                                            <strong>Civic Hall</strong>
+                                            <small>40 Cr · 25 Mat</small>
+                                        </span>
+                                        <span class="dock-hotkey">[4]</span>
+                                    </button>
+                                    <button type="button" class="dock-build-btn" data-building="maker-workshop" title="Maker Workshop: Advanced light manufacturing (+20 Goods, +12 Jobs)">
+                                        <span class="dock-icon">🏭</span>
+                                        <span class="dock-info">
+                                            <strong>Maker Workshop</strong>
+                                            <small>25 Cr · 15 Mat</small>
+                                        </span>
+                                        <span class="dock-hotkey">[5]</span>
+                                    </button>
+                                    <button type="button" class="dock-build-btn" data-building="solar-canopy" title="Solar Canopy: Rooftop photovoltaic energy (+15 Power, +3 Wellbeing)">
+                                        <span class="dock-icon">☀️</span>
+                                        <span class="dock-info">
+                                            <strong>Solar Canopy</strong>
+                                            <small>15 Cr · 10 Mat</small>
+                                        </span>
+                                        <span class="dock-hotkey">[6]</span>
+                                    </button>
+                                </div>
+                                <div class="dock-placement-status hidden" id="dock-placement-status">
+                                    <span class="placement-glow"></span>
+                                    <span id="placement-building-name">Placing: Vertical Farm</span>
+                                    <small>Click an empty district plot on the map to construct</small>
+                                    <button type="button" class="button button-quiet btn-cancel-place" id="btn-cancel-placement">Cancel</button>
+                                </div>
+                            </div>
+
                             <div class="cg-hud-card hidden" id="cg-hud-card" aria-hidden="true">
                                 <div class="cg-hud-header">
                                     <span class="cg-hud-badge" id="cg-hud-type">PRODUCER</span>
@@ -492,7 +610,7 @@
                                 <span><i class="legend-dot flow"></i> Flow conduits</span>
                                 <span><i class="legend-dot prod"></i> Production</span>
                                 <span><i class="legend-dot alert"></i> Shortage</span>
-                                <span class="cg-keyboard-hint" title="WASD / Arrows to Pan · +/- Zoom · Space Play/Pause · F Fit · 1-5 Speed">Controls: WASD · Space · F</span>
+                                <span class="cg-keyboard-hint" title="WASD / Arrows to Pan · +/- Zoom · Space Play/Pause · 1-6 Build · F Fit">Controls: WASD · 1-6 Build · Space</span>
                             </div>
                         </div>
                     </section>
@@ -760,6 +878,44 @@
             </header>
             <div class="dialog-body trophies-body">
                 <div class="trophies-grid" id="trophies-grid"></div>
+            </div>
+        </div>
+    </dialog>
+
+    <dialog class="tool-dialog war-room-dialog" id="war-room-dialog" aria-labelledby="war-room-title">
+        <div class="dialog-shell war-room-shell">
+            <header class="dialog-header war-room-header">
+                <div>
+                    <div class="panel-kicker">Geopolitics &amp; Realm Command</div>
+                    <h2 id="war-room-title">Grand Realm War Room</h2>
+                    <p>Command regional diplomacy, extract vassal tribute, fortify defenses against warlord raids, and forge defensive coalitions.</p>
+                </div>
+                <div class="war-room-header-actions">
+                    <button class="posture-toggle-btn" id="btn-war-room-posture" type="button">
+                        <span class="posture-shield-icon">🛡️</span>
+                        <span id="war-room-posture-text">Standard Garrison</span>
+                    </button>
+                    <button class="icon-button dialog-close" id="war-room-close" type="button" aria-label="Close War Room"><svg viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></svg></button>
+                </div>
+            </header>
+            <div class="dialog-body war-room-body">
+                <div class="war-room-top-bar">
+                    <div class="war-stat-chip">
+                        <span>Regional Posture</span>
+                        <strong id="war-stat-posture">Standard Garrison</strong>
+                    </div>
+                    <div class="war-stat-chip">
+                        <span>Desert Warlord Incursion</span>
+                        <strong id="war-stat-threat" style="color: var(--amber)">0% Incursion Risk</strong>
+                    </div>
+                    <div class="war-stat-chip">
+                        <span>Active Coalitions</span>
+                        <strong id="war-stat-coalition">Mercantile League (Defensive)</strong>
+                    </div>
+                </div>
+                <div class="realm-entities-grid" id="war-room-entities-grid">
+                    <!-- Populated dynamically via renderGeopolitics() -->
+                </div>
             </div>
         </div>
     </dialog>

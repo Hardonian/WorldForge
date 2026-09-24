@@ -1139,6 +1139,542 @@ button, input, select, a { -webkit-tap-highlight-color: transparent; }
     .builder-actions .button { width: 100%; }
 }
 
+/* =========================================================================
+   VISUAL CITY BUILDING GAME, 3RD WORLD FARMER HUD & REALM WAR ROOM
+   ========================================================================= */
+
+.launch-city-btn {
+    background: linear-gradient(135deg, #f59e0b, #d97706);
+    color: #fff;
+    font-weight: 700;
+    box-shadow: 0 0 16px rgba(245, 158, 11, 0.4);
+    border: 1px solid rgba(254, 240, 138, 0.3);
+    transition: all 0.2s var(--ease);
+}
+.launch-city-btn:hover {
+    transform: translateY(-1px) scale(1.02);
+    box-shadow: 0 0 24px rgba(245, 158, 11, 0.65);
+}
+
+/* 3rd World Farmer Hardship & Survival Top HUD */
+.city-hardship-hud {
+    position: absolute;
+    top: 12px;
+    left: 12px;
+    right: 12px;
+    z-index: 25;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 8px 14px;
+    background: rgba(8, 12, 20, 0.88);
+    backdrop-filter: blur(12px);
+    border: 1px solid rgba(163, 184, 214, 0.16);
+    border-radius: 999px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.45);
+    pointer-events: auto;
+}
+
+.hardship-gauges {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.hardship-chip {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 12px;
+    background: rgba(22, 30, 46, 0.7);
+    border: 1px solid rgba(163, 184, 214, 0.14);
+    border-radius: 999px;
+    font-size: 0.76rem;
+    transition: all 0.2s var(--ease);
+}
+.hardship-chip .hardship-icon {
+    font-size: 1rem;
+    line-height: 1;
+}
+.hardship-chip .hardship-meta {
+    display: flex;
+    flex-direction: column;
+    line-height: 1.15;
+}
+.hardship-chip .hardship-meta small {
+    font-size: 0.58rem;
+    font-weight: 700;
+    color: var(--text-muted);
+    letter-spacing: 0.05em;
+}
+.hardship-chip .hardship-meta strong {
+    font-size: 0.78rem;
+    color: var(--text);
+}
+
+.hardship-chip.threat {
+    border-color: rgba(251, 146, 60, 0.35);
+    background: rgba(36, 18, 10, 0.7);
+}
+.hardship-chip.threat.active-raid {
+    border-color: var(--red);
+    background: rgba(56, 12, 16, 0.85);
+    animation: pulseRaidBorder 1.2s infinite alternate;
+}
+@keyframes pulseRaidBorder {
+    from { box-shadow: 0 0 6px rgba(255, 111, 124, 0.3); }
+    to { box-shadow: 0 0 16px rgba(255, 111, 124, 0.8); }
+}
+
+.threat-mini-bar {
+    width: 36px;
+    height: 4px;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 2px;
+    overflow: hidden;
+}
+.threat-mini-bar span {
+    display: block;
+    height: 100%;
+    background: linear-gradient(90deg, #f59e0b, #ef4444);
+    transition: width 0.3s ease;
+}
+
+.hardship-tactical-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.posture-toggle-btn {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 5px 14px;
+    background: rgba(103, 169, 255, 0.12);
+    border: 1px solid rgba(103, 169, 255, 0.3);
+    border-radius: 999px;
+    color: var(--text);
+    cursor: pointer;
+    font-size: 0.76rem;
+    transition: all 0.2s var(--ease);
+}
+.posture-toggle-btn:hover {
+    background: rgba(103, 169, 255, 0.22);
+    border-color: var(--blue);
+    box-shadow: 0 0 12px rgba(103, 169, 255, 0.35);
+}
+.posture-toggle-btn.fortified {
+    background: rgba(66, 211, 234, 0.22);
+    border-color: var(--cyan);
+    box-shadow: 0 0 16px rgba(66, 211, 234, 0.4);
+}
+.posture-toggle-btn .posture-copy {
+    display: flex;
+    flex-direction: column;
+    text-align: left;
+    line-height: 1.15;
+}
+.posture-toggle-btn .posture-copy small {
+    font-size: 0.56rem;
+    font-weight: 700;
+    color: var(--blue);
+    letter-spacing: 0.05em;
+}
+.posture-toggle-btn .posture-copy strong {
+    font-size: 0.78rem;
+    color: #fff;
+}
+
+.war-room-hud-btn {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 14px;
+    background: linear-gradient(135deg, rgba(241, 185, 107, 0.18), rgba(217, 119, 6, 0.25));
+    border: 1px solid rgba(241, 185, 107, 0.4);
+    border-radius: 999px;
+    color: var(--amber);
+    font-weight: 600;
+    font-size: 0.78rem;
+    cursor: pointer;
+    transition: all 0.2s var(--ease);
+}
+.war-room-hud-btn svg {
+    width: 14px;
+    height: 14px;
+    fill: currentColor;
+}
+.war-room-hud-btn:hover {
+    background: linear-gradient(135deg, rgba(241, 185, 107, 0.3), rgba(217, 119, 6, 0.45));
+    border-color: var(--amber);
+    box-shadow: 0 0 14px rgba(241, 185, 107, 0.4);
+}
+
+/* SimCity / Age of Empires RTS Quick-Build Dock */
+.city-build-dock {
+    position: absolute;
+    bottom: 12px;
+    left: 12px;
+    right: 12px;
+    z-index: 25;
+    background: rgba(8, 12, 20, 0.92);
+    backdrop-filter: blur(14px);
+    border: 1px solid rgba(163, 184, 214, 0.18);
+    border-radius: var(--radius);
+    padding: 8px 12px;
+    box-shadow: 0 12px 36px rgba(0, 0, 0, 0.55);
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    pointer-events: auto;
+}
+
+.dock-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 4px;
+}
+.dock-title {
+    font-size: 0.72rem;
+    font-weight: 700;
+    color: var(--amber);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+}
+.dock-hotkey-hint {
+    font-size: 0.68rem;
+    color: var(--text-muted);
+}
+
+.dock-cards-scroll {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    overflow-x: auto;
+    padding-bottom: 2px;
+}
+
+.dock-build-btn {
+    flex: 1;
+    min-width: 120px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px;
+    background: rgba(20, 27, 40, 0.85);
+    border: 1px solid rgba(163, 184, 214, 0.14);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    text-align: left;
+    position: relative;
+    transition: all 0.2s var(--ease);
+}
+.dock-build-btn:hover {
+    background: rgba(30, 42, 64, 0.9);
+    border-color: var(--blue);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 16px rgba(103, 169, 255, 0.25);
+}
+.dock-build-btn.active {
+    background: rgba(35, 52, 80, 0.95);
+    border-color: var(--cyan);
+    box-shadow: 0 0 16px rgba(66, 211, 234, 0.45);
+}
+.dock-build-btn .dock-icon {
+    font-size: 1.3rem;
+    line-height: 1;
+}
+.dock-build-btn .dock-info {
+    display: flex;
+    flex-direction: column;
+    line-height: 1.15;
+}
+.dock-build-btn .dock-info strong {
+    font-size: 0.76rem;
+    color: var(--text);
+    white-space: nowrap;
+}
+.dock-build-btn .dock-info small {
+    font-size: 0.62rem;
+    color: var(--text-soft);
+    white-space: nowrap;
+}
+.dock-build-btn .dock-hotkey {
+    position: absolute;
+    top: 3px;
+    right: 5px;
+    font-size: 0.58rem;
+    font-family: ui-monospace, monospace;
+    color: var(--text-muted);
+}
+
+.dock-placement-status {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 6px 14px;
+    background: rgba(14, 32, 54, 0.9);
+    border: 1px solid var(--cyan);
+    border-radius: var(--radius-sm);
+    font-size: 0.8rem;
+    color: #fff;
+    animation: fadeIn 0.2s ease;
+}
+.dock-placement-status .placement-glow {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--cyan);
+    box-shadow: 0 0 10px var(--cyan);
+    animation: pulseDot 1s infinite alternate;
+}
+@keyframes pulseDot {
+    from { opacity: 0.4; transform: scale(0.8); }
+    to { opacity: 1; transform: scale(1.3); }
+}
+.dock-placement-status small {
+    color: var(--text-soft);
+    margin-right: auto;
+}
+.dock-placement-status .btn-cancel-place {
+    padding: 2px 10px;
+    font-size: 0.72rem;
+}
+
+/* Grand Realm War Room Dialog */
+.war-room-dialog {
+    width: min(1080px, 95vw);
+    max-height: 88vh;
+    border-radius: var(--radius-lg);
+    background: var(--bg-deep);
+    border: 1px solid rgba(241, 185, 107, 0.3);
+    box-shadow: 0 25px 80px rgba(0, 0, 0, 0.75);
+}
+.war-room-shell {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    max-height: 85vh;
+}
+.war-room-header {
+    border-bottom: 1px solid rgba(241, 185, 107, 0.2);
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+}
+.war-room-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+.war-room-body {
+    padding: 18px 24px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+}
+.war-room-top-bar {
+    display: flex;
+    gap: 14px;
+    flex-wrap: wrap;
+}
+.war-stat-chip {
+    flex: 1;
+    min-width: 180px;
+    padding: 10px 14px;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-sm);
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+.war-stat-chip span {
+    font-size: 0.68rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+.war-stat-chip strong {
+    font-size: 0.92rem;
+    color: var(--text);
+}
+
+.realm-entities-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 16px;
+}
+
+.realm-card {
+    background: var(--surface-solid);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    position: relative;
+    overflow: hidden;
+    transition: all 0.2s var(--ease);
+}
+.realm-card:hover {
+    border-color: rgba(163, 184, 214, 0.35);
+    transform: translateY(-2px);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+}
+.realm-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 4px;
+    background: var(--realm-accent, var(--blue));
+}
+.realm-card.fiefdom { --realm-accent: #f1b96b; }
+.realm-card.vassal { --realm-accent: #46d29a; }
+.realm-card.hegemon { --realm-accent: #ff6f7c; }
+.realm-card.coalition { --realm-accent: #67a9ff; }
+.realm-card.insurgency { --realm-accent: #fb923c; }
+
+.realm-card-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 10px;
+}
+.realm-card-identity {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+.realm-card-title {
+    font-size: 1.05rem;
+    color: var(--text);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.realm-card-ruler {
+    font-size: 0.74rem;
+    color: var(--text-soft);
+}
+.realm-crest-icon {
+    font-size: 1.5rem;
+}
+.realm-type-badge {
+    padding: 3px 8px;
+    border-radius: 999px;
+    font-size: 0.65rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    background: rgba(255, 255, 255, 0.08);
+    color: var(--realm-accent);
+    border: 1px solid currentColor;
+}
+
+.realm-metrics-row {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+    padding: 8px 10px;
+    background: rgba(0, 0, 0, 0.25);
+    border-radius: var(--radius-sm);
+    font-size: 0.72rem;
+}
+.realm-metric {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+.realm-metric span {
+    font-size: 0.6rem;
+    color: var(--text-muted);
+}
+.realm-metric strong {
+    font-size: 0.8rem;
+    color: var(--text);
+}
+
+.realm-loyalty-wrap {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+.realm-loyalty-head {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.7rem;
+    color: var(--text-soft);
+}
+.realm-loyalty-bar {
+    width: 100%;
+    height: 6px;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 3px;
+    overflow: hidden;
+}
+.realm-loyalty-fill {
+    height: 100%;
+    background: var(--realm-accent);
+    transition: width 0.3s ease;
+}
+
+.realm-tribute-info {
+    font-size: 0.72rem;
+    color: var(--text-soft);
+    background: rgba(70, 210, 154, 0.08);
+    border: 1px solid rgba(70, 210, 154, 0.2);
+    border-radius: var(--radius-sm);
+    padding: 6px 10px;
+}
+
+.realm-actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-top: auto;
+}
+.realm-btn {
+    flex: 1;
+    min-width: 120px;
+    padding: 7px 12px;
+    font-size: 0.74rem;
+    font-weight: 600;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    border: 1px solid var(--line);
+    background: var(--surface-raised);
+    color: var(--text);
+    transition: all 0.2s var(--ease);
+}
+.realm-btn:hover:not(:disabled) {
+    background: var(--surface-hover);
+    border-color: var(--realm-accent);
+    transform: translateY(-1px);
+}
+.realm-btn.tribute-btn {
+    background: rgba(70, 210, 154, 0.15);
+    border-color: rgba(70, 210, 154, 0.4);
+    color: var(--green);
+}
+.realm-btn.strike-btn {
+    background: rgba(255, 111, 124, 0.15);
+    border-color: rgba(255, 111, 124, 0.4);
+    color: var(--red);
+}
+.realm-btn:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+
 @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
 }

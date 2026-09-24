@@ -29,6 +29,12 @@ pub struct CityConfig {
     pub dilemmas: Vec<CivicDilemma>,
     #[serde(default)]
     pub political_entities: Vec<PoliticalEntityDefinition>,
+    #[serde(default)]
+    pub corporations: Vec<CorporationDefinition>,
+    #[serde(default)]
+    pub cyber_agents: Vec<CyberAgentDefinition>,
+    #[serde(default)]
+    pub crypto_assets: Vec<CryptoAssetDefinition>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -221,6 +227,108 @@ pub struct PoliticalEntityDefinition {
     pub tribute: BTreeMap<String, f64>,
     #[serde(default)]
     pub traits: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CorporationDefinition {
+    pub id: String,
+    pub name: String,
+    #[serde(default)]
+    pub description: String,
+    #[serde(default = "default_corporate_sector")]
+    pub sector: String,
+    #[serde(default = "default_corporate_security")]
+    pub security: f64,
+    #[serde(default = "default_corporate_influence")]
+    pub influence: f64,
+    #[serde(default)]
+    pub secrets: Vec<TradeSecretDefinition>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TradeSecretDefinition {
+    pub id: String,
+    pub name: String,
+    #[serde(default)]
+    pub description: String,
+    #[serde(default = "default_secret_difficulty")]
+    pub difficulty: f64,
+    #[serde(default = "default_secret_value")]
+    pub research_value: f64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CyberAgentDefinition {
+    pub id: String,
+    pub name: String,
+    #[serde(default)]
+    pub description: String,
+    #[serde(default = "default_agent_rating")]
+    pub skill: f64,
+    #[serde(default = "default_agent_rating")]
+    pub stealth: f64,
+    #[serde(default = "default_agent_loyalty")]
+    pub loyalty: f64,
+    #[serde(default = "default_agent_containment")]
+    pub containment: f64,
+    #[serde(default = "default_agent_status")]
+    pub initial_status: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CryptoAssetDefinition {
+    pub id: String,
+    pub name: String,
+    pub symbol: String,
+    pub initial_price: f64,
+    #[serde(default = "default_crypto_volatility")]
+    pub volatility: f64,
+    #[serde(default = "default_crypto_liquidity")]
+    pub liquidity: f64,
+}
+
+fn default_corporate_sector() -> String {
+    "technology".to_string()
+}
+
+const fn default_corporate_security() -> f64 {
+    50.0
+}
+
+const fn default_corporate_influence() -> f64 {
+    50.0
+}
+
+const fn default_secret_difficulty() -> f64 {
+    50.0
+}
+
+const fn default_secret_value() -> f64 {
+    40.0
+}
+
+const fn default_agent_rating() -> f64 {
+    50.0
+}
+
+const fn default_agent_loyalty() -> f64 {
+    70.0
+}
+
+const fn default_agent_containment() -> f64 {
+    70.0
+}
+
+fn default_agent_status() -> String {
+    "ready".to_string()
+}
+
+const fn default_crypto_volatility() -> f64 {
+    0.12
+}
+
+const fn default_crypto_liquidity() -> f64 {
+    1_000.0
 }
 
 fn default_power_structure() -> String {
@@ -591,8 +699,96 @@ impl CityConfig {
             }
         }
 
+        let mut corporation_ids = BTreeSet::new();
+        for corporation in &self.corporations {
+            validate_id(&corporation.id, "corporation id")?;
+            if corporation.name.trim().is_empty()
+                || corporation.sector.trim().is_empty()
+                || !valid_percent(corporation.security)
+                || !valid_percent(corporation.influence)
+            {
+                return Err(city_error(format!(
+                    "corporation '{}' needs a name, sector, security, and influence between 0 and 100",
+                    corporation.id
+                )));
+            }
+            if !corporation_ids.insert(corporation.id.as_str()) {
+                return Err(city_error(format!(
+                    "duplicate corporation '{}'",
+                    corporation.id
+                )));
+            }
+            let mut secret_ids = BTreeSet::new();
+            if corporation.secrets.is_empty() {
+                return Err(city_error(format!(
+                    "corporation '{}' must define at least one trade secret",
+                    corporation.id
+                )));
+            }
+            for secret in &corporation.secrets {
+                validate_id(&secret.id, "trade secret id")?;
+                if secret.name.trim().is_empty()
+                    || !valid_percent(secret.difficulty)
+                    || !secret.research_value.is_finite()
+                    || secret.research_value <= 0.0
+                    || !secret_ids.insert(secret.id.as_str())
+                {
+                    return Err(city_error(format!(
+                        "corporation '{}' has an invalid trade secret '{}'",
+                        corporation.id, secret.id
+                    )));
+                }
+            }
+        }
+
+        let mut agent_ids = BTreeSet::new();
+        for agent in &self.cyber_agents {
+            validate_id(&agent.id, "cyber agent id")?;
+            if agent.name.trim().is_empty()
+                || !valid_percent(agent.skill)
+                || !valid_percent(agent.stealth)
+                || !valid_percent(agent.loyalty)
+                || !valid_percent(agent.containment)
+                || !matches!(
+                    agent.initial_status.as_str(),
+                    "ready" | "contained" | "compromised" | "rogue"
+                )
+                || !agent_ids.insert(agent.id.as_str())
+            {
+                return Err(city_error(format!(
+                    "cyber agent '{}' has invalid ratings, status, or duplicate id",
+                    agent.id
+                )));
+            }
+        }
+
+        let mut asset_ids = BTreeSet::new();
+        for asset in &self.crypto_assets {
+            validate_id(&asset.id, "crypto asset id")?;
+            if asset.name.trim().is_empty()
+                || asset.symbol.trim().is_empty()
+                || asset.symbol.len() > 12
+                || !asset.initial_price.is_finite()
+                || asset.initial_price <= 0.0
+                || !asset.volatility.is_finite()
+                || !(0.0..=1.0).contains(&asset.volatility)
+                || !asset.liquidity.is_finite()
+                || asset.liquidity <= 0.0
+                || !asset_ids.insert(asset.id.as_str())
+            {
+                return Err(city_error(format!(
+                    "crypto asset '{}' has invalid price, volatility, liquidity, symbol, or duplicate id",
+                    asset.id
+                )));
+            }
+        }
+
         Ok(())
     }
+}
+
+fn valid_percent(value: f64) -> bool {
+    value.is_finite() && (0.0..=100.0).contains(&value)
 }
 
 fn validate_civic_effects(

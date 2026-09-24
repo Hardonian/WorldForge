@@ -89,6 +89,46 @@ pub enum EventType {
         origin: String,
         count: f64,
     },
+    CovertOperationResolved {
+        operation: String,
+        target: String,
+        agent: String,
+        success: bool,
+        detected: bool,
+    },
+    PlayerIntrigueAction {
+        action: String,
+        target: String,
+        agent: Option<String>,
+        option: Option<String>,
+    },
+    TradeSecretAcquired {
+        corporation: String,
+        secret: String,
+        research_value: f64,
+    },
+    CyberAgentStatusChanged {
+        agent: String,
+        from: String,
+        to: String,
+    },
+    RogueAgentIncident {
+        agent: String,
+        resource: String,
+        damage: f64,
+    },
+    CryptoMarketMoved {
+        asset: String,
+        old_price: Fixed64,
+        new_price: Fixed64,
+        cause: String,
+    },
+    CryptoTradeExecuted {
+        asset: String,
+        side: String,
+        units: Fixed64,
+        price: Fixed64,
+    },
 }
 
 /// A simulation event with its tick and type.
@@ -211,6 +251,58 @@ impl SimulationEvent {
             EventType::RefugeeWaveArrived { origin, count } => {
                 format!("{count} refugees arrived from '{origin}' seeking sanctuary")
             }
+            EventType::CovertOperationResolved {
+                operation,
+                target,
+                agent,
+                success,
+                detected,
+            } => format!(
+                "covert operation {operation} by {agent} against {target}: {}{}",
+                if *success { "success" } else { "failed" },
+                if *detected { " (attributed)" } else { "" }
+            ),
+            EventType::PlayerIntrigueAction {
+                action,
+                target,
+                agent,
+                option,
+            } => format!(
+                "intrigue command: {action} → {target}{}{}",
+                agent
+                    .as_ref()
+                    .map_or_else(String::new, |agent| format!(" via {agent}")),
+                option
+                    .as_ref()
+                    .map_or_else(String::new, |option| format!(" ({option})"))
+            ),
+            EventType::TradeSecretAcquired {
+                corporation,
+                secret,
+                research_value,
+            } => format!(
+                "acquired {corporation} trade secret '{secret}' (+{research_value} research)"
+            ),
+            EventType::CyberAgentStatusChanged { agent, from, to } => {
+                format!("cyber agent {agent}: {from} → {to}")
+            }
+            EventType::RogueAgentIncident {
+                agent,
+                resource,
+                damage,
+            } => format!("rogue agent {agent} siphoned {damage} {resource}"),
+            EventType::CryptoMarketMoved {
+                asset,
+                old_price,
+                new_price,
+                cause,
+            } => format!("{asset} market: {old_price} → {new_price} ({cause})"),
+            EventType::CryptoTradeExecuted {
+                asset,
+                side,
+                units,
+                price,
+            } => format!("crypto {side}: {units} {asset} at {price}"),
         }
     }
 }

@@ -11,7 +11,7 @@ use std::path::Path;
 
 use worldforge_core::error::{ErrorCode, WorldForgeError};
 use worldforge_core::hash::Fingerprint;
-use worldforge_core::{EntityId, Fixed64, Tick};
+use worldforge_core::{DeterministicRng, EntityId, Fixed64, Tick};
 use worldforge_economy::{run_production, run_transfers, update_prices};
 use worldforge_ecs::SimulationWorld;
 use worldforge_proof::RunProof;
@@ -76,6 +76,7 @@ pub struct RunEventCounts {
     pub research: usize,
     pub governance: usize,
     pub geopolitics: usize,
+    pub intrigue: usize,
 }
 
 impl RunEventCounts {
@@ -99,6 +100,13 @@ impl RunEventCounts {
             | EventType::TributeCollected { .. }
             | EventType::WarlordIncursion { .. }
             | EventType::RefugeeWaveArrived { .. } => self.geopolitics += 1,
+            EventType::CovertOperationResolved { .. }
+            | EventType::PlayerIntrigueAction { .. }
+            | EventType::TradeSecretAcquired { .. }
+            | EventType::CyberAgentStatusChanged { .. }
+            | EventType::RogueAgentIncident { .. }
+            | EventType::CryptoMarketMoved { .. }
+            | EventType::CryptoTradeExecuted { .. } => self.intrigue += 1,
         }
     }
 }
@@ -194,6 +202,67 @@ pub struct CityProgress {
     pub governance: CityGovernanceProgress,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub geopolitics: Option<CityGeopoliticsProgress>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub intrigue: Option<CityIntrigueProgress>,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CityIntrigueProgress {
+    pub heat: f64,
+    pub corporations: Vec<CorporationProgress>,
+    pub agents: Vec<CyberAgentProgress>,
+    pub markets: Vec<CryptoMarketProgress>,
+    pub stolen_secrets: Vec<StolenSecretProgress>,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CorporationProgress {
+    pub id: String,
+    pub name: String,
+    pub description: String,
+    pub sector: String,
+    pub security: f64,
+    pub influence: f64,
+    pub exposure: f64,
+    pub remaining_secrets: usize,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CyberAgentProgress {
+    pub id: String,
+    pub name: String,
+    pub description: String,
+    pub skill: f64,
+    pub stealth: f64,
+    pub loyalty: f64,
+    pub containment: f64,
+    pub status: String,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CryptoMarketProgress {
+    pub id: String,
+    pub name: String,
+    pub symbol: String,
+    pub price: f64,
+    pub initial_price: f64,
+    pub change_percent: f64,
+    pub volatility: f64,
+    pub holdings: f64,
+    pub position_value: f64,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StolenSecretProgress {
+    pub corporation: String,
+    pub secret: String,
+    pub name: String,
+    pub research_value: f64,
 }
 
 #[derive(Debug, Clone, serde::Serialize)]
@@ -340,6 +409,24 @@ struct CityRuntimeState {
     last_tribute_tick: BTreeMap<String, u64>,
     #[serde(default)]
     raid_threat_counter: Fixed64,
+    #[serde(default)]
+    intrigue_heat: Fixed64,
+    #[serde(default)]
+    corporation_security: BTreeMap<String, Fixed64>,
+    #[serde(default)]
+    corporation_exposure: BTreeMap<String, Fixed64>,
+    #[serde(default)]
+    stolen_secrets: BTreeSet<String>,
+    #[serde(default)]
+    agent_status: BTreeMap<String, String>,
+    #[serde(default)]
+    agent_loyalty: BTreeMap<String, Fixed64>,
+    #[serde(default)]
+    crypto_prices: BTreeMap<String, Fixed64>,
+    #[serde(default)]
+    crypto_holdings: BTreeMap<String, Fixed64>,
+    #[serde(default)]
+    intrigue_nonce: u64,
 }
 
 impl worldforge_ecs::Component for CityRuntimeState {
@@ -570,6 +657,36 @@ impl SimulationRuntime {
                         )
                     })
                     .collect(),
+                corporation_security: city
+                    .corporations
+                    .iter()
+                    .map(|corporation| {
+                        (
+                            corporation.id.clone(),
+                            Fixed64::from_f64_lossy(corporation.security),
+                        )
+                    })
+                    .collect(),
+                agent_status: city
+                    .cyber_agents
+                    .iter()
+                    .map(|agent| (agent.id.clone(), agent.initial_status.clone()))
+                    .collect(),
+                agent_loyalty: city
+                    .cyber_agents
+                    .iter()
+                    .map(|agent| (agent.id.clone(), Fixed64::from_f64_lossy(agent.loyalty)))
+                    .collect(),
+                crypto_prices: city
+                    .crypto_assets
+                    .iter()
+                    .map(|asset| {
+                        (
+                            asset.id.clone(),
+                            Fixed64::from_f64_lossy(asset.initial_price),
+                        )
+                    })
+                    .collect(),
                 ..CityRuntimeState::default()
             };
             if let Some(inventory) = ecs_world.get_component::<Inventory>(&treasury_id) {
@@ -617,6 +734,11 @@ impl SimulationRuntime {
                     for resource in option.cost.keys().chain(option.grants.keys()) {
                         track(resource);
                     }
+                }
+            }
+            if !city.corporations.is_empty() || !city.crypto_assets.is_empty() {
+                for resource in ["credits".to_string(), "research".to_string()] {
+                    track(&resource);
                 }
             }
         }
@@ -770,6 +892,7 @@ impl SimulationRuntime {
             run_production(&mut self.world, &self.entity_ids, tick, &mut tick_events);
             tick_events.extend(self.run_city_economy(tick)?);
             tick_events.extend(self.run_city_geopolitics(tick)?);
+            tick_events.extend(self.run_city_intrigue(tick)?);
             run_transfers(
                 &mut self.world,
                 &self.supply_links,
@@ -1317,6 +1440,421 @@ impl SimulationRuntime {
         self.refresh_resource_totals(self.world.current_tick().value());
         self.state_fingerprint = self.world.fingerprint();
         Ok(self.progress_with_events(vec![event]))
+    }
+
+    /// Execute a deterministic corporate-intrigue, cyber-defense, or crypto-market action.
+    /// These mechanics are deliberately abstract game systems: outcome odds and consequences
+    /// are authored values, never real intrusion techniques.
+    pub fn execute_intrigue_action(
+        &mut self,
+        action: &str,
+        target: &str,
+        agent_id: Option<&str>,
+        option: Option<&str>,
+    ) -> Result<RunProgress, WorldForgeError> {
+        self.ensure_player_action_allowed()?;
+        let city = self
+            .city_config
+            .clone()
+            .ok_or_else(|| action_error("this world has no intrigue configuration"))?;
+        let treasury_id = self
+            .city_treasury_id
+            .ok_or_else(|| action_error("city treasury is unavailable"))?;
+        let tick = self.world.current_tick();
+        let nonce = {
+            let state = self
+                .world
+                .get_component_mut::<CityRuntimeState>(&treasury_id)
+                .expect("validated city state");
+            let nonce = state.intrigue_nonce;
+            state.intrigue_nonce = state.intrigue_nonce.saturating_add(1);
+            nonce
+        };
+        let mut rng = DeterministicRng::new(
+            self.scenario.seed,
+            &format!("intrigue/{}/{}/{}/{nonce}", tick.value(), action, target),
+        );
+        let mut events = Vec::new();
+
+        match action {
+            "infiltrate" => {
+                let agent_id =
+                    agent_id.ok_or_else(|| action_error("infiltration needs an agent"))?;
+                let agent = city
+                    .cyber_agents
+                    .iter()
+                    .find(|agent| agent.id == agent_id)
+                    .ok_or_else(|| action_error(format!("cyber agent '{agent_id}' not found")))?;
+                let corporation = city
+                    .corporations
+                    .iter()
+                    .find(|corporation| corporation.id == target)
+                    .ok_or_else(|| action_error(format!("corporation '{target}' not found")))?;
+                let state = self
+                    .world
+                    .get_component::<CityRuntimeState>(&treasury_id)
+                    .expect("validated city state");
+                let status = state
+                    .agent_status
+                    .get(agent_id)
+                    .map(String::as_str)
+                    .unwrap_or(agent.initial_status.as_str());
+                if status != "ready" {
+                    return Err(action_error(format!(
+                        "agent '{agent_id}' is {status}, not ready"
+                    )));
+                }
+                let secret = if let Some(secret_id) = option {
+                    corporation
+                        .secrets
+                        .iter()
+                        .find(|secret| secret.id == secret_id)
+                } else {
+                    corporation.secrets.iter().find(|secret| {
+                        !state
+                            .stolen_secrets
+                            .contains(&format!("{}/{}", corporation.id, secret.id))
+                    })
+                }
+                .ok_or_else(|| action_error("that corporation has no available trade secret"))?
+                .clone();
+                let secret_key = format!("{}/{}", corporation.id, secret.id);
+                if state.stolen_secrets.contains(&secret_key) {
+                    return Err(action_error("that trade secret was already acquired"));
+                }
+                let security = state
+                    .corporation_security
+                    .get(&corporation.id)
+                    .copied()
+                    .unwrap_or(Fixed64::from_f64_lossy(corporation.security))
+                    .to_f64_lossy();
+                let operation_cost = BTreeMap::from([("credits".to_string(), 90.0)]);
+                spend_resources(&mut self.world, treasury_id, &operation_cost)?;
+                let probability = ((agent.skill * 0.55 + agent.stealth * 0.35 + 25.0
+                    - security * 0.45
+                    - secret.difficulty * 0.25)
+                    / 100.0)
+                    .clamp(0.08, 0.92);
+                let success = rng.chance(Fixed64::from_f64_lossy(probability));
+                let detected_probability =
+                    ((security + secret.difficulty - agent.stealth) / 160.0).clamp(0.05, 0.9);
+                let detected = rng.chance(Fixed64::from_f64_lossy(detected_probability));
+                events.push(SimulationEvent::new(
+                    tick,
+                    EventType::CovertOperationResolved {
+                        operation: action.to_string(),
+                        target: target.to_string(),
+                        agent: agent_id.to_string(),
+                        success,
+                        detected,
+                    },
+                ));
+                {
+                    let state = self
+                        .world
+                        .get_component_mut::<CityRuntimeState>(&treasury_id)
+                        .expect("validated city state");
+                    let exposure = state
+                        .corporation_exposure
+                        .entry(target.to_string())
+                        .or_insert(Fixed64::ZERO);
+                    *exposure = (*exposure + Fixed64::from_int(if detected { 24 } else { 6 }))
+                        .min(Fixed64::from_int(100));
+                    state.intrigue_heat = (state.intrigue_heat
+                        + Fixed64::from_int(if detected { 18 } else { 4 }))
+                    .min(Fixed64::from_int(100));
+                    if success {
+                        state.stolen_secrets.insert(secret_key);
+                        let security = state
+                            .corporation_security
+                            .entry(target.to_string())
+                            .or_insert(Fixed64::from_f64_lossy(corporation.security));
+                        *security = (*security - Fixed64::from_int(5)).max(Fixed64::ZERO);
+                    }
+                    if detected && rng.chance(Fixed64::from_ratio(1, 3)) {
+                        let status = state
+                            .agent_status
+                            .entry(agent_id.to_string())
+                            .or_insert_with(|| agent.initial_status.clone());
+                        let previous = status.clone();
+                        *status = if rng.chance(Fixed64::from_ratio(1, 4)) {
+                            "rogue".to_string()
+                        } else {
+                            "compromised".to_string()
+                        };
+                        events.push(SimulationEvent::new(
+                            tick,
+                            EventType::CyberAgentStatusChanged {
+                                agent: agent_id.to_string(),
+                                from: previous,
+                                to: status.clone(),
+                            },
+                        ));
+                    }
+                }
+                if success {
+                    self.world
+                        .get_component_mut::<Inventory>(&treasury_id)
+                        .expect("validated city inventory")
+                        .add("research", Fixed64::from_f64_lossy(secret.research_value));
+                    events.push(SimulationEvent::new(
+                        tick,
+                        EventType::TradeSecretAcquired {
+                            corporation: target.to_string(),
+                            secret: secret.id,
+                            research_value: secret.research_value,
+                        },
+                    ));
+                }
+            }
+            "deploy" => {
+                let agent = city
+                    .cyber_agents
+                    .iter()
+                    .find(|agent| agent.id == target)
+                    .ok_or_else(|| action_error(format!("cyber agent '{target}' not found")))?;
+                let cost = BTreeMap::from([("research".to_string(), 20.0)]);
+                spend_resources(&mut self.world, treasury_id, &cost)?;
+                let state = self
+                    .world
+                    .get_component_mut::<CityRuntimeState>(&treasury_id)
+                    .expect("validated city state");
+                let status = state
+                    .agent_status
+                    .entry(target.to_string())
+                    .or_insert_with(|| agent.initial_status.clone());
+                if status != "contained" && status != "compromised" {
+                    return Err(action_error(
+                        "only contained or compromised agents can be deployed",
+                    ));
+                }
+                let previous = status.clone();
+                *status = "ready".to_string();
+                events.push(SimulationEvent::new(
+                    tick,
+                    EventType::CyberAgentStatusChanged {
+                        agent: target.to_string(),
+                        from: previous,
+                        to: status.clone(),
+                    },
+                ));
+            }
+            "contain" => {
+                let agent = city
+                    .cyber_agents
+                    .iter()
+                    .find(|agent| agent.id == target)
+                    .ok_or_else(|| action_error(format!("cyber agent '{target}' not found")))?;
+                let cost = BTreeMap::from([("credits".to_string(), 120.0)]);
+                spend_resources(&mut self.world, treasury_id, &cost)?;
+                let state = self
+                    .world
+                    .get_component_mut::<CityRuntimeState>(&treasury_id)
+                    .expect("validated city state");
+                let status = state
+                    .agent_status
+                    .entry(target.to_string())
+                    .or_insert_with(|| agent.initial_status.clone());
+                if status != "rogue" && status != "compromised" {
+                    return Err(action_error(
+                        "only rogue or compromised agents need containment",
+                    ));
+                }
+                let previous = status.clone();
+                let probability =
+                    ((agent.containment + 110.0 - agent.skill) / 140.0).clamp(0.15, 0.95);
+                let success = rng.chance(Fixed64::from_f64_lossy(probability));
+                if success {
+                    *status = "contained".to_string();
+                    state.intrigue_heat =
+                        (state.intrigue_heat - Fixed64::from_int(15)).max(Fixed64::ZERO);
+                }
+                events.push(SimulationEvent::new(
+                    tick,
+                    EventType::CovertOperationResolved {
+                        operation: action.to_string(),
+                        target: target.to_string(),
+                        agent: "counter-intelligence".to_string(),
+                        success,
+                        detected: false,
+                    },
+                ));
+                if success {
+                    events.push(SimulationEvent::new(
+                        tick,
+                        EventType::CyberAgentStatusChanged {
+                            agent: target.to_string(),
+                            from: previous,
+                            to: status.clone(),
+                        },
+                    ));
+                }
+            }
+            "counterintel" => {
+                let corporation = city
+                    .corporations
+                    .iter()
+                    .find(|corporation| corporation.id == target)
+                    .ok_or_else(|| action_error(format!("corporation '{target}' not found")))?;
+                let cost = BTreeMap::from([("credits".to_string(), 75.0)]);
+                spend_resources(&mut self.world, treasury_id, &cost)?;
+                let state = self
+                    .world
+                    .get_component_mut::<CityRuntimeState>(&treasury_id)
+                    .expect("validated city state");
+                let security = state
+                    .corporation_security
+                    .entry(target.to_string())
+                    .or_insert(Fixed64::from_f64_lossy(corporation.security));
+                *security = (*security + Fixed64::from_int(10)).min(Fixed64::from_int(100));
+                state.intrigue_heat =
+                    (state.intrigue_heat - Fixed64::from_int(12)).max(Fixed64::ZERO);
+                events.push(SimulationEvent::new(
+                    tick,
+                    EventType::CovertOperationResolved {
+                        operation: action.to_string(),
+                        target: target.to_string(),
+                        agent: "civic-cyber-command".to_string(),
+                        success: true,
+                        detected: false,
+                    },
+                ));
+            }
+            "manipulate" => {
+                let asset = city
+                    .crypto_assets
+                    .iter()
+                    .find(|asset| asset.id == target)
+                    .ok_or_else(|| action_error(format!("crypto asset '{target}' not found")))?;
+                let direction = option.unwrap_or("pump");
+                if !matches!(direction, "pump" | "dump") {
+                    return Err(action_error(
+                        "market manipulation option must be pump or dump",
+                    ));
+                }
+                let operator = agent_id.unwrap_or("market-desk");
+                let skill = agent_id
+                    .and_then(|id| city.cyber_agents.iter().find(|agent| agent.id == id))
+                    .map_or(45.0, |agent| agent.skill);
+                let cost = BTreeMap::from([("credits".to_string(), 150.0)]);
+                spend_resources(&mut self.world, treasury_id, &cost)?;
+                let state = self
+                    .world
+                    .get_component_mut::<CityRuntimeState>(&treasury_id)
+                    .expect("validated city state");
+                let price = state
+                    .crypto_prices
+                    .entry(target.to_string())
+                    .or_insert(Fixed64::from_f64_lossy(asset.initial_price));
+                let old_price = *price;
+                let magnitude = asset.volatility * (0.35 + skill / 200.0);
+                let multiplier = if direction == "pump" {
+                    1.0 + magnitude
+                } else {
+                    (1.0 - magnitude).max(0.1)
+                };
+                *price =
+                    (*price * Fixed64::from_f64_lossy(multiplier)).max(Fixed64::from_ratio(1, 100));
+                state.intrigue_heat =
+                    (state.intrigue_heat + Fixed64::from_int(22)).min(Fixed64::from_int(100));
+                events.push(SimulationEvent::new(
+                    tick,
+                    EventType::CovertOperationResolved {
+                        operation: format!("market-{direction}"),
+                        target: target.to_string(),
+                        agent: operator.to_string(),
+                        success: true,
+                        detected: rng.chance(Fixed64::from_ratio(2, 5)),
+                    },
+                ));
+                events.push(SimulationEvent::new(
+                    tick,
+                    EventType::CryptoMarketMoved {
+                        asset: target.to_string(),
+                        old_price,
+                        new_price: *price,
+                        cause: "manipulation".to_string(),
+                    },
+                ));
+            }
+            "trade" => {
+                let asset = city
+                    .crypto_assets
+                    .iter()
+                    .find(|asset| asset.id == target)
+                    .ok_or_else(|| action_error(format!("crypto asset '{target}' not found")))?;
+                let side = option.unwrap_or("buy");
+                let state = self
+                    .world
+                    .get_component::<CityRuntimeState>(&treasury_id)
+                    .expect("validated city state");
+                let price = state
+                    .crypto_prices
+                    .get(target)
+                    .copied()
+                    .unwrap_or(Fixed64::from_f64_lossy(asset.initial_price));
+                let units;
+                if side == "buy" {
+                    let cost = BTreeMap::from([("credits".to_string(), 100.0)]);
+                    spend_resources(&mut self.world, treasury_id, &cost)?;
+                    units = Fixed64::from_int(100) / price;
+                    *self
+                        .world
+                        .get_component_mut::<CityRuntimeState>(&treasury_id)
+                        .expect("validated city state")
+                        .crypto_holdings
+                        .entry(target.to_string())
+                        .or_insert(Fixed64::ZERO) += units;
+                } else if side == "sell" {
+                    let state = self
+                        .world
+                        .get_component_mut::<CityRuntimeState>(&treasury_id)
+                        .expect("validated city state");
+                    units = state
+                        .crypto_holdings
+                        .remove(target)
+                        .unwrap_or(Fixed64::ZERO);
+                    if units <= Fixed64::ZERO {
+                        return Err(action_error("there is no position to sell"));
+                    }
+                    self.world
+                        .get_component_mut::<Inventory>(&treasury_id)
+                        .expect("validated city inventory")
+                        .add("credits", units * price);
+                } else {
+                    return Err(action_error("crypto trade option must be buy or sell"));
+                }
+                events.push(SimulationEvent::new(
+                    tick,
+                    EventType::CryptoTradeExecuted {
+                        asset: target.to_string(),
+                        side: side.to_string(),
+                        units,
+                        price,
+                    },
+                ));
+            }
+            _ => return Err(action_error(format!("unknown intrigue action '{action}'"))),
+        }
+
+        events.insert(
+            0,
+            SimulationEvent::new(
+                tick,
+                EventType::PlayerIntrigueAction {
+                    action: action.to_string(),
+                    target: target.to_string(),
+                    agent: agent_id.map(str::to_string),
+                    option: option.map(str::to_string),
+                },
+            ),
+        );
+        for event in &events {
+            self.record_player_event(event.clone());
+        }
+        self.refresh_resource_totals(tick.value());
+        self.state_fingerprint = self.world.fingerprint();
+        Ok(self.progress_with_events(events))
     }
 
     fn ensure_player_action_allowed(&self) -> Result<(), WorldForgeError> {
@@ -1960,6 +2498,120 @@ impl SimulationRuntime {
                 entities,
             })
         };
+        let intrigue = if city.corporations.is_empty()
+            && city.cyber_agents.is_empty()
+            && city.crypto_assets.is_empty()
+        {
+            None
+        } else {
+            let corporations = city
+                .corporations
+                .iter()
+                .map(|corporation| CorporationProgress {
+                    id: corporation.id.clone(),
+                    name: corporation.name.clone(),
+                    description: corporation.description.clone(),
+                    sector: corporation.sector.clone(),
+                    security: state
+                        .corporation_security
+                        .get(&corporation.id)
+                        .copied()
+                        .unwrap_or(Fixed64::from_f64_lossy(corporation.security))
+                        .to_f64_lossy(),
+                    influence: corporation.influence,
+                    exposure: state
+                        .corporation_exposure
+                        .get(&corporation.id)
+                        .copied()
+                        .unwrap_or(Fixed64::ZERO)
+                        .to_f64_lossy(),
+                    remaining_secrets: corporation
+                        .secrets
+                        .iter()
+                        .filter(|secret| {
+                            !state
+                                .stolen_secrets
+                                .contains(&format!("{}/{}", corporation.id, secret.id))
+                        })
+                        .count(),
+                })
+                .collect();
+            let agents = city
+                .cyber_agents
+                .iter()
+                .map(|agent| CyberAgentProgress {
+                    id: agent.id.clone(),
+                    name: agent.name.clone(),
+                    description: agent.description.clone(),
+                    skill: agent.skill,
+                    stealth: agent.stealth,
+                    loyalty: state
+                        .agent_loyalty
+                        .get(&agent.id)
+                        .copied()
+                        .unwrap_or(Fixed64::from_f64_lossy(agent.loyalty))
+                        .to_f64_lossy(),
+                    containment: agent.containment,
+                    status: state
+                        .agent_status
+                        .get(&agent.id)
+                        .cloned()
+                        .unwrap_or_else(|| agent.initial_status.clone()),
+                })
+                .collect();
+            let markets = city
+                .crypto_assets
+                .iter()
+                .map(|asset| {
+                    let price = state
+                        .crypto_prices
+                        .get(&asset.id)
+                        .copied()
+                        .unwrap_or(Fixed64::from_f64_lossy(asset.initial_price));
+                    let holdings = state
+                        .crypto_holdings
+                        .get(&asset.id)
+                        .copied()
+                        .unwrap_or(Fixed64::ZERO);
+                    let price_value = price.to_f64_lossy();
+                    CryptoMarketProgress {
+                        id: asset.id.clone(),
+                        name: asset.name.clone(),
+                        symbol: asset.symbol.clone(),
+                        price: price_value,
+                        initial_price: asset.initial_price,
+                        change_percent: ((price_value / asset.initial_price) - 1.0) * 100.0,
+                        volatility: asset.volatility,
+                        holdings: holdings.to_f64_lossy(),
+                        position_value: (holdings * price).to_f64_lossy(),
+                    }
+                })
+                .collect();
+            let stolen_secrets = city
+                .corporations
+                .iter()
+                .flat_map(|corporation| {
+                    corporation.secrets.iter().filter_map(|secret| {
+                        state
+                            .stolen_secrets
+                            .contains(&format!("{}/{}", corporation.id, secret.id))
+                            .then(|| StolenSecretProgress {
+                                corporation: corporation.id.clone(),
+                                secret: secret.id.clone(),
+                                name: secret.name.clone(),
+                                research_value: secret.research_value,
+                            })
+                    })
+                })
+                .collect();
+            Some(CityIntrigueProgress {
+                heat: state.intrigue_heat.to_f64_lossy(),
+                corporations,
+                agents,
+                markets,
+                stolen_secrets,
+            })
+        };
         Some(CityProgress {
             treasury: city.treasury.clone(),
             population,
@@ -1972,6 +2624,7 @@ impl SimulationRuntime {
             technologies,
             governance,
             geopolitics,
+            intrigue,
         })
     }
 
@@ -2218,6 +2871,100 @@ impl SimulationRuntime {
             .get_component_mut::<CityRuntimeState>(&treasury_id)
             .expect("validated city state") = state;
 
+        Ok(events)
+    }
+
+    fn run_city_intrigue(&mut self, tick: Tick) -> Result<Vec<SimulationEvent>, WorldForgeError> {
+        let (Some(city), Some(treasury_id)) = (self.city_config.clone(), self.city_treasury_id)
+        else {
+            return Ok(Vec::new());
+        };
+        if city.corporations.is_empty()
+            && city.cyber_agents.is_empty()
+            && city.crypto_assets.is_empty()
+        {
+            return Ok(Vec::new());
+        }
+        let mut events = Vec::new();
+        let tick_value = tick.value();
+        let mut state = self
+            .world
+            .get_component::<CityRuntimeState>(&treasury_id)
+            .cloned()
+            .ok_or_else(|| action_error("city intrigue state is unavailable"))?;
+
+        state.intrigue_heat = (state.intrigue_heat - Fixed64::from_ratio(1, 2)).max(Fixed64::ZERO);
+
+        if tick_value > 0 && tick_value % 5 == 0 {
+            for asset in &city.crypto_assets {
+                let price = state
+                    .crypto_prices
+                    .entry(asset.id.clone())
+                    .or_insert(Fixed64::from_f64_lossy(asset.initial_price));
+                let old_price = *price;
+                let mut rng = DeterministicRng::new(
+                    self.scenario.seed,
+                    &format!("crypto-market/{}/{tick_value}", asset.id),
+                );
+                let centered = rng.next_fixed() * Fixed64::from_int(2) - Fixed64::ONE;
+                let movement = centered * Fixed64::from_f64_lossy(asset.volatility * 0.18);
+                *price = (*price * (Fixed64::ONE + movement)).max(Fixed64::from_ratio(1, 100));
+                events.push(SimulationEvent::new(
+                    tick,
+                    EventType::CryptoMarketMoved {
+                        asset: asset.id.clone(),
+                        old_price,
+                        new_price: *price,
+                        cause: "market-cycle".to_string(),
+                    },
+                ));
+            }
+        }
+
+        if tick_value > 0 && tick_value % 10 == 0 {
+            let rogue_agents = city
+                .cyber_agents
+                .iter()
+                .filter(|agent| {
+                    state
+                        .agent_status
+                        .get(&agent.id)
+                        .map(String::as_str)
+                        .unwrap_or(agent.initial_status.as_str())
+                        == "rogue"
+                })
+                .cloned()
+                .collect::<Vec<_>>();
+            for agent in rogue_agents {
+                let resource = if tick_value % 20 == 0 {
+                    "research"
+                } else {
+                    "credits"
+                };
+                let requested = Fixed64::from_f64_lossy((agent.skill * 0.22).max(5.0));
+                let inventory = self
+                    .world
+                    .get_component_mut::<Inventory>(&treasury_id)
+                    .expect("validated city inventory");
+                let damage = inventory.get(resource).min(requested);
+                let _ = inventory.try_subtract(resource, damage);
+                state.intrigue_heat =
+                    (state.intrigue_heat + Fixed64::from_int(8)).min(Fixed64::from_int(100));
+                events.push(SimulationEvent::new(
+                    tick,
+                    EventType::RogueAgentIncident {
+                        agent: agent.id,
+                        resource: resource.to_string(),
+                        damage: damage.to_f64_lossy(),
+                    },
+                ));
+            }
+        }
+
+        *self
+            .world
+            .get_component_mut::<CityRuntimeState>(&treasury_id)
+            .expect("validated city state") = state;
         Ok(events)
     }
 

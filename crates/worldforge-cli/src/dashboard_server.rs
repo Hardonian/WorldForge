@@ -81,12 +81,28 @@ struct InterventionRecord {
     option: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     geo_action: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    intrigue_action: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    target: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    agent: Option<String>,
 }
 
 #[derive(Deserialize)]
 struct GeopoliticsRequest {
     action: String,
     entity: String,
+    #[serde(default)]
+    option: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct IntrigueRequest {
+    action: String,
+    target: String,
+    #[serde(default)]
+    agent: Option<String>,
     #[serde(default)]
     option: Option<String>,
 }
@@ -464,6 +480,15 @@ fn handle_connection(stream: &mut TcpStream, state: &ServerState) -> Result<(), 
             let response = geopolitics_in_play_session(state, id, request)?;
             respond_json(stream, "200 OK", &response)
         }
+        ("POST", route)
+            if route.ends_with("/intrigue") && play_action_id(route, "intrigue").is_some() =>
+        {
+            require_json_content_type(&header)?;
+            let request: IntrigueRequest = parse_json(body)?;
+            let id = play_action_id(route, "intrigue").unwrap_or_default();
+            let response = intrigue_in_play_session(state, id, request)?;
+            respond_json(stream, "200 OK", &response)
+        }
         ("GET", route)
             if route.ends_with("/replay") && play_action_id(route, "replay").is_some() =>
         {
@@ -633,6 +658,9 @@ fn intervene_play_session(
             dilemma: None,
             option: None,
             geo_action: None,
+            intrigue_action: None,
+            target: None,
+            agent: None,
         });
         Ok(play_document(
             id,
@@ -665,6 +693,9 @@ fn construct_in_play_session(
             dilemma: None,
             option: None,
             geo_action: None,
+            intrigue_action: None,
+            target: None,
+            agent: None,
         });
         Ok(play_document(
             id,
@@ -695,6 +726,9 @@ fn research_in_play_session(
             dilemma: None,
             option: None,
             geo_action: None,
+            intrigue_action: None,
+            target: None,
+            agent: None,
         });
         Ok(play_document(
             id,
@@ -727,6 +761,9 @@ fn decide_in_play_session(
             dilemma: Some(request.dilemma),
             option: Some(request.option),
             geo_action: None,
+            intrigue_action: None,
+            target: None,
+            agent: None,
         });
         Ok(play_document(
             id,
@@ -761,6 +798,47 @@ fn geopolitics_in_play_session(
             dilemma: None,
             option: request.option,
             geo_action: Some(request.action),
+            intrigue_action: None,
+            target: None,
+            agent: None,
+        });
+        Ok(play_document(
+            id,
+            &session.world,
+            &progress,
+            session.runtime.replay(),
+            false,
+        ))
+    })
+}
+
+fn intrigue_in_play_session(
+    state: &ServerState,
+    id: &str,
+    request: IntrigueRequest,
+) -> Result<Value, WorldForgeError> {
+    with_play_session(state, id, |session| {
+        let tick = session.runtime.current_progress().current_tick;
+        let progress = session.runtime.execute_intrigue_action(
+            &request.action,
+            &request.target,
+            request.agent.as_deref(),
+            request.option.as_deref(),
+        )?;
+        session.interventions.push(InterventionRecord {
+            tick,
+            action: "intrigue".to_string(),
+            entity: None,
+            capacity: None,
+            building: None,
+            district: None,
+            technology: None,
+            dilemma: None,
+            option: request.option,
+            geo_action: None,
+            intrigue_action: Some(request.action),
+            target: Some(request.target),
+            agent: request.agent,
         });
         Ok(play_document(
             id,
@@ -990,6 +1068,22 @@ fn load_save(state: &ServerState, id: &str) -> Result<Value, WorldForgeError> {
                 intervention.entity.as_deref().unwrap_or("defense-garrison"),
                 intervention.option.as_deref(),
             )?,
+            "intrigue" => runtime.execute_intrigue_action(
+                intervention.intrigue_action.as_deref().ok_or_else(|| {
+                    WorldForgeError::new(
+                        ErrorCode::ReplayFormatInvalid,
+                        "intrigue intervention is missing its action",
+                    )
+                })?,
+                intervention.target.as_deref().ok_or_else(|| {
+                    WorldForgeError::new(
+                        ErrorCode::ReplayFormatInvalid,
+                        "intrigue intervention is missing its target",
+                    )
+                })?,
+                intervention.agent.as_deref(),
+                intervention.option.as_deref(),
+            )?,
             _ => {
                 return Err(WorldForgeError::new(
                     ErrorCode::ReplayFormatInvalid,
@@ -1174,6 +1268,15 @@ fn validate_save_game(save: &SaveGame, expected_id: &str) -> Result<(), WorldFor
                     && intervention.option.as_deref().is_some_and(valid_action_id)
             }
             "geopolitics" => intervention.entity.as_deref().is_some_and(valid_action_id),
+            "intrigue" => {
+                intervention
+                    .intrigue_action
+                    .as_deref()
+                    .is_some_and(valid_action_id)
+                    && intervention.target.as_deref().is_some_and(valid_action_id)
+                    && intervention.agent.as_deref().is_none_or(valid_action_id)
+                    && intervention.option.as_deref().is_none_or(valid_action_id)
+            }
             _ => false,
         };
         if intervention.tick > save.current_tick
@@ -1482,6 +1585,54 @@ fn event_document(event: &SimulationEvent) -> Value {
             origin.clone(),
             "refugees".to_string(),
             *count,
+        ),
+        EventType::CovertOperationResolved {
+            operation,
+            target,
+            success,
+            ..
+        } => (
+            "intrigue",
+            target.clone(),
+            operation.clone(),
+            if *success { 1.0 } else { 0.0 },
+        ),
+        EventType::PlayerIntrigueAction { action, target, .. } => {
+            ("intrigue", target.clone(), action.clone(), 1.0)
+        }
+        EventType::TradeSecretAcquired {
+            corporation,
+            secret,
+            research_value,
+        } => (
+            "intrigue",
+            corporation.clone(),
+            secret.clone(),
+            *research_value,
+        ),
+        EventType::CyberAgentStatusChanged { agent, to, .. } => {
+            ("intrigue", agent.clone(), to.clone(), 0.0)
+        }
+        EventType::RogueAgentIncident {
+            agent,
+            resource,
+            damage,
+        } => ("intrigue", agent.clone(), resource.clone(), *damage),
+        EventType::CryptoMarketMoved {
+            asset, new_price, ..
+        } => (
+            "intrigue",
+            asset.clone(),
+            "market".to_string(),
+            new_price.to_f64_lossy(),
+        ),
+        EventType::CryptoTradeExecuted {
+            asset, side, units, ..
+        } => (
+            "intrigue",
+            asset.clone(),
+            side.clone(),
+            units.to_f64_lossy(),
         ),
     };
     json!({

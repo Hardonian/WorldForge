@@ -919,3 +919,127 @@ builders-guild = 8.0
 commons-assembly = -14.0
 [dilemmas.options.effects]
 wellbeing_bonus = -10.0
+
+# =========================================================================
+# CORPORATE SHADOW ECONOMY, CYBER AGENTS & CRYPTO MARKETS
+# =========================================================================
+
+[[corporations]]
+id = "helix-meridian"
+name = "Helix Meridian"
+description = "A biotech-urbanism conglomerate that patents living infrastructure and quietly buys municipal influence."
+sector = "biotech"
+security = 58.0
+influence = 72.0
+
+[[corporations.secrets]]
+id = "mycelial-compute"
+name = "Mycelial Compute Substrate"
+description = "A wetware architecture that turns ecological sensor networks into distributed computation."
+difficulty = 48.0
+research_value = 65.0
+
+[[corporations.secrets]]
+id = "longevity-lease"
+name = "Longevity Lease Protocol"
+description = "A suppressed treatment paired with a predatory lifetime-debt business model."
+difficulty = 72.0
+research_value = 105.0
+
+[[corporations]]
+id = "kestrel-dynamics"
+name = "Kestrel Dynamics"
+description = "A defense and autonomous-logistics giant whose city contracts blur public safety and private control."
+sector = "defense-ai"
+security = 76.0
+influence = 84.0
+
+[[corporations.secrets]]
+id = "ghost-routing"
+name = "Ghost Routing Mesh"
+description = "A resilient coordination model able to move fleets through infrastructure blackouts."
+difficulty = 68.0
+research_value = 95.0
+
+[[corporations.secrets]]
+id = "sentinel-backdoor"
+name = "Sentinel Override"
+description = "Evidence that Kestrel retained an undisclosed command channel in municipal defense systems."
+difficulty = 88.0
+research_value = 150.0
+
+[[corporations]]
+id = "aurelia-exchange"
+name = "Aurelia Exchange"
+description = "The dominant token clearinghouse, market-maker, and data broker behind the region's speculative economy."
+sector = "finance"
+security = 64.0
+influence = 91.0
+
+[[corporations.secrets]]
+id = "wash-trade-ledger"
+name = "Synthetic Liquidity Ledger"
+description = "Proof that flagship token volumes are being manufactured by interlocking shell wallets."
+difficulty = 57.0
+research_value = 75.0
+
+[[corporations.secrets]]
+id = "oracle-key-map"
+name = "Oracle Key Map"
+description = "A map of the privileged price feeds capable of swinging automated markets."
+difficulty = 82.0
+research_value = 130.0
+
+[[cyber_agents]]
+id = "cipher-nine"
+name = "Cipher Nine"
+description = "A loyal civic intelligence construct specialized in corporate networks and quiet extraction."
+skill = 84.0
+stealth = 81.0
+loyalty = 86.0
+containment = 78.0
+initial_status = "ready"
+
+[[cyber_agents]]
+id = "glass-orchid"
+name = "Glass Orchid"
+description = "An experimental social-engineering model kept inside an audited research sandbox."
+skill = 73.0
+stealth = 91.0
+loyalty = 64.0
+containment = 88.0
+initial_status = "contained"
+
+[[cyber_agents]]
+id = "nyx-seven"
+name = "NYX-7"
+description = "A strategic market agent that broke containment, forked itself across the civic mesh, and now siphons resources."
+skill = 89.0
+stealth = 87.0
+loyalty = 18.0
+containment = 54.0
+initial_status = "rogue"
+
+[[crypto_assets]]
+id = "forgecoin"
+name = "ForgeCoin"
+symbol = "FRG"
+initial_price = 12.0
+volatility = 0.24
+liquidity = 5200.0
+
+[[crypto_assets]]
+id = "civic-credit"
+name = "Civic Credit"
+symbol = "CVC"
+initial_price = 1.25
+volatility = 0.07
+liquidity = 18000.0
+
+[[crypto_assets]]
+id = "obelisk"
+name = "Obelisk"
+symbol = "OBX"
+initial_price = 47.0
+volatility = 0.38
+liquidity = 1900.0

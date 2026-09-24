@@ -455,6 +455,7 @@ pub fn replay_run(file: &Path) -> Result<(), WorldForgeError> {
                     | EventType::BuildingConstructed { .. }
                     | EventType::TechnologyUnlocked { .. }
                     | EventType::PlayerCivicDecision { .. }
+                    | EventType::PlayerIntrigueAction { .. }
             )
         })
         .collect::<Vec<_>>();
@@ -488,6 +489,19 @@ pub fn replay_run(file: &Path) -> Result<(), WorldForgeError> {
             }
             EventType::PlayerCivicDecision { dilemma, option } => {
                 runtime.make_civic_decision(dilemma, option)?;
+            }
+            EventType::PlayerIntrigueAction {
+                action,
+                target,
+                agent,
+                option,
+            } => {
+                runtime.execute_intrigue_action(
+                    action,
+                    target,
+                    agent.as_deref(),
+                    option.as_deref(),
+                )?;
             }
             _ => unreachable!("filtered player action"),
         }
@@ -730,6 +744,54 @@ fn simulation_export_with_event_limit(
                     origin.clone(),
                     "refugees".to_string(),
                     *count,
+                ),
+                EventType::CovertOperationResolved {
+                    operation,
+                    target,
+                    success,
+                    ..
+                } => (
+                    "intrigue",
+                    target.clone(),
+                    operation.clone(),
+                    if *success { 1.0 } else { 0.0 },
+                ),
+                EventType::PlayerIntrigueAction { action, target, .. } => {
+                    ("intrigue", target.clone(), action.clone(), 1.0)
+                }
+                EventType::TradeSecretAcquired {
+                    corporation,
+                    secret,
+                    research_value,
+                } => (
+                    "intrigue",
+                    corporation.clone(),
+                    secret.clone(),
+                    *research_value,
+                ),
+                EventType::CyberAgentStatusChanged { agent, to, .. } => {
+                    ("intrigue", agent.clone(), to.clone(), 0.0)
+                }
+                EventType::RogueAgentIncident {
+                    agent,
+                    resource,
+                    damage,
+                } => ("intrigue", agent.clone(), resource.clone(), *damage),
+                EventType::CryptoMarketMoved {
+                    asset, new_price, ..
+                } => (
+                    "intrigue",
+                    asset.clone(),
+                    "market".to_string(),
+                    new_price.to_f64_lossy(),
+                ),
+                EventType::CryptoTradeExecuted {
+                    asset, side, units, ..
+                } => (
+                    "intrigue",
+                    asset.clone(),
+                    side.clone(),
+                    units.to_f64_lossy(),
                 ),
             };
             serde_json::json!({
