@@ -27,6 +27,8 @@ pub struct CityConfig {
     pub factions: Vec<CivicFaction>,
     #[serde(default)]
     pub dilemmas: Vec<CivicDilemma>,
+    #[serde(default)]
+    pub political_entities: Vec<PoliticalEntityDefinition>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -196,6 +198,48 @@ const fn default_max_count() -> u32 {
 }
 
 const fn default_faction_support() -> f64 {
+    50.0
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PoliticalEntityDefinition {
+    pub id: String,
+    pub name: String,
+    #[serde(default)]
+    pub description: String,
+    #[serde(default = "default_power_structure")]
+    pub power_structure: String,
+    #[serde(default = "default_ruler_title")]
+    pub ruler_title: String,
+    #[serde(default = "default_initial_stance")]
+    pub initial_stance: String,
+    #[serde(default = "default_initial_loyalty")]
+    pub initial_loyalty: f64,
+    #[serde(default = "default_military_power")]
+    pub military_power: f64,
+    #[serde(default)]
+    pub tribute: BTreeMap<String, f64>,
+    #[serde(default)]
+    pub traits: Vec<String>,
+}
+
+fn default_power_structure() -> String {
+    "fiefdom".to_string()
+}
+
+fn default_ruler_title() -> String {
+    "Lord Commander".to_string()
+}
+
+fn default_initial_stance() -> String {
+    "neutral".to_string()
+}
+
+const fn default_initial_loyalty() -> f64 {
+    60.0
+}
+
+const fn default_military_power() -> f64 {
     50.0
 }
 
@@ -511,6 +555,42 @@ impl CityConfig {
             }
         }
         validate_dilemma_dag(&self.dilemmas)?;
+
+        let mut political_ids = BTreeSet::new();
+        for entity in &self.political_entities {
+            validate_id(&entity.id, "political entity id")?;
+            if entity.name.trim().is_empty() {
+                return Err(city_error(format!(
+                    "political entity '{}' needs a name",
+                    entity.id
+                )));
+            }
+            if !entity.initial_loyalty.is_finite()
+                || !(0.0..=100.0).contains(&entity.initial_loyalty)
+            {
+                return Err(city_error(format!(
+                    "political entity '{}' loyalty must be between 0 and 100",
+                    entity.id
+                )));
+            }
+            if !entity.military_power.is_finite() || entity.military_power < 0.0 {
+                return Err(city_error(format!(
+                    "political entity '{}' military power must be non-negative",
+                    entity.id
+                )));
+            }
+            validate_amounts(
+                &entity.tribute,
+                &format!("political entity '{}' tribute", entity.id),
+            )?;
+            if !political_ids.insert(entity.id.as_str()) {
+                return Err(city_error(format!(
+                    "duplicate political entity '{}'",
+                    entity.id
+                )));
+            }
+        }
+
         Ok(())
     }
 }
@@ -775,11 +855,58 @@ mod tests {
             .validate(&entities())
             .is_err());
 
-        let invalid_choice = source.replace(
-            "charter = \"commons\"",
-            "charter = \"not-an-option\"",
-        );
+        let invalid_choice = source.replace("charter = \"commons\"", "charter = \"not-an-option\"");
         assert!(CityConfig::from_toml(&invalid_choice)
+            .unwrap()
+            .validate(&entities())
+            .is_err());
+    }
+
+    #[test]
+    fn validates_political_entities() {
+        let toml = r#"
+            treasury = "city-hall"
+            population_growth_per_tick = 1.0
+
+            [[districts]]
+            id = "core"
+            name = "Core"
+            slots = 4
+
+            [[buildings]]
+            id = "garrison"
+            name = "Garrison"
+            allowed_districts = ["core"]
+            [buildings.outputs]
+            power = 1.0
+
+            [[political_entities]]
+            id = "barony-oakhaven"
+            name = "Barony of Oakhaven"
+            power_structure = "fiefdom"
+            ruler_title = "Baron Kaelen"
+            initial_stance = "vassal"
+            initial_loyalty = 80.0
+            military_power = 120.0
+            [political_entities.tribute]
+            credits = 50.0
+        "#;
+        let config = CityConfig::from_toml(toml).unwrap();
+        config.validate(&entities()).unwrap();
+        assert_eq!(config.political_entities.len(), 1);
+        assert_eq!(config.political_entities[0].power_structure, "fiefdom");
+
+        // Duplicate entity rejected
+        let dup =
+            format!("{toml}\n[[political_entities]]\nid = \"barony-oakhaven\"\nname = \"Dup\"\n");
+        assert!(CityConfig::from_toml(&dup)
+            .unwrap()
+            .validate(&entities())
+            .is_err());
+
+        // Negative military power rejected
+        let neg_power = toml.replace("military_power = 120.0", "military_power = -5.0");
+        assert!(CityConfig::from_toml(&neg_power)
             .unwrap()
             .validate(&entities())
             .is_err());

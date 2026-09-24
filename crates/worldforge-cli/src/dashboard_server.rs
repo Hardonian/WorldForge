@@ -79,6 +79,16 @@ struct InterventionRecord {
     dilemma: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     option: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    geo_action: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct GeopoliticsRequest {
+    action: String,
+    entity: String,
+    #[serde(default)]
+    option: Option<String>,
 }
 
 fn default_capacity_action() -> String {
@@ -444,6 +454,16 @@ fn handle_connection(stream: &mut TcpStream, state: &ServerState) -> Result<(), 
             let response = decide_in_play_session(state, id, request)?;
             respond_json(stream, "200 OK", &response)
         }
+        ("POST", route)
+            if route.ends_with("/geopolitics")
+                && play_action_id(route, "geopolitics").is_some() =>
+        {
+            require_json_content_type(&header)?;
+            let request: GeopoliticsRequest = parse_json(body)?;
+            let id = play_action_id(route, "geopolitics").unwrap_or_default();
+            let response = geopolitics_in_play_session(state, id, request)?;
+            respond_json(stream, "200 OK", &response)
+        }
         ("GET", route)
             if route.ends_with("/replay") && play_action_id(route, "replay").is_some() =>
         {
@@ -612,6 +632,7 @@ fn intervene_play_session(
             technology: None,
             dilemma: None,
             option: None,
+            geo_action: None,
         });
         Ok(play_document(
             id,
@@ -643,6 +664,7 @@ fn construct_in_play_session(
             technology: None,
             dilemma: None,
             option: None,
+            geo_action: None,
         });
         Ok(play_document(
             id,
@@ -672,6 +694,7 @@ fn research_in_play_session(
             technology: Some(request.technology),
             dilemma: None,
             option: None,
+            geo_action: None,
         });
         Ok(play_document(
             id,
@@ -703,6 +726,41 @@ fn decide_in_play_session(
             technology: None,
             dilemma: Some(request.dilemma),
             option: Some(request.option),
+            geo_action: None,
+        });
+        Ok(play_document(
+            id,
+            &session.world,
+            &progress,
+            session.runtime.replay(),
+            false,
+        ))
+    })
+}
+
+fn geopolitics_in_play_session(
+    state: &ServerState,
+    id: &str,
+    request: GeopoliticsRequest,
+) -> Result<Value, WorldForgeError> {
+    with_play_session(state, id, |session| {
+        let tick = session.runtime.current_progress().current_tick;
+        let progress = session.runtime.execute_geopolitical_action(
+            &request.action,
+            &request.entity,
+            request.option.as_deref(),
+        )?;
+        session.interventions.push(InterventionRecord {
+            tick,
+            action: "geopolitics".to_string(),
+            entity: Some(request.entity),
+            capacity: None,
+            building: None,
+            district: None,
+            technology: None,
+            dilemma: None,
+            option: request.option,
+            geo_action: Some(request.action),
         });
         Ok(play_document(
             id,
@@ -927,6 +985,11 @@ fn load_save(state: &ServerState, id: &str) -> Result<Value, WorldForgeError> {
                     )
                 })?,
             )?,
+            "geopolitics" => runtime.execute_geopolitical_action(
+                intervention.geo_action.as_deref().unwrap_or("posture"),
+                intervention.entity.as_deref().unwrap_or("defense-garrison"),
+                intervention.option.as_deref(),
+            )?,
             _ => {
                 return Err(WorldForgeError::new(
                     ErrorCode::ReplayFormatInvalid,
@@ -1110,6 +1173,7 @@ fn validate_save_game(save: &SaveGame, expected_id: &str) -> Result<(), WorldFor
                 intervention.dilemma.as_deref().is_some_and(valid_action_id)
                     && intervention.option.as_deref().is_some_and(valid_action_id)
             }
+            "geopolitics" => intervention.entity.as_deref().is_some_and(valid_action_id),
             _ => false,
         };
         if intervention.tick > save.current_tick
@@ -1394,6 +1458,31 @@ fn event_document(event: &SimulationEvent) -> Value {
         EventType::SimulationDegraded { reason } => {
             ("system", "runtime".to_string(), reason.clone(), 0.0)
         }
+        EventType::GeopoliticalStanceChanged { entity, from, to } => {
+            ("geopolitics", entity.clone(), format!("{from}→{to}"), 0.0)
+        }
+        EventType::TributeCollected { entity, resources } => {
+            let total = resources.values().sum::<f64>();
+            ("geopolitics", entity.clone(), "tribute".to_string(), total)
+        }
+        EventType::WarlordIncursion {
+            entity,
+            damage,
+            repelled,
+        } => {
+            let status = if *repelled {
+                "repelled".to_string()
+            } else {
+                "breached".to_string()
+            };
+            ("geopolitics", entity.clone(), status, *damage)
+        }
+        EventType::RefugeeWaveArrived { origin, count } => (
+            "geopolitics",
+            origin.clone(),
+            "refugees".to_string(),
+            *count,
+        ),
     };
     json!({
         "tick": event.tick.value(),

@@ -778,3 +778,146 @@ jobs_multiplier = 0.78
 [dilemmas.options.effects.resource_multipliers]
 credits = 1.32
 materials = 1.2
+
+# =========================================================================
+# GEOPOLITICAL POWER STRUCTURES & POLITICAL ENTITIES
+# (Fiefdoms, Vassals, Hegemons, Coalitions, and Insurgent Warlords)
+# =========================================================================
+
+[[political_entities]]
+id = "barony-oakhaven"
+name = "Barony of Oakhaven"
+description = "A fortified martial march guarding the northern mountain passes. Offers feudal levy protection if allied, but quick to take offense if dishonored."
+power_structure = "fiefdom"
+ruler_title = "Baron Kaelen"
+initial_stance = "neutral"
+initial_loyalty = 65.0
+military_power = 125.0
+traits = ["martial", "feudal", "honor-bound"]
+[political_entities.tribute]
+credits = 80.0
+materials = 40.0
+
+[[political_entities]]
+id = "riverside-vassal"
+name = "Riverside Protectorate"
+description = "A fertile downstream agricultural basin producing bountiful rice and freshwater harvests under municipal protection. Susceptible to droughts and famines."
+power_structure = "vassal"
+ruler_title = "Governor Chen"
+initial_stance = "vassal"
+initial_loyalty = 75.0
+military_power = 45.0
+traits = ["agrarian", "subjugated", "vulnerable"]
+[political_entities.tribute]
+food = 100.0
+clean_water = 80.0
+
+[[political_entities]]
+id = "iron-mandate"
+name = "Iron Mandate Hegemony"
+description = "A colossal industrial war machine occupying the eastern plateau. Disdainful of independent settlements and prone to imperial trade ultimatums."
+power_structure = "hegemon"
+ruler_title = "Arch-Imperator Vane"
+initial_stance = "tense"
+initial_loyalty = 35.0
+military_power = 290.0
+traits = ["expansionist", "imperial", "autocratic"]
+
+[[political_entities]]
+id = "mercantile-league"
+name = "Free Mercantile League"
+description = "A maritime confederation of trade hubs keen on open commerce, low tariffs, merchant credit lines, and mutual defensive coalitions."
+power_structure = "coalition"
+ruler_title = "High Chancellor Mirren"
+initial_stance = "neutral"
+initial_loyalty = 60.0
+military_power = 90.0
+traits = ["mercantile", "diplomatic", "free-trade"]
+[political_entities.tribute]
+credits = 60.0
+
+[[political_entities]]
+id = "dust-canyon-raiders"
+name = "Dust Canyon Raiders"
+description = "Rogue mechanized scavengers and desert warlords operating out of the badlands. Periodically launch border raids against unprotected food and credit silos."
+power_structure = "insurgency"
+ruler_title = "Warlord Jax"
+initial_stance = "hostile"
+initial_loyalty = 15.0
+military_power = 75.0
+traits = ["predatory", "desperate", "lawless"]
+
+# =========================================================================
+# GEOPOLITICAL CRISIS DILEMMAS (3rd World Farmer & Total War Inspired)
+# =========================================================================
+
+[[dilemmas]]
+id = "refugee-crisis"
+title = "Refugee Exodus at Frontier Gates"
+description = "Warfare between the Iron Mandate and border villages has displaced hundreds of starving civilians pleading for sanctuary. Do we admit them?"
+deadline_ticks = 15
+default_option = "admit-refugees"
+[dilemmas.trigger]
+tick = 18
+
+[[dilemmas.options]]
+id = "admit-refugees"
+label = "Open the Gates & Granaries"
+description = "Provide emergency food and shelter. Swells our workforce and prestige at the cost of short-term food strain."
+[dilemmas.options.cost]
+food = 60.0
+[dilemmas.options.grants]
+population = 25.0
+[dilemmas.options.faction_support]
+commons-assembly = 14.0
+ecological-council = 5.0
+builders-guild = -6.0
+[dilemmas.options.effects]
+wellbeing_bonus = 6.0
+population_growth_multiplier = 1.1
+
+[[dilemmas.options]]
+id = "seal-borders"
+label = "Seal Gates & Turn Away"
+description = "Preserve municipal granary reserves and prioritize local residents over foreign refugees."
+[dilemmas.options.cost]
+credits = 30.0
+[dilemmas.options.faction_support]
+builders-guild = 6.0
+commons-assembly = -12.0
+[dilemmas.options.effects]
+wellbeing_bonus = -8.0
+
+[[dilemmas]]
+id = "vassal-famine-emergency"
+title = "Riverside Vassal Famine Petition"
+description = "Prolonged drought has devastated the Riverside Protectorate. Governor Chen petitions our council for emergency grain relief and tithe suspension."
+deadline_ticks = 18
+default_option = "send-relief"
+[dilemmas.trigger]
+tick = 26
+
+[[dilemmas.options]]
+id = "send-relief"
+label = "Dispatch Granary Shipments & Suspend Tithes"
+description = "Solidify vassal fealty and save thousands of lives from famine."
+[dilemmas.options.cost]
+food = 80.0
+[dilemmas.options.faction_support]
+commons-assembly = 10.0
+ecological-council = 8.0
+builders-guild = -5.0
+[dilemmas.options.effects]
+wellbeing_bonus = 5.0
+
+[[dilemmas.options]]
+id = "enforce-quotas"
+label = "Enforce Strict Tribute Quotas"
+description = "Siphon grain and water regardless of local hardships to maintain imperial strength."
+[dilemmas.options.grants]
+credits = 100.0
+[dilemmas.options.faction_support]
+builders-guild = 8.0
+commons-assembly = -14.0
+[dilemmas.options.effects]
+wellbeing_bonus = -10.0

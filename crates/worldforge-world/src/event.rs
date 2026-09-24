@@ -71,6 +71,24 @@ pub enum EventType {
     SimulationDegraded {
         reason: String,
     },
+    GeopoliticalStanceChanged {
+        entity: String,
+        from: String,
+        to: String,
+    },
+    TributeCollected {
+        entity: String,
+        resources: std::collections::BTreeMap<String, f64>,
+    },
+    WarlordIncursion {
+        entity: String,
+        damage: f64,
+        repelled: bool,
+    },
+    RefugeeWaveArrived {
+        origin: String,
+        count: f64,
+    },
 }
 
 /// A simulation event with its tick and type.
@@ -167,6 +185,31 @@ impl SimulationEvent {
             }
             EventType::SimulationDegraded { reason } => {
                 format!("DEGRADED: {}", reason)
+            }
+            EventType::GeopoliticalStanceChanged { entity, from, to } => {
+                format!("geopolitical stance of '{entity}' changed: {from} → {to}")
+            }
+            EventType::TributeCollected { entity, resources } => {
+                let details = resources
+                    .iter()
+                    .map(|(k, v)| format!("{v} {k}"))
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                format!("collected tribute from '{entity}': {details}")
+            }
+            EventType::WarlordIncursion {
+                entity,
+                damage,
+                repelled,
+            } => {
+                if *repelled {
+                    format!("warlord incursion by '{entity}' repelled by defense forces")
+                } else {
+                    format!("warlord incursion by '{entity}' breached perimeter ({damage} damage)")
+                }
+            }
+            EventType::RefugeeWaveArrived { origin, count } => {
+                format!("{count} refugees arrived from '{origin}' seeking sanctuary")
             }
         }
     }

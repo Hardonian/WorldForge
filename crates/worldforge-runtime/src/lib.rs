@@ -75,6 +75,7 @@ pub struct RunEventCounts {
     pub construction: usize,
     pub research: usize,
     pub governance: usize,
+    pub geopolitics: usize,
 }
 
 impl RunEventCounts {
@@ -94,6 +95,10 @@ impl RunEventCounts {
             EventType::CivicDilemmaOpened { .. }
             | EventType::PlayerCivicDecision { .. }
             | EventType::CivicDecisionResolved { .. } => self.governance += 1,
+            EventType::GeopoliticalStanceChanged { .. }
+            | EventType::TributeCollected { .. }
+            | EventType::WarlordIncursion { .. }
+            | EventType::RefugeeWaveArrived { .. } => self.geopolitics += 1,
         }
     }
 }
@@ -187,6 +192,37 @@ pub struct CityProgress {
     pub buildings: Vec<CityBuildingProgress>,
     pub technologies: Vec<CityTechnologyProgress>,
     pub governance: CityGovernanceProgress,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub geopolitics: Option<CityGeopoliticsProgress>,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CityGeopoliticsProgress {
+    pub defense_posture: String,
+    pub military_power: f64,
+    pub border_threat: f64,
+    pub drought_index: f64,
+    pub famine_risk: f64,
+    pub active_coalition: Option<String>,
+    pub entities: Vec<PoliticalEntityProgress>,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PoliticalEntityProgress {
+    pub id: String,
+    pub name: String,
+    pub description: String,
+    pub power_structure: String,
+    pub ruler_title: String,
+    pub stance: String,
+    pub loyalty: f64,
+    pub military_power: f64,
+    pub tribute: BTreeMap<String, f64>,
+    pub traits: Vec<String>,
+    pub tribute_available: bool,
+    pub raid_threat: f64,
 }
 
 #[derive(Debug, Clone, serde::Serialize)]
@@ -294,6 +330,16 @@ struct CityRuntimeState {
     faction_support: BTreeMap<String, Fixed64>,
     opened_dilemmas: BTreeMap<String, u64>,
     decisions: BTreeMap<String, String>,
+    #[serde(default)]
+    entity_stances: BTreeMap<String, String>,
+    #[serde(default)]
+    entity_loyalty: BTreeMap<String, Fixed64>,
+    #[serde(default)]
+    defense_posture: String,
+    #[serde(default)]
+    last_tribute_tick: BTreeMap<String, u64>,
+    #[serde(default)]
+    raid_threat_counter: Fixed64,
 }
 
 impl worldforge_ecs::Component for CityRuntimeState {
@@ -723,6 +769,7 @@ impl SimulationRuntime {
 
             run_production(&mut self.world, &self.entity_ids, tick, &mut tick_events);
             tick_events.extend(self.run_city_economy(tick)?);
+            tick_events.extend(self.run_city_geopolitics(tick)?);
             run_transfers(
                 &mut self.world,
                 &self.supply_links,
@@ -1063,6 +1110,209 @@ impl SimulationRuntime {
         })?;
         let event =
             self.resolve_civic_option(&city, treasury_id, dilemma_id, option_id, true, true)?;
+        self.record_player_event(event.clone());
+        self.refresh_resource_totals(self.world.current_tick().value());
+        self.state_fingerprint = self.world.fingerprint();
+        Ok(self.progress_with_events(vec![event]))
+    }
+
+    /// Execute a geopolitical realm action (tribute, emissary, defense posture, coalition, counter-strike).
+    pub fn execute_geopolitical_action(
+        &mut self,
+        action: &str,
+        entity_id: &str,
+        option: Option<&str>,
+    ) -> Result<RunProgress, WorldForgeError> {
+        self.ensure_player_action_allowed()?;
+        let city = self.city_config.clone().ok_or_else(|| {
+            WorldForgeError::new(
+                ErrorCode::ScenarioInvalid,
+                "this world has no city configuration",
+            )
+        })?;
+        let treasury_id = self.city_treasury_id.ok_or_else(|| {
+            WorldForgeError::new(ErrorCode::RuntimeInitFailed, "city treasury is unavailable")
+        })?;
+
+        let event;
+        let tick = self.world.current_tick();
+
+        match action {
+            "tribute" => {
+                let entity = city
+                    .political_entities
+                    .iter()
+                    .find(|e| e.id == entity_id)
+                    .ok_or_else(|| {
+                        action_error(format!("political entity '{entity_id}' not found"))
+                    })?;
+                if entity.tribute.is_empty() {
+                    return Err(action_error(format!(
+                        "entity '{entity_id}' does not owe tribute"
+                    )));
+                }
+
+                let state = self
+                    .world
+                    .get_component_mut::<CityRuntimeState>(&treasury_id)
+                    .expect("validated city state");
+                let last = state.last_tribute_tick.get(entity_id).copied().unwrap_or(0);
+                if tick.value() < last + 10 && last > 0 {
+                    return Err(action_error(
+                        "tribute is on cooldown; wait before demanding again",
+                    ));
+                }
+                state
+                    .last_tribute_tick
+                    .insert(entity_id.to_string(), tick.value());
+
+                let loyalty = state
+                    .entity_loyalty
+                    .entry(entity_id.to_string())
+                    .or_insert(Fixed64::from_f64_lossy(entity.initial_loyalty));
+                *loyalty = (*loyalty - Fixed64::from_int(8)).max(Fixed64::ZERO);
+
+                let inventory = self
+                    .world
+                    .get_component_mut::<Inventory>(&treasury_id)
+                    .expect("validated city inventory");
+                for (res, amt) in &entity.tribute {
+                    inventory.add(res, Fixed64::from_f64_lossy(*amt));
+                }
+
+                event = SimulationEvent::new(
+                    tick,
+                    EventType::TributeCollected {
+                        entity: entity_id.to_string(),
+                        resources: entity.tribute.clone(),
+                    },
+                );
+            }
+            "emissary" => {
+                let entity = city
+                    .political_entities
+                    .iter()
+                    .find(|e| e.id == entity_id)
+                    .ok_or_else(|| {
+                        action_error(format!("political entity '{entity_id}' not found"))
+                    })?;
+
+                let cost = BTreeMap::from([("credits".to_string(), 100.0)]);
+                spend_resources(&mut self.world, treasury_id, &cost)?;
+
+                let state = self
+                    .world
+                    .get_component_mut::<CityRuntimeState>(&treasury_id)
+                    .expect("validated city state");
+                let loyalty = state
+                    .entity_loyalty
+                    .entry(entity_id.to_string())
+                    .or_insert(Fixed64::from_f64_lossy(entity.initial_loyalty));
+                *loyalty = (*loyalty + Fixed64::from_int(20)).min(Fixed64::from_int(100));
+
+                let current_stance = state
+                    .entity_stances
+                    .entry(entity_id.to_string())
+                    .or_insert_with(|| entity.initial_stance.clone());
+                let old_stance = current_stance.clone();
+                if *current_stance == "hostile" {
+                    *current_stance = "neutral".to_string();
+                } else if *current_stance == "neutral" {
+                    *current_stance = "friendly".to_string();
+                }
+
+                event = SimulationEvent::new(
+                    tick,
+                    EventType::GeopoliticalStanceChanged {
+                        entity: entity_id.to_string(),
+                        from: old_stance,
+                        to: current_stance.clone(),
+                    },
+                );
+            }
+            "posture" => {
+                let new_posture = option.unwrap_or("fortified").to_string();
+                let state = self
+                    .world
+                    .get_component_mut::<CityRuntimeState>(&treasury_id)
+                    .expect("validated city state");
+                let old_posture = if state.defense_posture.is_empty() {
+                    "standard".to_string()
+                } else {
+                    state.defense_posture.clone()
+                };
+                state.defense_posture = new_posture.clone();
+
+                event = SimulationEvent::new(
+                    tick,
+                    EventType::GeopoliticalStanceChanged {
+                        entity: "defense-garrison".to_string(),
+                        from: old_posture,
+                        to: new_posture,
+                    },
+                );
+            }
+            "coalition" => {
+                let entity = city
+                    .political_entities
+                    .iter()
+                    .find(|e| e.id == entity_id)
+                    .ok_or_else(|| {
+                        action_error(format!("political entity '{entity_id}' not found"))
+                    })?;
+
+                let cost = BTreeMap::from([("credits".to_string(), 150.0)]);
+                spend_resources(&mut self.world, treasury_id, &cost)?;
+
+                let state = self
+                    .world
+                    .get_component_mut::<CityRuntimeState>(&treasury_id)
+                    .expect("validated city state");
+                let current_stance = state
+                    .entity_stances
+                    .entry(entity_id.to_string())
+                    .or_insert_with(|| entity.initial_stance.clone());
+                let old = current_stance.clone();
+                *current_stance = "coalition".to_string();
+
+                event = SimulationEvent::new(
+                    tick,
+                    EventType::GeopoliticalStanceChanged {
+                        entity: entity_id.to_string(),
+                        from: old,
+                        to: "coalition".to_string(),
+                    },
+                );
+            }
+            "strike" => {
+                let cost = BTreeMap::from([
+                    ("materials".to_string(), 150.0),
+                    ("credits".to_string(), 100.0),
+                ]);
+                spend_resources(&mut self.world, treasury_id, &cost)?;
+
+                let state = self
+                    .world
+                    .get_component_mut::<CityRuntimeState>(&treasury_id)
+                    .expect("validated city state");
+                state.raid_threat_counter = Fixed64::ZERO;
+
+                event = SimulationEvent::new(
+                    tick,
+                    EventType::WarlordIncursion {
+                        entity: entity_id.to_string(),
+                        damage: 0.0,
+                        repelled: true,
+                    },
+                );
+            }
+            _ => {
+                return Err(action_error(format!(
+                    "unknown geopolitical action '{action}'"
+                )));
+            }
+        }
+
         self.record_player_event(event.clone());
         self.refresh_resource_totals(self.world.current_tick().value());
         self.state_fingerprint = self.world.fingerprint();
@@ -1622,6 +1872,94 @@ impl SimulationRuntime {
                 })
                 .collect(),
         };
+        let geopolitics = if city.political_entities.is_empty() {
+            None
+        } else {
+            let defense_posture = if state.defense_posture.is_empty() {
+                "standard".to_string()
+            } else {
+                state.defense_posture.clone()
+            };
+            let military_power = 50.0
+                + (jobs as f64 * 0.15)
+                + if defense_posture == "fortified" {
+                    40.0
+                } else {
+                    0.0
+                };
+            let border_threat = state.raid_threat_counter.to_f64_lossy().clamp(0.0, 100.0);
+            let current_tick = self.world.current_tick().value();
+            let drought_index =
+                ((((self.scenario.seed.wrapping_add(current_tick / 40)) % 100) as f64) / 100.0)
+                    .clamp(0.0, 1.0);
+            let food_level = inventory.get("food").to_f64_lossy();
+            let famine_risk = (1.0 - (food_level / 400.0)).clamp(0.0, 1.0);
+            let active_coalition = city
+                .political_entities
+                .iter()
+                .find(|e| {
+                    state
+                        .entity_stances
+                        .get(&e.id)
+                        .map(String::as_str)
+                        .unwrap_or(e.initial_stance.as_str())
+                        == "coalition"
+                })
+                .map(|e| e.name.clone());
+
+            let entities = city
+                .political_entities
+                .iter()
+                .map(|e| {
+                    let stance = state
+                        .entity_stances
+                        .get(&e.id)
+                        .cloned()
+                        .unwrap_or_else(|| e.initial_stance.clone());
+                    let loyalty = state
+                        .entity_loyalty
+                        .get(&e.id)
+                        .copied()
+                        .unwrap_or(Fixed64::from_f64_lossy(e.initial_loyalty))
+                        .to_f64_lossy();
+                    let last = state.last_tribute_tick.get(&e.id).copied().unwrap_or(0);
+                    let tribute_available =
+                        !e.tribute.is_empty() && (current_tick >= last + 10 || last == 0);
+                    let raid_threat = if e.power_structure == "insurgency"
+                        || stance == "hostile"
+                        || stance == "at-war"
+                    {
+                        border_threat
+                    } else {
+                        0.0
+                    };
+                    PoliticalEntityProgress {
+                        id: e.id.clone(),
+                        name: e.name.clone(),
+                        description: e.description.clone(),
+                        power_structure: e.power_structure.clone(),
+                        ruler_title: e.ruler_title.clone(),
+                        stance,
+                        loyalty,
+                        military_power: e.military_power,
+                        tribute: e.tribute.clone(),
+                        traits: e.traits.clone(),
+                        tribute_available,
+                        raid_threat,
+                    }
+                })
+                .collect();
+
+            Some(CityGeopoliticsProgress {
+                defense_posture,
+                military_power,
+                border_threat,
+                drought_index,
+                famine_risk,
+                active_coalition,
+                entities,
+            })
+        };
         Some(CityProgress {
             treasury: city.treasury.clone(),
             population,
@@ -1633,6 +1971,7 @@ impl SimulationRuntime {
             buildings,
             technologies,
             governance,
+            geopolitics,
         })
     }
 
@@ -1771,6 +2110,114 @@ impl SimulationRuntime {
                 }
             }
         }
+        Ok(events)
+    }
+
+    fn run_city_geopolitics(
+        &mut self,
+        tick: Tick,
+    ) -> Result<Vec<SimulationEvent>, WorldForgeError> {
+        let (Some(city), Some(treasury_id)) = (self.city_config.clone(), self.city_treasury_id)
+        else {
+            return Ok(Vec::new());
+        };
+        if city.political_entities.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let mut events = Vec::new();
+        let tick_val = tick.value();
+
+        let mut state = self
+            .world
+            .get_component::<CityRuntimeState>(&treasury_id)
+            .cloned()
+            .ok_or_else(|| action_error("city state is unavailable"))?;
+
+        if tick_val > 0 && tick_val % 25 == 0 {
+            let has_hostiles = city.political_entities.iter().any(|e| {
+                let stance = state
+                    .entity_stances
+                    .get(&e.id)
+                    .map(String::as_str)
+                    .unwrap_or(e.initial_stance.as_str());
+                e.power_structure == "insurgency" || stance == "hostile" || stance == "at-war"
+            });
+            if has_hostiles {
+                state.raid_threat_counter += Fixed64::from_int(25);
+                if state.raid_threat_counter >= Fixed64::from_int(100) {
+                    state.raid_threat_counter = Fixed64::ZERO;
+                    let is_fortified = state.defense_posture == "fortified";
+                    let hostile_id = city
+                        .political_entities
+                        .iter()
+                        .find(|e| {
+                            let stance = state
+                                .entity_stances
+                                .get(&e.id)
+                                .map(String::as_str)
+                                .unwrap_or(e.initial_stance.as_str());
+                            e.power_structure == "insurgency"
+                                || stance == "hostile"
+                                || stance == "at-war"
+                        })
+                        .map(|e| e.id.clone())
+                        .unwrap_or_else(|| "dust-canyon-raiders".to_string());
+
+                    if is_fortified {
+                        events.push(SimulationEvent::new(
+                            tick,
+                            EventType::WarlordIncursion {
+                                entity: hostile_id,
+                                damage: 0.0,
+                                repelled: true,
+                            },
+                        ));
+                    } else {
+                        let inventory = self
+                            .world
+                            .get_component_mut::<Inventory>(&treasury_id)
+                            .expect("validated city treasury inventory");
+                        let looted_food = inventory.get("food").min(Fixed64::from_int(50));
+                        let looted_credits = inventory.get("credits").min(Fixed64::from_int(50));
+                        let _ = inventory.try_subtract("food", looted_food);
+                        let _ = inventory.try_subtract("credits", looted_credits);
+                        events.push(SimulationEvent::new(
+                            tick,
+                            EventType::WarlordIncursion {
+                                entity: hostile_id,
+                                damage: (looted_food + looted_credits).to_f64_lossy(),
+                                repelled: false,
+                            },
+                        ));
+                    }
+                }
+            }
+        }
+
+        if tick_val == 100 || tick_val == 350 || tick_val == 650 {
+            let inventory = self
+                .world
+                .get_component_mut::<Inventory>(&treasury_id)
+                .expect("validated city treasury inventory");
+            if inventory.get("food") >= Fixed64::from_int(50) {
+                let count = 25.0;
+                inventory.add(&city.population_resource, Fixed64::from_f64_lossy(count));
+                events.push(SimulationEvent::new(
+                    tick,
+                    EventType::RefugeeWaveArrived {
+                        origin: "border-marches".to_string(),
+                        count,
+                    },
+                ));
+            }
+        }
+
+        *self
+            .world
+            .get_component_mut::<CityRuntimeState>(&treasury_id)
+            .expect("validated city state") = state;
+
         Ok(events)
     }
 
@@ -2550,5 +2997,35 @@ goods = 2.0
             EventType::CivicDecisionResolved { dilemma, option }
                 if dilemma == "growth-charter" && option == "open-development"
         )));
+    }
+
+    #[test]
+    fn geopolitical_actions_are_recorded_and_deterministic() {
+        let play = || {
+            let mut runtime =
+                SimulationRuntime::load(&example("micro-city"), 42, Some(50)).unwrap();
+            runtime.step(5).unwrap();
+
+            // Toggle defense posture
+            runtime
+                .execute_geopolitical_action("posture", "defense-garrison", Some("fortified"))
+                .unwrap();
+
+            let progress = runtime.current_progress();
+            if let Some(city) = &progress.city {
+                if let Some(geo) = &city.geopolitics {
+                    assert_eq!(geo.defense_posture, "fortified");
+                }
+            }
+
+            runtime.step(45).unwrap();
+            let result = runtime.completed_result().unwrap();
+            (
+                result.final_state_fingerprint,
+                result.proof.event_chain_root,
+            )
+        };
+
+        assert_eq!(play(), play());
     }
 }

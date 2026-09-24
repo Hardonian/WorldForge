@@ -16,7 +16,8 @@ pub mod scenario;
 
 pub use city::{
     BuildingDefinition, BuildingSynergy, CityConfig, CivicDilemma, CivicEffects, CivicFaction,
-    CivicOption, CivicTrigger, DistrictDefinition, TechnologyDefinition, TechnologyEffects,
+    CivicOption, CivicTrigger, DistrictDefinition, PoliticalEntityDefinition, TechnologyDefinition,
+    TechnologyEffects,
 };
 pub use config::{EntitiesConfig, EntityConfig, LinkConfig, ProductionConfig};
 pub use event::{EventType, ScheduledEvent, ScheduledEventType, SimulationEvent};

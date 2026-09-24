@@ -598,6 +598,7 @@ fn simulation_export_with_event_limit(
         ("construction", result.event_type_counts.construction),
         ("research", result.event_type_counts.research),
         ("governance", result.event_type_counts.governance),
+        ("geopolitics", result.event_type_counts.geopolitics),
     ]);
     let retained_events = runtime.retained_events();
     let event_start = result.event_count.saturating_sub(retained_events.len());
@@ -705,6 +706,31 @@ fn simulation_export_with_event_limit(
                 EventType::SimulationDegraded { reason } => {
                     ("system", "runtime".to_string(), reason.clone(), 0.0)
                 }
+                EventType::GeopoliticalStanceChanged { entity, from, to } => {
+                    ("geopolitics", entity.clone(), format!("{from}→{to}"), 0.0)
+                }
+                EventType::TributeCollected { entity, resources } => {
+                    let total = resources.values().sum::<f64>();
+                    ("geopolitics", entity.clone(), "tribute".to_string(), total)
+                }
+                EventType::WarlordIncursion {
+                    entity,
+                    damage,
+                    repelled,
+                } => {
+                    let status = if *repelled {
+                        "repelled".to_string()
+                    } else {
+                        "breached".to_string()
+                    };
+                    ("geopolitics", entity.clone(), status, *damage)
+                }
+                EventType::RefugeeWaveArrived { origin, count } => (
+                    "geopolitics",
+                    origin.clone(),
+                    "refugees".to_string(),
+                    *count,
+                ),
             };
             serde_json::json!({
                 "tick": event.tick.value(),
