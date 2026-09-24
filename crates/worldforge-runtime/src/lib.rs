@@ -1461,15 +1461,11 @@ impl SimulationRuntime {
             .city_treasury_id
             .ok_or_else(|| action_error("city treasury is unavailable"))?;
         let tick = self.world.current_tick();
-        let nonce = {
-            let state = self
-                .world
-                .get_component_mut::<CityRuntimeState>(&treasury_id)
-                .expect("validated city state");
-            let nonce = state.intrigue_nonce;
-            state.intrigue_nonce = state.intrigue_nonce.saturating_add(1);
-            nonce
-        };
+        let nonce = self
+            .world
+            .get_component::<CityRuntimeState>(&treasury_id)
+            .expect("validated city state")
+            .intrigue_nonce;
         let mut rng = DeterministicRng::new(
             self.scenario.seed,
             &format!("intrigue/{}/{}/{}/{nonce}", tick.value(), action, target),
@@ -1613,6 +1609,19 @@ impl SimulationRuntime {
                     .iter()
                     .find(|agent| agent.id == target)
                     .ok_or_else(|| action_error(format!("cyber agent '{target}' not found")))?;
+                let current_status = self
+                    .world
+                    .get_component::<CityRuntimeState>(&treasury_id)
+                    .expect("validated city state")
+                    .agent_status
+                    .get(target)
+                    .map(String::as_str)
+                    .unwrap_or(agent.initial_status.as_str());
+                if current_status != "contained" && current_status != "compromised" {
+                    return Err(action_error(
+                        "only contained or compromised agents can be deployed",
+                    ));
+                }
                 let cost = BTreeMap::from([("research".to_string(), 20.0)]);
                 spend_resources(&mut self.world, treasury_id, &cost)?;
                 let state = self
@@ -1623,11 +1632,6 @@ impl SimulationRuntime {
                     .agent_status
                     .entry(target.to_string())
                     .or_insert_with(|| agent.initial_status.clone());
-                if status != "contained" && status != "compromised" {
-                    return Err(action_error(
-                        "only contained or compromised agents can be deployed",
-                    ));
-                }
                 let previous = status.clone();
                 *status = "ready".to_string();
                 events.push(SimulationEvent::new(
@@ -1645,6 +1649,19 @@ impl SimulationRuntime {
                     .iter()
                     .find(|agent| agent.id == target)
                     .ok_or_else(|| action_error(format!("cyber agent '{target}' not found")))?;
+                let current_status = self
+                    .world
+                    .get_component::<CityRuntimeState>(&treasury_id)
+                    .expect("validated city state")
+                    .agent_status
+                    .get(target)
+                    .map(String::as_str)
+                    .unwrap_or(agent.initial_status.as_str());
+                if current_status != "rogue" && current_status != "compromised" {
+                    return Err(action_error(
+                        "only rogue or compromised agents need containment",
+                    ));
+                }
                 let cost = BTreeMap::from([("credits".to_string(), 120.0)]);
                 spend_resources(&mut self.world, treasury_id, &cost)?;
                 let state = self
@@ -1655,11 +1672,6 @@ impl SimulationRuntime {
                     .agent_status
                     .entry(target.to_string())
                     .or_insert_with(|| agent.initial_status.clone());
-                if status != "rogue" && status != "compromised" {
-                    return Err(action_error(
-                        "only rogue or compromised agents need containment",
-                    ));
-                }
                 let previous = status.clone();
                 let probability =
                     ((agent.containment + 110.0 - agent.skill) / 140.0).clamp(0.15, 0.95);
@@ -1733,9 +1745,31 @@ impl SimulationRuntime {
                     ));
                 }
                 let operator = agent_id.unwrap_or("market-desk");
-                let skill = agent_id
-                    .and_then(|id| city.cyber_agents.iter().find(|agent| agent.id == id))
-                    .map_or(45.0, |agent| agent.skill);
+                let skill = if let Some(agent_id) = agent_id {
+                    let agent = city
+                        .cyber_agents
+                        .iter()
+                        .find(|agent| agent.id == agent_id)
+                        .ok_or_else(|| {
+                            action_error(format!("cyber agent '{agent_id}' not found"))
+                        })?;
+                    let status = self
+                        .world
+                        .get_component::<CityRuntimeState>(&treasury_id)
+                        .expect("validated city state")
+                        .agent_status
+                        .get(agent_id)
+                        .map(String::as_str)
+                        .unwrap_or(agent.initial_status.as_str());
+                    if status != "ready" {
+                        return Err(action_error(format!(
+                            "agent '{agent_id}' is {status}, not ready"
+                        )));
+                    }
+                    agent.skill
+                } else {
+                    45.0
+                };
                 let cost = BTreeMap::from([("credits".to_string(), 150.0)]);
                 spend_resources(&mut self.world, treasury_id, &cost)?;
                 let state = self
@@ -1808,15 +1842,21 @@ impl SimulationRuntime {
                 } else if side == "sell" {
                     let state = self
                         .world
-                        .get_component_mut::<CityRuntimeState>(&treasury_id)
+                        .get_component::<CityRuntimeState>(&treasury_id)
                         .expect("validated city state");
                     units = state
                         .crypto_holdings
-                        .remove(target)
+                        .get(target)
+                        .copied()
                         .unwrap_or(Fixed64::ZERO);
                     if units <= Fixed64::ZERO {
                         return Err(action_error("there is no position to sell"));
                     }
+                    self.world
+                        .get_component_mut::<CityRuntimeState>(&treasury_id)
+                        .expect("validated city state")
+                        .crypto_holdings
+                        .remove(target);
                     self.world
                         .get_component_mut::<Inventory>(&treasury_id)
                         .expect("validated city inventory")
@@ -1836,6 +1876,11 @@ impl SimulationRuntime {
             }
             _ => return Err(action_error(format!("unknown intrigue action '{action}'"))),
         }
+
+        self.world
+            .get_component_mut::<CityRuntimeState>(&treasury_id)
+            .expect("validated city state")
+            .intrigue_nonce = nonce.saturating_add(1);
 
         events.insert(
             0,
@@ -3832,5 +3877,26 @@ goods = 2.0
             )
         };
         assert_eq!(play(), play());
+    }
+
+    #[test]
+    fn rejected_intrigue_actions_are_atomic() {
+        let mut runtime = SimulationRuntime::load(&example("micro-city"), 2026, Some(24)).unwrap();
+        let before_fingerprint = runtime.world.fingerprint();
+        let before_events = runtime.event_count;
+        let before_progress =
+            serde_json::to_value(runtime.current_progress()).expect("progress serializes");
+
+        let error = runtime
+            .execute_intrigue_action("deploy", "cipher-nine", None, None)
+            .unwrap_err();
+
+        assert!(error.message.contains("contained or compromised"));
+        assert_eq!(runtime.world.fingerprint(), before_fingerprint);
+        assert_eq!(runtime.event_count, before_events);
+        assert_eq!(
+            serde_json::to_value(runtime.current_progress()).expect("progress serializes"),
+            before_progress
+        );
     }
 }
