@@ -13,6 +13,10 @@
 - Added a city-system JSON schema, content-authoring documentation, graph-cycle validation, and end-to-end regression coverage.
 - Added data-driven civic factions, triggerable and timed dilemmas, branching successor choices, automatic defaults, treasury exchanges, support shifts, and permanent city-system effects.
 - Added proof-chained governance events, replay/save restoration, a live Council Chamber interface, and a three-dilemma branching campaign for `micro-city`.
+- Added rival corporations, stealable trade secrets, rated cyber agents, compromise and rogue-agent containment, recurring rogue incidents, and an attribution-heat system.
+- Added deterministic crypto market cycles, holdings, buy/sell actions, pump/dump operations, position valuation, and proof-chained market consequences.
+- Connected geopolitical, corporate, cyber, market, civic, research, construction, and resource systems in a unified Play Mode strategy console.
+- Added first-person city-link and third-person follow cameras with smooth transitions, WASD/look/orbit controls, mode-aware HUD feedback, live decision flashes, pause, checkpoint, and intervention controls.
 
 ### Local world inheritance
 

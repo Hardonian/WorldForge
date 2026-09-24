@@ -1107,4 +1107,56 @@ mod tests {
             .validate(&entities())
             .is_err());
     }
+
+    #[test]
+    fn validates_corporate_intrigue_content() {
+        let source = r#"
+            treasury = "city-hall"
+            [[districts]]
+            id = "core"
+            name = "Core"
+            slots = 2
+            [[buildings]]
+            id = "lab"
+            name = "Lab"
+            allowed_districts = ["core"]
+
+            [[corporations]]
+            id = "nova"
+            name = "Nova"
+            security = 70.0
+            influence = 60.0
+            [[corporations.secrets]]
+            id = "project-ghost"
+            name = "Project Ghost"
+            difficulty = 80.0
+            research_value = 90.0
+
+            [[cyber_agents]]
+            id = "cipher"
+            name = "Cipher"
+            skill = 75.0
+            stealth = 82.0
+            loyalty = 65.0
+            containment = 88.0
+            initial_status = "contained"
+
+            [[crypto_assets]]
+            id = "nova-token"
+            name = "Nova Token"
+            symbol = "NVA"
+            initial_price = 12.0
+            volatility = 0.3
+            liquidity = 1000.0
+        "#;
+        let config = CityConfig::from_toml(source).unwrap();
+        config.validate(&entities()).unwrap();
+        assert_eq!(config.corporations[0].secrets.len(), 1);
+
+        let invalid = source.replace("volatility = 0.3", "volatility = 1.3");
+        assert!(CityConfig::from_toml(&invalid)
+            .unwrap()
+            .validate(&entities())
+            .is_err());
+    }
 }

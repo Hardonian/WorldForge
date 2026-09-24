@@ -19,6 +19,9 @@ World Forge is a simulation operating system for building games, simulations, wo
 | City construction | ✅ Implemented | District slots, costs, upkeep, yields, housing, jobs, wellbeing, population growth, co-location synergies |
 | Research trees | ✅ Implemented | Data-driven branches, prerequisites, exclusions, unlocks, and systemic multipliers |
 | Civic governance | ✅ Implemented | Factions, timed dilemmas, branching mandates, support shifts, defaults, and persistent systemic consequences |
+| Geopolitics | ✅ Implemented | Rival realms, loyalty, tribute, coalitions, defense posture, raids, famine pressure, and refugee crises |
+| Corporate intrigue | ✅ Implemented | Rival corporations, trade secrets, cyber agents, attribution heat, compromise, rogue-agent containment |
+| Crypto markets | ✅ Implemented | Deterministic prices, positions, trades, volatility, manipulation, risk, and proof-chained outcomes |
 | Objective system | ✅ Implemented | Evaluate pass/fail conditions per scenario |
 | Replay artifacts | ✅ Implemented | CBOR-serialized with tamper detection |
 | Proof chain | ✅ Implemented | Event hash chains with verification |
@@ -27,7 +30,7 @@ World Forge is a simulation operating system for building games, simulations, wo
 | Agent framework | ✅ Implemented | Rule-based and utility-based policies |
 | Capability-based mod API | ✅ Implemented | Deny-by-default capability system |
 | WASM mod runtime | ✅ Implemented | Wasmtime core-Wasm sandbox, fuel/memory limits, capability-gated host ABI |
-| Simulation Studio | ✅ Implemented | World Builder, durable saves, Play Mode, live decisions, charts, proofs, comparisons, benchmarks, export |
+| Simulation Studio | ✅ Implemented | Immersive first-/third-person and tactical views, live decisions, time control, checkpoints, interventions, charts, proofs, comparisons, benchmarks |
 | Operational analytics | ✅ Implemented | Exact resource extrema, objective progress, stress/growth/recovery signals, resilience scoring |
 | CLI | ✅ Implemented | doctor, validate, run, export, benchmark, dashboard, package, replay |
 | CI pipeline | ✅ Implemented | Cross-platform tests + determinism verification |
@@ -106,9 +109,9 @@ cargo run -p worldforge-cli -- run examples/supply-chain --seed 42 --ticks 1000
 
 ## Playable city and research layer
 
-`examples/micro-city` is now a player-directed city rather than a passive scenario. Its four districts have finite land budgets; eight building types consume construction resources and ongoing upkeep; tagged neighbors create local production synergies; housing supports population growth; and jobs and wellbeing respond to the built form.
+`examples/micro-city` is now a player-directed city rather than a passive scenario. Its districts have finite land budgets; thirteen building types consume construction resources and ongoing upkeep; tagged neighbors create local production synergies; housing supports population growth; and jobs and wellbeing respond to the built form.
 
-Nine technologies span knowledge, habitat, ecology, energy, and synthesis. Paths cross-link, unlock new buildings, transform resource yields, and include an exclusive choice between autonomous and human-scale power systems. Four civic factions contest a branching campaign of timed dilemmas: development policy opens different successor crises, shifts support, and permanently rewrites growth, housing, employment, wellbeing, and production. Construction, research, governance, and capacity choices are deterministic events preserved by saves, replay re-execution, state fingerprints, and the proof chain. See [city systems, research, and governance](docs/city-systems.md).
+Twenty-four technologies span knowledge, habitat, ecology, energy, cybernetics, defense, economics, and synthesis. Paths cross-link, unlock new buildings, transform resource yields, and include mutually exclusive choices. Civic factions, rival realms, corporations, covert agents, and token markets create branching crises whose consequences rewrite growth, legitimacy, security, employment, wellbeing, and production. Every construction, research, governance, geopolitical, intrigue, market, and capacity choice is deterministic and preserved by saves, replay re-execution, state fingerprints, and the proof chain. See [city systems, research, and governance](docs/city-systems.md).
 
 ## Verification
 
