@@ -1311,6 +1311,154 @@ impl SimulationRuntime {
         Ok(self.progress_with_events(vec![event]))
     }
 
+    /// Upgrade an existing building type across the city to the next level (up to Level 3).
+    pub fn upgrade_city_building(
+        &mut self,
+        building_id: &str,
+    ) -> Result<RunProgress, WorldForgeError> {
+        self.ensure_player_action_allowed()?;
+        let city = self.city_config.as_ref().ok_or_else(|| {
+            WorldForgeError::new(ErrorCode::ScenarioInvalid, "this world has no city-building rules")
+        })?;
+        let building = city
+            .buildings
+            .iter()
+            .find(|b| b.id == building_id)
+            .ok_or_else(|| {
+                WorldForgeError::new(
+                    ErrorCode::ScenarioInvalid,
+                    format!("building '{building_id}' does not exist"),
+                )
+            })?
+            .clone();
+
+        let treasury_id = self.city_treasury_id.ok_or_else(|| {
+            WorldForgeError::new(ErrorCode::RuntimeInitFailed, "city treasury is unavailable")
+        })?;
+        let state = self
+            .world
+            .get_component::<CityRuntimeState>(&treasury_id)
+            .cloned()
+            .ok_or_else(|| {
+                WorldForgeError::new(ErrorCode::RuntimeInitFailed, "city state is unavailable")
+            })?;
+
+        let current_count = city_building_count(&state, building_id);
+        if current_count == 0 {
+            return Err(action_error(format!(
+                "cannot upgrade '{}': no constructed instances in the city",
+                building.name
+            )));
+        }
+
+        let current_level = state.building_levels.get(building_id).copied().unwrap_or(1);
+        if current_level >= 3 {
+            return Err(action_error(format!(
+                "'{}' is already at maximum level 3",
+                building.name
+            )));
+        }
+
+        let mut upgrade_cost = BTreeMap::new();
+        for (res, amt) in &building.cost {
+            upgrade_cost.insert(res.clone(), amt * 0.75 * (current_level as f64));
+        }
+        spend_resources(&mut self.world, treasury_id, &upgrade_cost)?;
+
+        let state = self
+            .world
+            .get_component_mut::<CityRuntimeState>(&treasury_id)
+            .expect("validated city state");
+        state
+            .building_levels
+            .insert(building_id.to_string(), current_level + 1);
+
+        let event = SimulationEvent::new(
+            self.world.current_tick(),
+            EventType::BuildingConstructed {
+                building: building.id,
+                district: format!("level-{}", current_level + 1),
+                count: current_count,
+            },
+        );
+        self.record_player_event(event.clone());
+        self.refresh_resource_totals(self.world.current_tick().value());
+        self.state_fingerprint = self.world.fingerprint();
+        Ok(self.progress_with_events(vec![event]))
+    }
+
+    /// Demolish one constructed building instance from a district, refunding 40% of its cost.
+    pub fn demolish_city_building(
+        &mut self,
+        building_id: &str,
+        district_id: &str,
+    ) -> Result<RunProgress, WorldForgeError> {
+        self.ensure_player_action_allowed()?;
+        let city = self.city_config.as_ref().ok_or_else(|| {
+            WorldForgeError::new(ErrorCode::ScenarioInvalid, "this world has no city-building rules")
+        })?;
+        let building = city
+            .buildings
+            .iter()
+            .find(|b| b.id == building_id)
+            .ok_or_else(|| {
+                WorldForgeError::new(
+                    ErrorCode::ScenarioInvalid,
+                    format!("building '{building_id}' does not exist"),
+                )
+            })?
+            .clone();
+
+        let treasury_id = self.city_treasury_id.ok_or_else(|| {
+            WorldForgeError::new(ErrorCode::RuntimeInitFailed, "city treasury is unavailable")
+        })?;
+        let placement_key = format!("{district_id}/{building_id}");
+        let state = self
+            .world
+            .get_component_mut::<CityRuntimeState>(&treasury_id)
+            .ok_or_else(|| {
+                WorldForgeError::new(ErrorCode::RuntimeInitFailed, "city state is unavailable")
+            })?;
+
+        let count = state.placements.get_mut(&placement_key).ok_or_else(|| {
+            action_error(format!(
+                "no '{}' found in '{}' to demolish",
+                building.name, district_id
+            ))
+        })?;
+        if *count == 0 {
+            return Err(action_error(format!(
+                "no '{}' found in '{}' to demolish",
+                building.name, district_id
+            )));
+        }
+        *count -= 1;
+        let remaining = *count;
+        if remaining == 0 {
+            state.placements.remove(&placement_key);
+        }
+
+        let inventory = self
+            .world
+            .get_component_mut::<Inventory>(&treasury_id)
+            .expect("validated city inventory");
+        for (res, amt) in &building.cost {
+            inventory.add(res, Fixed64::from_f64_lossy(amt * 0.40));
+        }
+
+        let event = SimulationEvent::new(
+            self.world.current_tick(),
+            EventType::CapacityChanged {
+                entity: district_id.to_string(),
+                new_capacity: remaining as f64,
+            },
+        );
+        self.record_player_event(event.clone());
+        self.refresh_resource_totals(self.world.current_tick().value());
+        self.state_fingerprint = self.world.fingerprint();
+        Ok(self.progress_with_events(vec![event]))
+    }
+
     /// Unlock a technology in the world's branching research graph.
     pub fn research_technology(
         &mut self,
@@ -3178,6 +3326,138 @@ impl SimulationRuntime {
             .world
             .get_component_mut::<CityRuntimeState>(&treasury_id)
             .expect("validated city state") = state;
+
+        Ok(events)
+    }
+
+    fn run_city_ecology(
+        &mut self,
+        tick: Tick,
+    ) -> Result<Vec<SimulationEvent>, WorldForgeError> {
+        let (Some(city), Some(treasury_id)) = (self.city_config.clone(), self.city_treasury_id)
+        else {
+            return Ok(Vec::new());
+        };
+        let mut events = Vec::new();
+        let tick_val = tick.value();
+
+        // 1. Seasonal progression (every 60 ticks)
+        if tick_val > 0 && tick_val.is_multiple_of(60) {
+            let cycle = (tick_val / 240) + 1;
+            let season_idx = (tick_val % 240) / 60;
+            let season = match season_idx {
+                0 => "Spring",
+                1 => "Summer",
+                2 => "Autumn",
+                _ => "Winter",
+            };
+            events.push(SimulationEvent::new(
+                tick,
+                EventType::SeasonChanged {
+                    season: season.to_string(),
+                    cycle,
+                },
+            ));
+        }
+
+        // 2. Weather shift (every 30 ticks)
+        if tick_val > 0 && tick_val.is_multiple_of(30) {
+            let season_idx = (tick_val % 240) / 60;
+            let weather_seed = self.scenario.seed.wrapping_add(tick_val / 30);
+            let weather_choice = weather_seed % 4;
+            let (weather, temp) = match season_idx {
+                0 => match weather_choice {
+                    0 => ("Gentle Rain", 14.5),
+                    1 => ("Clear Skies", 18.0),
+                    2 => ("Spring Showers", 15.0),
+                    _ => ("Mild Breeze", 17.5),
+                },
+                1 => match weather_choice {
+                    0 => ("Scorching Sun", 34.0),
+                    1 => ("Heatwave", 37.5),
+                    2 => ("Thunderstorm", 28.0),
+                    _ => ("Clear Skies", 31.0),
+                },
+                2 => match weather_choice {
+                    0 => ("Crisp Autumn Wind", 16.0),
+                    1 => ("Overcast Skies", 14.0),
+                    2 => ("Cool Rain", 12.5),
+                    _ => ("Harvest Sun", 18.0),
+                },
+                _ => match weather_choice {
+                    0 => ("Light Snow", 0.5),
+                    1 => ("Freezing Frost", -4.0),
+                    2 => ("Winter Blizzard", -2.5),
+                    _ => ("Cold Clear", 1.0),
+                },
+            };
+            events.push(SimulationEvent::new(
+                tick,
+                EventType::WeatherChanged {
+                    weather: weather.to_string(),
+                    temperature: temp,
+                },
+            ));
+        }
+
+        // 3. Ecological disaster check
+        if tick_val > 0 && tick_val.is_multiple_of(100) {
+            let inventory = self
+                .world
+                .get_component_mut::<Inventory>(&treasury_id)
+                .expect("validated city inventory");
+            let season_idx = (tick_val % 240) / 60;
+            if season_idx == 1 && inventory.get("clean_water") < Fixed64::from_int(40) {
+                events.push(SimulationEvent::new(
+                    tick,
+                    EventType::EcologicalDisaster {
+                        disaster: "Groundwater Drought".to_string(),
+                        severity: 65.0,
+                    },
+                ));
+            } else if season_idx == 3 && inventory.get("power") < Fixed64::from_int(30) {
+                events.push(SimulationEvent::new(
+                    tick,
+                    EventType::EcologicalDisaster {
+                        disaster: "Grid Freeze Shock".to_string(),
+                        severity: 50.0,
+                    },
+                ));
+            }
+        }
+
+        // 4. Logistics & trade caravan
+        if tick_val > 0 && tick_val.is_multiple_of(40) {
+            let state = self
+                .world
+                .get_component::<CityRuntimeState>(&treasury_id)
+                .cloned()
+                .ok_or_else(|| action_error("city state is unavailable"))?;
+            let friendly_entity = city.political_entities.iter().find(|e| {
+                let stance = state
+                    .entity_stances
+                    .get(&e.id)
+                    .map(String::as_str)
+                    .unwrap_or(e.initial_stance.as_str());
+                stance == "vassal" || stance == "friendly" || stance == "coalition"
+            });
+            if let Some(partner) = friendly_entity {
+                let inventory = self
+                    .world
+                    .get_component_mut::<Inventory>(&treasury_id)
+                    .expect("validated city inventory");
+                let bonus_credits = Fixed64::from_int(20);
+                inventory.add("credits", bonus_credits);
+                events.push(SimulationEvent::new(
+                    tick,
+                    EventType::TradeCaravanArrived {
+                        source: partner.name.clone(),
+                        resource: "credits".to_string(),
+                        amount: bonus_credits.to_f64_lossy(),
+                    },
+                ));
+            }
+        }
 
         Ok(events)
     }

@@ -179,6 +179,17 @@ struct ConstructRequest {
 }
 
 #[derive(Deserialize)]
+struct UpgradeRequest {
+    building: String,
+}
+
+#[derive(Deserialize)]
+struct DemolishRequest {
+    building: String,
+    district: String,
+}
+
+#[derive(Deserialize)]
 struct ResearchRequest {
     technology: String,
 }
@@ -453,6 +464,24 @@ fn handle_connection(stream: &mut TcpStream, state: &ServerState) -> Result<(), 
             respond_json(stream, "200 OK", &response)
         }
         ("POST", route)
+            if route.ends_with("/upgrade") && play_action_id(route, "upgrade").is_some() =>
+        {
+            require_json_content_type(&header)?;
+            let request: UpgradeRequest = parse_json(body)?;
+            let id = play_action_id(route, "upgrade").unwrap_or_default();
+            let response = upgrade_in_play_session(state, id, request)?;
+            respond_json(stream, "200 OK", &response)
+        }
+        ("POST", route)
+            if route.ends_with("/demolish") && play_action_id(route, "demolish").is_some() =>
+        {
+            require_json_content_type(&header)?;
+            let request: DemolishRequest = parse_json(body)?;
+            let id = play_action_id(route, "demolish").unwrap_or_default();
+            let response = demolish_in_play_session(state, id, request)?;
+            respond_json(stream, "200 OK", &response)
+        }
+        ("POST", route)
             if route.ends_with("/research") && play_action_id(route, "research").is_some() =>
         {
             require_json_content_type(&header)?;
@@ -685,6 +714,74 @@ fn construct_in_play_session(
         session.interventions.push(InterventionRecord {
             tick,
             action: "construct".to_string(),
+            entity: None,
+            capacity: None,
+            building: Some(request.building),
+            district: Some(request.district),
+            technology: None,
+            dilemma: None,
+            option: None,
+            geo_action: None,
+            intrigue_action: None,
+            target: None,
+            agent: None,
+        });
+        Ok(play_document(
+            id,
+            &session.world,
+            &progress,
+            session.runtime.replay(),
+            false,
+        ))
+    })
+}
+
+fn upgrade_in_play_session(
+    state: &ServerState,
+    id: &str,
+    request: UpgradeRequest,
+) -> Result<Value, WorldForgeError> {
+    with_play_session(state, id, |session| {
+        let tick = session.runtime.current_progress().current_tick;
+        let progress = session.runtime.upgrade_city_building(&request.building)?;
+        session.interventions.push(InterventionRecord {
+            tick,
+            action: "upgrade".to_string(),
+            entity: None,
+            capacity: None,
+            building: Some(request.building),
+            district: None,
+            technology: None,
+            dilemma: None,
+            option: None,
+            geo_action: None,
+            intrigue_action: None,
+            target: None,
+            agent: None,
+        });
+        Ok(play_document(
+            id,
+            &session.world,
+            &progress,
+            session.runtime.replay(),
+            false,
+        ))
+    })
+}
+
+fn demolish_in_play_session(
+    state: &ServerState,
+    id: &str,
+    request: DemolishRequest,
+) -> Result<Value, WorldForgeError> {
+    with_play_session(state, id, |session| {
+        let tick = session.runtime.current_progress().current_tick;
+        let progress = session
+            .runtime
+            .demolish_city_building(&request.building, &request.district)?;
+        session.interventions.push(InterventionRecord {
+            tick,
+            action: "demolish".to_string(),
             entity: None,
             capacity: None,
             building: Some(request.building),
@@ -1041,6 +1138,28 @@ fn load_save(state: &ServerState, id: &str) -> Result<Value, WorldForgeError> {
                     )
                 })?,
             )?,
+            "upgrade" => runtime.upgrade_city_building(
+                intervention.building.as_deref().ok_or_else(|| {
+                    WorldForgeError::new(
+                        ErrorCode::ReplayFormatInvalid,
+                        "upgrade intervention is missing its building",
+                    )
+                })?,
+            )?,
+            "demolish" => runtime.demolish_city_building(
+                intervention.building.as_deref().ok_or_else(|| {
+                    WorldForgeError::new(
+                        ErrorCode::ReplayFormatInvalid,
+                        "demolish intervention is missing its building",
+                    )
+                })?,
+                intervention.district.as_deref().ok_or_else(|| {
+                    WorldForgeError::new(
+                        ErrorCode::ReplayFormatInvalid,
+                        "demolish intervention is missing its district",
+                    )
+                })?,
+            )?,
             "research" => runtime.research_technology(
                 intervention.technology.as_deref().ok_or_else(|| {
                     WorldForgeError::new(
@@ -1250,6 +1369,20 @@ fn validate_save_game(save: &SaveGame, expected_id: &str) -> Result<(), WorldFor
                     })
             }
             "construct" => {
+                intervention
+                    .building
+                    .as_deref()
+                    .is_some_and(valid_action_id)
+                    && intervention
+                        .district
+                        .as_deref()
+                        .is_some_and(valid_action_id)
+            }
+            "upgrade" => intervention
+                .building
+                .as_deref()
+                .is_some_and(valid_action_id),
+            "demolish" => {
                 intervention
                     .building
                     .as_deref()
