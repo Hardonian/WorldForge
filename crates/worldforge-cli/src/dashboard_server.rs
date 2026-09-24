@@ -2117,6 +2117,36 @@ residents-council = -5.0
 jobs_multiplier = 1.18
 [dilemmas.options.effects.resource_multipliers]
 research = 1.15
+
+[[corporations]]
+id = "nova-consortium"
+name = "Nova Consortium"
+sector = "urban-technology"
+security = 55.0
+influence = 68.0
+[[corporations.secrets]]
+id = "adaptive-infrastructure"
+name = "Adaptive Infrastructure Model"
+difficulty = 50.0
+research_value = 60.0
+
+[[cyber_agents]]
+id = "civic-specter"
+name = "Civic Specter"
+description = "A sandboxed municipal intelligence agent for abstract covert operations."
+skill = 75.0
+stealth = 72.0
+loyalty = 85.0
+containment = 80.0
+initial_status = "ready"
+
+[[crypto_assets]]
+id = "metro-token"
+name = "Metro Token"
+symbol = "MTR"
+initial_price = 8.0
+volatility = 0.18
+liquidity = 4000.0
 "#,
     )
 }

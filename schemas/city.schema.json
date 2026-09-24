@@ -124,6 +124,81 @@
         },
         "additionalProperties": false
       }
+    },
+    "political_entities": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "name"],
+        "properties": {
+          "id": { "$ref": "#/definitions/id" },
+          "name": { "type": "string", "minLength": 1 },
+          "description": { "type": "string" },
+          "power_structure": { "type": "string" },
+          "ruler_title": { "type": "string" },
+          "initial_stance": { "type": "string" },
+          "initial_loyalty": { "type": "number", "minimum": 0, "maximum": 100 },
+          "military_power": { "type": "number", "minimum": 0 },
+          "tribute": { "$ref": "#/definitions/resources" },
+          "traits": { "$ref": "#/definitions/ids" }
+        },
+        "additionalProperties": false
+      }
+    },
+    "corporations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "name", "secrets"],
+        "properties": {
+          "id": { "$ref": "#/definitions/id" },
+          "name": { "type": "string", "minLength": 1 },
+          "description": { "type": "string" },
+          "sector": { "type": "string", "minLength": 1 },
+          "security": { "type": "number", "minimum": 0, "maximum": 100 },
+          "influence": { "type": "number", "minimum": 0, "maximum": 100 },
+          "secrets": {
+            "type": "array",
+            "minItems": 1,
+            "items": { "$ref": "#/definitions/tradeSecret" }
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "cyber_agents": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "name"],
+        "properties": {
+          "id": { "$ref": "#/definitions/id" },
+          "name": { "type": "string", "minLength": 1 },
+          "description": { "type": "string" },
+          "skill": { "type": "number", "minimum": 0, "maximum": 100 },
+          "stealth": { "type": "number", "minimum": 0, "maximum": 100 },
+          "loyalty": { "type": "number", "minimum": 0, "maximum": 100 },
+          "containment": { "type": "number", "minimum": 0, "maximum": 100 },
+          "initial_status": { "enum": ["ready", "contained", "compromised", "rogue"] }
+        },
+        "additionalProperties": false
+      }
+    },
+    "crypto_assets": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "name", "symbol", "initial_price"],
+        "properties": {
+          "id": { "$ref": "#/definitions/id" },
+          "name": { "type": "string", "minLength": 1 },
+          "symbol": { "type": "string", "minLength": 1, "maxLength": 12 },
+          "initial_price": { "type": "number", "exclusiveMinimum": 0 },
+          "volatility": { "type": "number", "minimum": 0, "maximum": 1 },
+          "liquidity": { "type": "number", "exclusiveMinimum": 0 }
+        },
+        "additionalProperties": false
+      }
     }
   },
   "additionalProperties": false,
@@ -169,6 +244,18 @@
         "grants": { "$ref": "#/definitions/resources" },
         "faction_support": { "$ref": "#/definitions/signedResources" },
         "effects": { "$ref": "#/definitions/civicEffects" }
+      },
+      "additionalProperties": false
+    },
+    "tradeSecret": {
+      "type": "object",
+      "required": ["id", "name"],
+      "properties": {
+        "id": { "$ref": "#/definitions/id" },
+        "name": { "type": "string", "minLength": 1 },
+        "description": { "type": "string" },
+        "difficulty": { "type": "number", "minimum": 0, "maximum": 100 },
+        "research_value": { "type": "number", "exclusiveMinimum": 0 }
       },
       "additionalProperties": false
     }
