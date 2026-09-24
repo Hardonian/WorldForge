@@ -2563,7 +2563,7 @@ function drawFanChart(report, resourceName) {
 
     // Gridlines & Y-axis numbers
     ctx.lineWidth = 1;
-    ctx.font = '10px ui-monospace, monospace';
+    ctx.font = '10px ' + FONT_MONO;
     ctx.textAlign = 'right';
     ctx.textBaseline = 'middle';
     ctx.fillStyle = 'rgba(163, 184, 214, 0.45)';
@@ -2656,7 +2656,7 @@ function drawFanChart(report, resourceName) {
     ctx.textAlign = 'left';
     ctx.textBaseline = 'top';
     ctx.fillStyle = '#67a9ff';
-    ctx.font = '700 11px ui-monospace, monospace';
+    ctx.font = '700 11px ' + FONT_MONO;
     ctx.fillText(`${resourceName.toUpperCase()} · Median: ${lastPt.median.toFixed(1)} [p10: ${lastPt.p10.toFixed(1)}, p90: ${lastPt.p90.toFixed(1)}]`, pad.left + 4, 10);
 }
 
@@ -2923,7 +2923,7 @@ function drawResourceChart(data) {
     maxValue = niceMaximum(maxValue);
 
     ctx.lineWidth = 1;
-    ctx.font = '10px ui-monospace, monospace';
+    ctx.font = '10px ' + FONT_MONO;
     for (let i = 0; i <= 4; i++) {
         const y = pad.top + ch * i / 4;
         ctx.strokeStyle = 'rgba(163,184,214,.09)';
@@ -2953,7 +2953,7 @@ function drawResourceChart(data) {
         ctx.strokeStyle = color; ctx.lineWidth = 1.7; ctx.lineJoin = 'round'; ctx.stroke();
     });
     let legendX = pad.left;
-    ctx.font = '10px ui-sans-serif, sans-serif';
+    ctx.font = '10px ' + FONT_SANS;
     resources.forEach((resource, index) => {
         const labelWidth = ctx.measureText(prettyName(resource)).width + 28;
         if (legendX + labelWidth > w - pad.right) return;
@@ -2993,7 +2993,7 @@ function drawEntityNetwork(world) {
         ctx.beginPath(); ctx.arc(position.x, position.y, 16, 0, Math.PI * 2); ctx.fillStyle = glow; ctx.fill();
         ctx.beginPath(); ctx.arc(position.x, position.y, entities.length > 20 ? 3.2 : 5, 0, Math.PI * 2); ctx.fillStyle = COLORS[index % COLORS.length]; ctx.fill();
         if (entities.length <= 14) {
-            ctx.fillStyle = '#9aa8bb'; ctx.font = '9px ui-sans-serif, sans-serif'; ctx.textAlign = 'center';
+            ctx.fillStyle = '#9aa8bb'; ctx.font = '9px ' + FONT_SANS; ctx.textAlign = 'center';
             ctx.fillText(entities[index], position.x, position.y > cy ? position.y + 18 : position.y - 13);
         }
     });
@@ -3016,8 +3016,8 @@ function drawEventDistribution(data) {
         const gradient = ctx.createLinearGradient(0, y, 0, pad.top + ch);
         gradient.addColorStop(0, color); gradient.addColorStop(1, `${color}35`);
         roundRect(ctx, x, y, barWidth, Math.max(2, height), 5); ctx.fillStyle = gradient; ctx.fill();
-        ctx.fillStyle = '#b7c1cf'; ctx.font = '10px ui-monospace, monospace'; ctx.textAlign = 'center'; ctx.fillText(compactNumber(count), x + barWidth / 2, y - 8);
-        ctx.fillStyle = '#718097'; ctx.font = '9px ui-sans-serif, sans-serif'; ctx.fillText(prettyName(type), x + barWidth / 2, h - 16);
+        ctx.fillStyle = '#b7c1cf'; ctx.font = '10px ' + FONT_MONO; ctx.textAlign = 'center'; ctx.fillText(compactNumber(count), x + barWidth / 2, y - 8);
+        ctx.fillStyle = '#718097'; ctx.font = '9px ' + FONT_SANS; ctx.fillText(prettyName(type), x + barWidth / 2, h - 16);
     });
 }
 
@@ -5564,7 +5564,7 @@ const WorldForgeCG = {
                 ctx.strokeStyle = '#38bdf8';
                 ctx.lineWidth = 1;
                 ctx.strokeRect(-12, -26, 24, 15);
-                ctx.font = '10px sans-serif';
+                ctx.font = '10px ' + FONT_SANS;
                 ctx.textAlign = 'center';
                 ctx.fillText(c.emoji, 0, -15);
             } else if (c.bubbleTimer >= 320) {
@@ -5728,21 +5728,21 @@ const WorldForgeCG = {
             ctx.lineWidth = isHovered ? 3 : 2;
             ctx.stroke();
 
-            ctx.font = '22px sans-serif';
+            ctx.font = '22px ' + FONT_SANS;
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
             ctx.fillText(r.crest, 0, -4);
 
             ctx.fillStyle = '#f8fafc';
-            ctx.font = 'bold 12px sans-serif';
+            ctx.font = 'bold 12px ' + FONT_SANS;
             ctx.fillText(r.name, 0, r.r + 16);
 
             ctx.fillStyle = 'var(--text-muted, #94a3b8)';
-            ctx.font = '10px sans-serif';
+            ctx.font = '10px ' + FONT_SANS;
             ctx.fillText(r.title, 0, r.r + 30);
 
             ctx.fillStyle = r.color;
-            ctx.font = 'bold 9px sans-serif';
+            ctx.font = 'bold 9px ' + FONT_MONO;
             ctx.fillText(r.power, 0, r.r + 43);
 
             ctx.restore();
@@ -6117,7 +6117,7 @@ const WorldForgeCG = {
         ctx.fillStyle = '#0284c7';
         ctx.fillRect(-6, -16, 52, 12);
         ctx.fillStyle = '#f8fafc';
-        ctx.font = 'bold 8px sans-serif';
+        ctx.font = 'bold 8px ' + FONT_MONO;
         ctx.fillText('DESAL', 4, -7);
 
         // Water Storage Silos
@@ -6590,7 +6590,7 @@ const WorldForgeCG = {
     },
 
     drawFloaties(ctx) {
-        ctx.font = '650 10.5px ui-monospace, SFMono-Regular, monospace';
+        ctx.font = '650 10.5px ' + FONT_MONO;
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
         for (let i = this.floaties.length - 1; i >= 0; i--) {
@@ -6714,7 +6714,7 @@ const WorldForgeCG = {
             if (node.capacity != null) {
                 const capPct = Math.round(node.capacity * 100);
                 const capText = `${capPct}%`;
-                ctx.font = '700 8px ui-monospace, monospace';
+                ctx.font = '700 8px ' + FONT_MONO;
                 const tw = ctx.measureText(capText).width;
                 ctx.fillStyle = node.capacity > 1.0 ? 'rgba(241,185,107,0.9)' : (node.capacity === 0 ? 'rgba(255,111,124,0.85)' : 'rgba(8,12,20,0.85)');
                 ctx.strokeStyle = node.capacity > 1.0 ? '#f1b96b' : (node.capacity === 0 ? '#ff6f7c' : 'rgba(103,169,255,0.4)');
@@ -6729,7 +6729,7 @@ const WorldForgeCG = {
             }
 
             // 9. Label and Inventory Count
-            ctx.font = '600 11px ui-sans-serif, system-ui, sans-serif';
+            ctx.font = '600 11px ' + FONT_SANS;
             ctx.textAlign = 'center';
             const nameText = prettyName(node.name);
             const nameWidth = ctx.measureText(nameText).width;
@@ -6747,7 +6747,7 @@ const WorldForgeCG = {
             ctx.fillText(nameText, 0, r + 19);
 
             // Subtitle inventory
-            ctx.font = '500 9px ui-monospace, monospace';
+            ctx.font = '500 9px ' + FONT_MONO;
             ctx.fillStyle = '#74839a';
             ctx.fillText(`${compactNumber(totalInv)} units`, 0, r + 33);
 
@@ -7158,7 +7158,7 @@ const WorldForgeCG = {
         const node = this.nodes.get(this.selectedNodeName) || (this.nodes.size > 0 ? this.nodes.values().next().value : null);
         if (!node) {
             ctx.fillStyle = '#64748b';
-            ctx.font = '8px monospace';
+            ctx.font = '8px ' + FONT_MONO;
             ctx.textAlign = 'center';
             ctx.fillText('SELECT ENTITY', w / 2, h / 2 + 3);
             return;
