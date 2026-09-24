@@ -3397,12 +3397,7 @@ impl SimulationRuntime {
                 turning_points,
             }
         };
-        let systems_debrief = build_systems_debrief(
-            state,
-            &trajectory,
-            wellbeing,
-            employment_rate,
-        );
+        let systems_debrief = build_systems_debrief(state, &trajectory, wellbeing, employment_rate);
         Some(CityProgress {
             treasury: city.treasury.clone(),
             population,
@@ -4378,6 +4373,170 @@ fn autonomous_action(action_type: &str, target: Option<&str>) -> AgentAction {
     }
 }
 
+fn build_systems_debrief(
+    state: &CityRuntimeState,
+    trajectory: &CityTrajectoryProgress,
+    wellbeing: f64,
+    employment_rate: f64,
+) -> SystemsDebriefProgress {
+    let headline = trajectory
+        .dominant_axis
+        .as_ref()
+        .and_then(|axis| trajectory.scores.get(axis).map(|score| (axis, score)))
+        .map_or_else(
+            || "The city has not committed to a dominant path yet.".to_string(),
+            |(axis, score)| {
+                if *score >= 0.0 {
+                    format!(
+                        "{} is now the dominant path ({score:+.1}); feedback is reshaping connected systems.",
+                        humanize_axis(axis)
+                    )
+                } else {
+                    format!(
+                        "Erosion of {} dominates the city ({score:+.1}); recovery will require counter-pressure.",
+                        humanize_axis(axis)
+                    )
+                }
+            },
+        );
+
+    let mut active_feedback_loops = trajectory
+        .momentum
+        .iter()
+        .filter_map(|(axis, momentum)| {
+            let score = trajectory.scores.get(axis).copied().unwrap_or(0.0);
+            (momentum.abs() >= 0.05).then(|| FeedbackLoopProgress {
+                axis: axis.clone(),
+                score,
+                momentum: *momentum,
+                direction: if score == 0.0 || score.signum() == momentum.signum() {
+                    "reinforcing".to_string()
+                } else {
+                    "balancing".to_string()
+                },
+                consequence: trajectory_consequence(axis, score),
+            })
+        })
+        .collect::<Vec<_>>();
+    active_feedback_loops.sort_by(|left, right| {
+        right
+            .momentum
+            .abs()
+            .partial_cmp(&left.momentum.abs())
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+
+    let score = |axis: &str| trajectory.scores.get(axis).copied().unwrap_or(0.0);
+    let mut warnings = Vec::new();
+    if score("risk") > 40.0 {
+        warnings.push(
+            "Risk has crossed 40: intrigue heat and cascading disruption can now amplify each other."
+                .to_string(),
+        );
+    }
+    if score("cohesion") < -25.0 {
+        warnings.push(
+            "Cohesion is below -25: faction trust is becoming a system constraint, not a cosmetic score."
+                .to_string(),
+        );
+    }
+    if score("sustainability") < -25.0 {
+        warnings.push(
+            "Ecological debt is accumulating and will weaken food, water, and power output."
+                .to_string(),
+        );
+    }
+    if employment_rate < 0.7 {
+        warnings.push(format!(
+            "Employment is only {:.0}%: population growth can outpace useful work and tax capacity.",
+            employment_rate * 100.0
+        ));
+    }
+    if wellbeing < 45.0 {
+        warnings.push(
+            "Wellbeing is below 45: growth without social capacity is producing fragility."
+                .to_string(),
+        );
+    }
+    if state.intrigue_heat > Fixed64::from_int(50) {
+        warnings.push(
+            "Shadow-network heat is above 50: corporate and rogue-agent reactions are increasingly costly."
+                .to_string(),
+        );
+    }
+
+    let mut leverage_points = Vec::new();
+    if score("risk") > 20.0 {
+        leverage_points.push(
+            "Reduce risk momentum through containment, counter-intelligence, diplomacy, or lower-volatility civic choices."
+                .to_string(),
+        );
+    }
+    if score("cohesion") < 0.0 {
+        leverage_points.push(
+            "A cohesion-positive council choice changes both immediate legitimacy and the long-run feedback direction."
+                .to_string(),
+        );
+    }
+    if score("sustainability") < 0.0 {
+        leverage_points.push(
+            "Regenerative buildings and resource research attack the shared food-water-power bottleneck."
+                .to_string(),
+        );
+    }
+    if score("innovation") < 15.0 {
+        leverage_points.push(
+            "Research capacity is a force multiplier: innovation unlocks technologies that alter several loops at once."
+                .to_string(),
+        );
+    }
+    if leverage_points.is_empty() {
+        leverage_points.push(
+            "Protect the current trajectory by diversifying resources; a single shortage can create a balancing shock."
+                .to_string(),
+        );
+    }
+
+    SystemsDebriefProgress {
+        headline,
+        active_feedback_loops,
+        warnings,
+        leverage_points,
+    }
+}
+
+fn humanize_axis(axis: &str) -> String {
+    let mut value = axis.replace(['-', '_'], " ");
+    if let Some(first) = value.get_mut(0..1) {
+        first.make_ascii_uppercase();
+    }
+    value
+}
+
+fn trajectory_consequence(axis: &str, score: f64) -> String {
+    let positive = score >= 0.0;
+    match (axis, positive) {
+        ("innovation", true) => "Research output is receiving a compounding bonus.",
+        ("innovation", false) => "Research output is being suppressed by institutional drag.",
+        ("prosperity", true) => "Credit generation is strengthening future purchasing power.",
+        ("prosperity", false) => "Credit generation is weakening, narrowing future options.",
+        ("sustainability", true) => "Food, water, and power systems are becoming more productive.",
+        ("sustainability", false) => {
+            "Food, water, and power systems are losing efficiency together."
+        }
+        ("cohesion", true) => "Wellbeing and population stability are reinforcing each other.",
+        ("cohesion", false) => "Wellbeing and faction support are exposed to continued erosion.",
+        ("sovereignty", true) => "Materials and security capacity are gaining strategic leverage.",
+        ("sovereignty", false) => {
+            "Materials and security capacity are increasingly externally constrained."
+        }
+        ("risk", true) => "Broad output penalties and intrigue pressure grow as risk compounds.",
+        ("risk", false) => "Lower systemic risk is removing friction across the economy.",
+        _ => "This trajectory is changing linked city systems over time.",
+    }
+    .to_string()
+}
+
 fn agent_observation(context: &AgentContext, key: &str) -> Fixed64 {
     context
         .observations
@@ -5074,6 +5233,20 @@ goods = 2.0
         assert!(commons_trajectory.scores["cohesion"] > 0.0);
         assert!(market_trajectory.scores["cohesion"] < 0.0);
         assert!(market_trajectory.scores["prosperity"] > 0.0);
+        let recorded_choice = &commons_choice.city.as_ref().unwrap().governance.decisions[0];
+        assert_eq!(recorded_choice.trajectory["cohesion"], 16.0);
+        assert_eq!(
+            recorded_choice.counterfactuals[0].option,
+            "open-development"
+        );
+        assert!(commons_choice
+            .city
+            .as_ref()
+            .unwrap()
+            .systems_debrief
+            .active_feedback_loops
+            .iter()
+            .any(|feedback| feedback.axis == "cohesion"));
 
         let initial_commons_cohesion = commons_trajectory.scores["cohesion"];
         // Momentum compounds before any later civic dilemma can add legitimate

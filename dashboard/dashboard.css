@@ -978,7 +978,22 @@ button, input, select, a { -webkit-tap-highlight-color: transparent; }
 .decision-history article { display: grid; gap: 2px; padding: 7px 8px; border-left: 2px solid var(--green); background: rgba(70,210,154,.035); min-width: 0; overflow: hidden; }
 .decision-history b { font-size: .52rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .decision-history span { color: var(--green); font-size: .48rem; word-break: break-word; }
+.decision-history small { color: var(--text-muted); font-size: .43rem; line-height: 1.35; word-break: break-word; }
 .civic-empty { margin: 0; padding: 12px; border: 1px dashed var(--line); border-radius: 8px; color: var(--text-muted); font-size: .52rem; line-height: 1.45; }
+.systems-debrief { margin-top: 12px; padding-top: 10px; border-top: 1px solid rgba(163,184,214,.12); }
+.debrief-headline { margin: 0 0 8px; color: var(--text-soft); font-size: .6rem; line-height: 1.5; }
+.debrief-loops { display: grid; grid-template-columns: repeat(auto-fit,minmax(190px,1fr)); gap: 6px; }
+.debrief-loop { padding: 8px; border: 1px solid var(--line); border-left: 2px solid var(--amber); border-radius: 7px; background: rgba(5,8,14,.4); }
+.debrief-loop.is-reinforcing { border-left-color: var(--violet); }
+.debrief-loop > div { display: flex; justify-content: space-between; gap: 8px; }
+.debrief-loop strong { font-size: .53rem; }
+.debrief-loop span { color: var(--amber); font: 700 .43rem var(--font-mono); text-transform: uppercase; }
+.debrief-loop.is-reinforcing span { color: var(--violet); }
+.debrief-loop p { margin: 5px 0 0; color: var(--text-muted); font-size: .47rem; line-height: 1.4; }
+.debrief-guidance { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 8px; margin-top: 8px; }
+.debrief-guidance article { padding: 8px 10px; border: 1px solid rgba(163,184,214,.1); border-radius: 7px; background: rgba(255,255,255,.015); }
+.debrief-guidance strong { color: var(--cyan); font-size: .5rem; text-transform: uppercase; letter-spacing: .06em; }
+.debrief-guidance ul { margin: 5px 0 0; padding-left: 14px; color: var(--text-muted); font-size: .47rem; line-height: 1.45; }
 .power-games { padding: 14px; border-top: 1px solid var(--line); background: linear-gradient(110deg,rgba(255,111,124,.025),rgba(241,185,107,.035),rgba(66,211,234,.025)); }
 .power-games-grid { display: grid; grid-template-columns: minmax(260px,.9fr) minmax(360px,1.2fr) minmax(250px,.85fr); gap: 10px; }
 .power-games-grid > section { min-width: 0; padding: 10px; border: 1px solid var(--line); border-radius: 10px; background: rgba(5,8,14,.45); }

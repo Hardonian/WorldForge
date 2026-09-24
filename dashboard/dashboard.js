@@ -1797,14 +1797,18 @@ function renderCityLayer(city) {
     updateCivilizationProgression(city);
     checkTrophies(city);
 
-    renderCivicGovernance(city.governance || { factions: [], pendingDilemmas: [], decisions: [] }, city.trajectory);
+    renderCivicGovernance(
+        city.governance || { factions: [], pendingDilemmas: [], decisions: [] },
+        city.trajectory,
+        city.systemsDebrief,
+    );
     renderGeopolitics(city.geopolitics);
     renderEcologyHud(city.ecology, state.play?.data?.tick);
     renderIntrigue(city.intrigue);
     syncCityBuildingSelection();
 }
 
-function renderCivicGovernance(governance, trajectory) {
+function renderCivicGovernance(governance, trajectory, debrief) {
     const factions = el('civic-factions');
     factions.replaceChildren(...governance.factions.map(faction => {
         const node = document.createElement('article'); node.className = 'faction-card'; node.title = faction.description;
@@ -1851,7 +1855,16 @@ function renderCivicGovernance(governance, trajectory) {
         const item = document.createElement('article');
         const title = document.createElement('b'); title.textContent = decision.title;
         const choice = document.createElement('span'); choice.textContent = decision.label;
-        item.append(title, choice);
+        const impact = document.createElement('small');
+        const deltas = Object.entries(decision.trajectory || {})
+            .map(([axis, delta]) => `${prettyName(axis)} ${delta > 0 ? '+' : ''}${formatDecimal(delta, 0)}`)
+            .join(' · ');
+        const counterfactuals = (decision.counterfactuals || []).map(option => option.label).join(' / ');
+        impact.textContent = `${deltas || 'No direct trajectory shift'}${counterfactuals ? ` · Other path: ${counterfactuals}` : ''}`;
+        impact.title = (decision.snowballingAxes || []).length
+            ? `Still snowballing: ${decision.snowballingAxes.map(prettyName).join(', ')}`
+            : 'Later forces are balancing this decision.';
+        item.append(title, choice, impact);
         return item;
     }) : [emptyCivicState('No constitutional precedents yet.')]));
 
@@ -1875,6 +1888,47 @@ function renderCivicGovernance(governance, trajectory) {
             }
             return node;
         }) : [emptyCivicState('No trajectory established. Your first major decision will set the city in motion.')]));
+
+    renderSystemsDebrief(debrief);
+}
+
+function renderSystemsDebrief(debrief) {
+    const root = el('systems-debrief');
+    if (!root) return;
+    if (!debrief) {
+        root.replaceChildren(emptyCivicState('Advance the simulation to reveal feedback loops, warnings, and leverage points.'));
+        return;
+    }
+    const headline = document.createElement('p');
+    headline.className = 'debrief-headline';
+    headline.textContent = debrief.headline;
+
+    const loops = document.createElement('div'); loops.className = 'debrief-loops';
+    (debrief.activeFeedbackLoops || []).slice(0, 4).forEach(loop => {
+        const card = document.createElement('article');
+        card.className = `debrief-loop ${loop.direction === 'reinforcing' ? 'is-reinforcing' : 'is-balancing'}`;
+        const heading = document.createElement('div');
+        const name = document.createElement('strong'); name.textContent = prettyName(loop.axis);
+        const badge = document.createElement('span'); badge.textContent = `${loop.direction} ${loop.momentum > 0 ? '↗' : '↘'}${formatDecimal(Math.abs(loop.momentum), 1)}`;
+        heading.append(name, badge);
+        const copy = document.createElement('p'); copy.textContent = loop.consequence;
+        card.append(heading, copy); loops.append(card);
+    });
+    if (!loops.childElementCount) loops.append(emptyCivicState('No feedback loop has enough momentum to dominate yet.'));
+
+    const guidance = document.createElement('div'); guidance.className = 'debrief-guidance';
+    const warnings = document.createElement('article');
+    const warningTitle = document.createElement('strong'); warningTitle.textContent = 'Watch next';
+    const warningList = document.createElement('ul');
+    (debrief.warnings?.length ? debrief.warnings : ['No critical threshold is currently breached.'])
+        .forEach(value => { const item = document.createElement('li'); item.textContent = value; warningList.append(item); });
+    warnings.append(warningTitle, warningList);
+    const leverage = document.createElement('article');
+    const leverageTitle = document.createElement('strong'); leverageTitle.textContent = 'Leverage points';
+    const leverageList = document.createElement('ul');
+    (debrief.leveragePoints || []).forEach(value => { const item = document.createElement('li'); item.textContent = value; leverageList.append(item); });
+    leverage.append(leverageTitle, leverageList); guidance.append(warnings, leverage);
+    root.replaceChildren(headline, loops, guidance);
 }
 
 function emptyCivicState(message) {
@@ -4870,6 +4924,7 @@ const WorldForgeCG = {
         this.drawChimneySmoke(ctx, now);
         this.drawCitizens(ctx, now);
         this.drawLogisticsCaravans(ctx, now, eco);
+        this.drawSkyDrones(ctx, now);
 
         if (raidThreat > 25) {
             this.drawRaiders(ctx, now, raidThreat);
@@ -4985,6 +5040,89 @@ const WorldForgeCG = {
         });
     },
 
+    drawSkyDrones(ctx, now) {
+        if (!this.cityDrones) {
+            this.cityDrones = [
+                { x: -140, y: -50, tx: 180, ty: 70, t: 0.15, speed: 0.0018, color: '#38bdf8', cargo: '#22c55e' },
+                { x: 160, y: -80, tx: -120, ty: 90, t: 0.55, speed: 0.0014, color: '#f59e0b', cargo: '#0ea5e9' },
+                { x: -30, y: 130, tx: 70, ty: -110, t: 0.85, speed: 0.0021, color: '#a855f7', cargo: '#ec4899' },
+            ];
+        }
+
+        this.cityDrones.forEach(drone => {
+            drone.t = (drone.t + drone.speed) % 1;
+            const curX = drone.x + (drone.tx - drone.x) * drone.t;
+            const curY = drone.y + (drone.ty - drone.y) * drone.t;
+            const altitude = -65 + Math.sin(now * 0.003 + drone.t * 10) * 4;
+
+            ctx.save();
+            ctx.translate(curX, curY + altitude);
+
+            // Ground shadow
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.2)';
+            ctx.beginPath();
+            ctx.ellipse(0, -altitude + 15, 12, 6, 0, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Downward laser scanner guide cone
+            const scanGrad = ctx.createLinearGradient(0, 0, 0, -altitude + 15);
+            scanGrad.addColorStop(0, `${drone.color}33`);
+            scanGrad.addColorStop(1, `${drone.color}00`);
+            ctx.fillStyle = scanGrad;
+            ctx.beginPath();
+            ctx.moveTo(0, 4);
+            ctx.lineTo(-10, -altitude + 15);
+            ctx.lineTo(10, -altitude + 15);
+            ctx.closePath();
+            ctx.fill();
+
+            // Drone central chassis
+            ctx.fillStyle = '#0f172a';
+            ctx.beginPath();
+            ctx.roundRect(-6, -3, 12, 6, 2);
+            ctx.fill();
+            ctx.strokeStyle = drone.color;
+            ctx.lineWidth = 1;
+            ctx.stroke();
+
+            // 4 Quad-rotor arms & spinning blades
+            const rotorRot = now * 0.04;
+            const arms = [[-8, -5], [8, -5], [-8, 5], [8, 5]];
+            arms.forEach(([ax, ay], i) => {
+                ctx.strokeStyle = '#475569';
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                ctx.moveTo(0, 0);
+                ctx.lineTo(ax, ay);
+                ctx.stroke();
+
+                // Spinning rotor blur
+                ctx.save();
+                ctx.translate(ax, ay);
+                ctx.rotate(rotorRot * (i % 2 === 0 ? 1 : -1));
+                ctx.strokeStyle = 'rgba(255, 255, 255, 0.6)';
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                ctx.moveTo(-5, 0); ctx.lineTo(5, 0);
+                ctx.stroke();
+                ctx.restore();
+
+                // Navigation LED
+                ctx.fillStyle = i < 2 ? '#22c55e' : '#ef4444';
+                ctx.fillRect(ax - 0.75, ay - 0.75, 1.5, 1.5);
+            });
+
+            // Slung cargo container
+            ctx.fillStyle = drone.cargo;
+            ctx.fillRect(-3, 3, 6, 5);
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
+            ctx.lineWidth = 0.5;
+            ctx.strokeRect(-3, 3, 6, 5);
+
+            ctx.restore();
+        });
+    },
+
     drawAtmosphericWeather(ctx, w, h, now, weather, season) {
         if (!this.vfxEnabled) return;
 
@@ -4998,6 +5136,17 @@ const WorldForgeCG = {
                 ctx.beginPath();
                 ctx.moveTo(rx, ry);
                 ctx.lineTo(rx - 6, ry + 16);
+                ctx.stroke();
+            }
+            // Road puddles and splash rings
+            for (let s = 0; s < 10; s++) {
+                const sx = ((s * 71 + now * 0.15) % 600) - 300;
+                const sy = ((s * 43) % 240) - 40;
+                const splashR = (now * 0.025 + s * 4) % 9;
+                ctx.strokeStyle = `rgba(186, 230, 253, ${Math.max(0, 0.35 - splashR * 0.035)})`;
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                ctx.ellipse(sx, sy, splashR, splashR * 0.5, 0, 0, Math.PI * 2);
                 ctx.stroke();
             }
             if (weather === 'storm' && Math.random() < 0.012) {
@@ -5027,6 +5176,12 @@ const WorldForgeCG = {
                 ctx.beginPath();
                 ctx.arc(dx, dy, 1.8, 0, Math.PI * 2);
                 ctx.fill();
+            }
+            // Heat wave refraction shimmer
+            ctx.fillStyle = 'rgba(245, 158, 11, 0.035)';
+            for (let hIndex = 0; hIndex < 4; hIndex++) {
+                const hy = -60 + hIndex * 45 + Math.sin(now * 0.003 + hIndex) * 10;
+                ctx.fillRect(-w, hy, w * 2, 14);
             }
             ctx.restore();
         }
