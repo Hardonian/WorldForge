@@ -8,6 +8,7 @@ use std::sync::mpsc::{sync_channel, TrySendError};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
+use semver::Version;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use worldforge_core::{EngineVersion, ErrorCode, WorldForgeError};
@@ -38,6 +39,8 @@ const MAX_SAVE_SLOTS: usize = 100;
 const MAX_SAVE_BYTES: u64 = 2 * 1024 * 1024;
 const MAX_SAVE_INTERVENTIONS: usize = 50_000;
 const MAX_WORLD_PACKAGES: usize = 200;
+const SAVE_FORMAT_VERSION: u32 = 2;
+const AUTOSAVE_INTERVAL_TICKS: u64 = 50;
 
 type SharedPlaySession = Arc<Mutex<PlaySession>>;
 type SessionRegistry = BTreeMap<String, SharedPlaySession>;
@@ -57,6 +60,7 @@ struct PlaySession {
     interventions: Vec<InterventionRecord>,
     runtime: SimulationRuntime,
     last_access: Instant,
+    last_autosave_tick: u64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -115,6 +119,12 @@ fn default_capacity_action() -> String {
 #[serde(rename_all = "camelCase")]
 struct SaveGame {
     format_version: u32,
+    #[serde(default = "default_save_engine_version")]
+    engine_version: String,
+    #[serde(default = "default_profile_id")]
+    profile_id: String,
+    #[serde(default = "default_save_kind")]
+    kind: String,
     id: String,
     name: String,
     world: String,
@@ -122,9 +132,23 @@ struct SaveGame {
     seed: u64,
     total_ticks: u64,
     current_tick: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    checkpoint_fingerprint: Option<String>,
     interventions: Vec<InterventionRecord>,
     created_at: u64,
     updated_at: u64,
+}
+
+fn default_save_engine_version() -> String {
+    EngineVersion::current().to_string()
+}
+
+fn default_profile_id() -> String {
+    "local".to_string()
+}
+
+fn default_save_kind() -> String {
+    "manual".to_string()
 }
 
 #[derive(Deserialize)]
@@ -617,6 +641,7 @@ fn create_play_session(state: &ServerState, request: RunRequest) -> Result<Value
         interventions: Vec::new(),
         runtime,
         last_access: Instant::now(),
+        last_autosave_tick: 0,
     };
     let id = register_session(state, session)?;
     Ok(play_document(&id, &request.world, &progress, None, true))
@@ -654,7 +679,7 @@ fn inspect_play_session(state: &ServerState, id: &str) -> Result<Value, WorldFor
 }
 
 fn step_play_session(state: &ServerState, id: &str, ticks: u64) -> Result<Value, WorldForgeError> {
-    with_play_session(state, id, |session| {
+    let mut document = with_play_session(state, id, |session| {
         let progress = session.runtime.step(ticks)?;
         Ok(play_document(
             id,
@@ -663,7 +688,15 @@ fn step_play_session(state: &ServerState, id: &str, ticks: u64) -> Result<Value,
             session.runtime.replay(),
             false,
         ))
-    })
+    })?;
+    if let Some(autosave) = maybe_autosave_play_session(state, id)? {
+        document["autosave"] = json!({
+            "id": autosave.id,
+            "tick": autosave.current_tick,
+            "updatedAt": autosave.updated_at,
+        });
+    }
+    Ok(document)
 }
 
 fn intervene_play_session(
@@ -1035,7 +1068,10 @@ fn save_play_session(
         let fingerprint =
             worldforge_package::fingerprint_resolved_world(&state.worlds_dir.join(&session.world))?;
         Ok(SaveGame {
-            format_version: 1,
+            format_version: SAVE_FORMAT_VERSION,
+            engine_version: EngineVersion::current().to_string(),
+            profile_id: default_profile_id(),
+            kind: "manual".to_string(),
             id: id.clone(),
             name: name.to_string(),
             world: session.world.clone(),
@@ -1043,6 +1079,7 @@ fn save_play_session(
             seed: session.seed,
             total_ticks: session.total_ticks,
             current_tick: progress.current_tick,
+            checkpoint_fingerprint: Some(progress.state_fingerprint.to_string()),
             interventions: session.interventions.clone(),
             created_at: existing.as_ref().map_or(now, |save| save.created_at),
             updated_at: now,
@@ -1052,6 +1089,61 @@ fn save_play_session(
         .map_err(|error| WorldForgeError::new(ErrorCode::InternalError, error.to_string()))?;
     atomic_replace(&save_path(state, &id), &encoded)?;
     Ok(save)
+}
+
+fn maybe_autosave_play_session(
+    state: &ServerState,
+    session_id: &str,
+) -> Result<Option<SaveGame>, WorldForgeError> {
+    let _save_guard = lock_save_io(state)?;
+    let now = unix_timestamp()?;
+    let mut save = match with_play_session(state, session_id, |session| {
+        let progress = session.runtime.current_progress();
+        let due = progress.current_tick > 0
+            && (progress.current_tick
+                >= session
+                    .last_autosave_tick
+                    .saturating_add(AUTOSAVE_INTERVAL_TICKS)
+                || progress.current_tick == session.total_ticks);
+        if !due {
+            return Ok(None);
+        }
+        let fingerprint =
+            worldforge_package::fingerprint_resolved_world(&state.worlds_dir.join(&session.world))?;
+        session.last_autosave_tick = progress.current_tick;
+        Ok(Some(SaveGame {
+            format_version: SAVE_FORMAT_VERSION,
+            engine_version: EngineVersion::current().to_string(),
+            profile_id: default_profile_id(),
+            kind: "autosave".to_string(),
+            id: session_id.to_string(),
+            name: format!("Autosave · {}", session.world),
+            world: session.world.clone(),
+            world_fingerprint: fingerprint.to_string(),
+            seed: session.seed,
+            total_ticks: session.total_ticks,
+            current_tick: progress.current_tick,
+            checkpoint_fingerprint: Some(progress.state_fingerprint.to_string()),
+            interventions: session.interventions.clone(),
+            created_at: now,
+            updated_at: now,
+        }))
+    })? {
+        Some(save) => save,
+        None => return Ok(None),
+    };
+
+    let path = save_path(state, session_id);
+    if path.is_file() {
+        save.created_at = read_save_unlocked(state, session_id)?.created_at;
+    } else if save_slot_count(&state.saves_dir)? >= MAX_SAVE_SLOTS {
+        // A full manual save library should never interrupt an active run.
+        return Ok(None);
+    }
+    let encoded = serde_json::to_vec_pretty(&save)
+        .map_err(|error| WorldForgeError::new(ErrorCode::InternalError, error.to_string()))?;
+    atomic_replace(&path, &encoded)?;
+    Ok(Some(save))
 }
 
 fn list_saves(state: &ServerState) -> Result<Vec<SaveGame>, WorldForgeError> {
@@ -1076,12 +1168,6 @@ fn list_saves(state: &ServerState) -> Result<Vec<SaveGame>, WorldForgeError> {
 
 fn load_save(state: &ServerState, id: &str) -> Result<Value, WorldForgeError> {
     let save = read_save(state, id)?;
-    if save.format_version != 1 {
-        return Err(WorldForgeError::new(
-            ErrorCode::ReplayVersionIncompatible,
-            format!("save format {} is not supported", save.format_version),
-        ));
-    }
     validate_ticks(save.total_ticks)?;
     if save.current_tick > save.total_ticks {
         return Err(WorldForgeError::new(
@@ -1216,7 +1302,16 @@ fn load_save(state: &ServerState, id: &str) -> Result<Value, WorldForgeError> {
         runtime.step(save.current_tick - current_tick)?;
     }
     let progress = runtime.current_progress();
+    if let Some(expected) = &save.checkpoint_fingerprint {
+        if progress.state_fingerprint.to_string() != *expected {
+            return Err(WorldForgeError::new(
+                ErrorCode::ReplayFingerprintMismatch,
+                "save reconstruction did not match its checkpoint fingerprint",
+            ));
+        }
+    }
     let world = save.world.clone();
+    let saved_tick = save.current_tick;
     let session = PlaySession {
         world: world.clone(),
         seed: save.seed,
@@ -1224,6 +1319,7 @@ fn load_save(state: &ServerState, id: &str) -> Result<Value, WorldForgeError> {
         interventions: save.interventions,
         runtime,
         last_access: Instant::now(),
+        last_autosave_tick: saved_tick,
     };
     let session_id = register_session(state, session)?;
     let session = lock_sessions(state)?
@@ -1280,13 +1376,31 @@ fn read_save_unlocked(state: &ServerState, id: &str) -> Result<SaveGame, WorldFo
         ));
     }
     let bytes = std::fs::read(path).map_err(io_error)?;
-    let save = serde_json::from_slice(&bytes).map_err(|error| {
+    let mut save: SaveGame = serde_json::from_slice(&bytes).map_err(|error| {
         WorldForgeError::new(
             ErrorCode::ReplayFormatInvalid,
             format!("save slot is invalid: {error}"),
         )
     })?;
+    let migrated = save.format_version == 1;
+    if migrated {
+        save.format_version = SAVE_FORMAT_VERSION;
+        if save.engine_version.is_empty() {
+            save.engine_version = EngineVersion::current().to_string();
+        }
+        if save.profile_id.is_empty() {
+            save.profile_id = default_profile_id();
+        }
+        if save.kind.is_empty() {
+            save.kind = default_save_kind();
+        }
+    }
     validate_save_game(&save, id)?;
+    if migrated {
+        let encoded = serde_json::to_vec_pretty(&save)
+            .map_err(|error| WorldForgeError::new(ErrorCode::InternalError, error.to_string()))?;
+        atomic_replace(&save_path(state, id), &encoded)?;
+    }
     Ok(save)
 }
 
@@ -1311,10 +1425,19 @@ fn validate_save_name(name: &str) -> Result<(), WorldForgeError> {
 }
 
 fn validate_save_game(save: &SaveGame, expected_id: &str) -> Result<(), WorldForgeError> {
-    if save.format_version != 1 {
+    if save.format_version != SAVE_FORMAT_VERSION {
         return Err(WorldForgeError::new(
             ErrorCode::ReplayVersionIncompatible,
             format!("save format {} is not supported", save.format_version),
+        ));
+    }
+    if Version::parse(&save.engine_version).is_err()
+        || !valid_action_id(&save.profile_id)
+        || !matches!(save.kind.as_str(), "manual" | "autosave")
+    {
+        return Err(WorldForgeError::new(
+            ErrorCode::ReplayFormatInvalid,
+            "save contains invalid engine, profile, or slot metadata",
         ));
     }
     if save.id != expected_id || !valid_save_id(&save.id) {
@@ -1344,6 +1467,21 @@ fn validate_save_game(save: &SaveGame, expected_id: &str) -> Result<(), WorldFor
         return Err(WorldForgeError::new(
             ErrorCode::ReplayFormatInvalid,
             "save contains an invalid world fingerprint",
+        ));
+    }
+    if save
+        .checkpoint_fingerprint
+        .as_ref()
+        .is_some_and(|fingerprint| {
+            fingerprint.len() != 64
+                || !fingerprint
+                    .chars()
+                    .all(|character| character.is_ascii_hexdigit())
+        })
+    {
+        return Err(WorldForgeError::new(
+            ErrorCode::ReplayFormatInvalid,
+            "save contains an invalid checkpoint fingerprint",
         ));
     }
     validate_ticks(save.total_ticks)?;
@@ -1812,6 +1950,9 @@ fn event_document(event: &SimulationEvent) -> Value {
             resource,
             amount,
         } => ("logistics", source.clone(), resource.clone(), *amount),
+        EventType::CivilizationEraAdvanced { era, score, .. } => {
+            ("civilization", era.clone(), "era".to_string(), score.to_f64_lossy())
+        }
     };
     json!({
         "tick": event.tick.value(),
@@ -3005,7 +3146,10 @@ mod tests {
         );
 
         delete_save(&state, &save.id).unwrap();
-        assert!(list_saves(&state).unwrap().is_empty());
+        assert!(list_saves(&state)
+            .unwrap()
+            .iter()
+            .all(|remaining| remaining.kind == "autosave"));
         std::fs::remove_dir_all(saves_dir).unwrap();
     }
 
@@ -3030,6 +3174,83 @@ mod tests {
         );
         assert!(!backup.exists());
         assert!(!temporary.exists());
+        std::fs::remove_dir_all(saves_dir).unwrap();
+    }
+
+    #[test]
+    fn legacy_saves_migrate_to_profile_aware_format_two() {
+        let (state, saves_dir) = test_state();
+        let id = "a".repeat(32);
+        let legacy = json!({
+            "formatVersion": 1,
+            "id": id,
+            "name": "Legacy city",
+            "world": "supply-chain",
+            "worldFingerprint": "0".repeat(64),
+            "seed": 42,
+            "totalTicks": 100,
+            "currentTick": 0,
+            "interventions": [],
+            "createdAt": 1,
+            "updatedAt": 1
+        });
+        std::fs::write(
+            saves_dir.join(format!("{id}.json")),
+            serde_json::to_vec_pretty(&legacy).unwrap(),
+        )
+        .unwrap();
+
+        let migrated = read_save(&state, &id).unwrap();
+        assert_eq!(migrated.format_version, SAVE_FORMAT_VERSION);
+        assert_eq!(migrated.profile_id, "local");
+        assert_eq!(migrated.kind, "manual");
+        assert_eq!(
+            migrated.engine_version,
+            EngineVersion::current().to_string()
+        );
+        let persisted: Value =
+            serde_json::from_slice(&std::fs::read(saves_dir.join(format!("{id}.json"))).unwrap())
+                .unwrap();
+        assert_eq!(persisted["formatVersion"], SAVE_FORMAT_VERSION);
+        assert_eq!(persisted["profileId"], "local");
+
+        std::fs::remove_dir_all(saves_dir).unwrap();
+    }
+
+    #[test]
+    fn autosaves_are_checkpointed_and_resume_deterministically() {
+        let (state, saves_dir) = test_state();
+        let created = create_play_session(
+            &state,
+            RunRequest {
+                world: "supply-chain".to_string(),
+                seed: 73,
+                ticks: 120,
+            },
+        )
+        .unwrap();
+        let original_id = created["sessionId"].as_str().unwrap();
+        let stepped = step_play_session(&state, original_id, AUTOSAVE_INTERVAL_TICKS).unwrap();
+        assert_eq!(stepped["autosave"]["tick"], AUTOSAVE_INTERVAL_TICKS);
+        let save = read_save(&state, original_id).unwrap();
+        assert_eq!(save.kind, "autosave");
+        assert_eq!(save.format_version, SAVE_FORMAT_VERSION);
+        assert!(save.checkpoint_fingerprint.is_some());
+
+        let resumed = load_save(&state, original_id).unwrap();
+        assert_eq!(resumed["currentTick"], AUTOSAVE_INTERVAL_TICKS);
+        let resumed_id = resumed["sessionId"].as_str().unwrap();
+        let original_final = step_play_session(&state, original_id, 100).unwrap();
+        let resumed_final = step_play_session(&state, resumed_id, 100).unwrap();
+        assert_eq!(
+            original_final["proof"]["eventChain"],
+            resumed_final["proof"]["eventChain"]
+        );
+        assert_eq!(
+            original_final["proof"]["final"],
+            resumed_final["proof"]["final"]
+        );
+
         std::fs::remove_dir_all(saves_dir).unwrap();
     }
 

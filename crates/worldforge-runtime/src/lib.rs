@@ -96,7 +96,9 @@ impl RunEventCounts {
             | EventType::PopulationChanged { .. }
             | EventType::SimulationDegraded { .. } => self.system += 1,
             EventType::BuildingConstructed { .. } => self.construction += 1,
-            EventType::TechnologyUnlocked { .. } => self.research += 1,
+            EventType::TechnologyUnlocked { .. } | EventType::CivilizationEraAdvanced { .. } => {
+                self.research += 1
+            }
             EventType::CivicDilemmaOpened { .. }
             | EventType::PlayerCivicDecision { .. }
             | EventType::CivicDecisionResolved { .. }
@@ -213,6 +215,7 @@ pub struct CityProgress {
     pub governance: CityGovernanceProgress,
     pub trajectory: CityTrajectoryProgress,
     pub systems_debrief: SystemsDebriefProgress,
+    pub civilization: CivilizationProgress,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub geopolitics: Option<CityGeopoliticsProgress>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -422,6 +425,29 @@ pub struct FeedbackLoopProgress {
 
 #[derive(Debug, Clone, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct CivilizationProgress {
+    pub level: u32,
+    pub era: String,
+    pub name: String,
+    pub description: String,
+    pub score: f64,
+    pub next_threshold: Option<f64>,
+    pub progress: f64,
+    pub achievements: Vec<AchievementProgress>,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AchievementProgress {
+    pub id: String,
+    pub title: String,
+    pub description: String,
+    pub unlocked: bool,
+    pub progress: f64,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct CivicFactionProgress {
     pub id: String,
     pub name: String,
@@ -517,6 +543,12 @@ struct CityRuntimeState {
     trajectory_momentum: BTreeMap<String, Fixed64>,
     #[serde(default)]
     trajectory_turning_points: Vec<TrajectoryTurningPointState>,
+    #[serde(default = "default_civilization_level")]
+    civilization_level: u32,
+}
+
+const fn default_civilization_level() -> u32 {
+    1
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -835,6 +867,7 @@ impl SimulationRuntime {
             .and_then(|city| entity_id_map.get(&city.treasury).copied());
         if let (Some(city), Some(treasury_id)) = (&city_config, city_treasury_id) {
             let mut city_state = CityRuntimeState {
+                civilization_level: 1,
                 faction_support: city
                     .factions
                     .iter()
@@ -1085,6 +1118,7 @@ impl SimulationRuntime {
             tick_events.extend(self.run_city_ecology(tick)?);
             tick_events.extend(self.run_city_intrigue(tick)?);
             tick_events.extend(self.run_autonomous_actors(tick)?);
+            tick_events.extend(self.run_civilization_progression(tick)?);
             run_transfers(
                 &mut self.world,
                 &self.supply_links,
@@ -3398,6 +3432,7 @@ impl SimulationRuntime {
             }
         };
         let systems_debrief = build_systems_debrief(state, &trajectory, wellbeing, employment_rate);
+        let civilization = build_civilization_progress(city, state, population, housing, wellbeing);
         Some(CityProgress {
             treasury: city.treasury.clone(),
             population,
@@ -3411,6 +3446,7 @@ impl SimulationRuntime {
             governance,
             trajectory,
             systems_debrief,
+            civilization,
             geopolitics,
             ecology,
             intrigue,
@@ -4189,6 +4225,46 @@ impl SimulationRuntime {
         Ok(events)
     }
 
+    fn run_civilization_progression(
+        &mut self,
+        tick: Tick,
+    ) -> Result<Vec<SimulationEvent>, WorldForgeError> {
+        let (Some(city), Some(treasury_id)) = (self.city_config.as_ref(), self.city_treasury_id)
+        else {
+            return Ok(Vec::new());
+        };
+        let inventory = self
+            .world
+            .get_component::<Inventory>(&treasury_id)
+            .cloned()
+            .ok_or_else(|| action_error("civilization treasury is unavailable"))?;
+        let state = self
+            .world
+            .get_component::<CityRuntimeState>(&treasury_id)
+            .cloned()
+            .ok_or_else(|| action_error("civilization state is unavailable"))?;
+        let (housing, _, wellbeing) = city_stats(city, &state);
+        let population = inventory.get(&city.population_resource).to_f64_lossy();
+        let score = civilization_score(city, &state, population, housing, wellbeing);
+        let tier = civilization_tier(score);
+        if tier.level <= state.civilization_level {
+            return Ok(Vec::new());
+        }
+        self.world
+            .get_component_mut::<CityRuntimeState>(&treasury_id)
+            .expect("validated city state")
+            .civilization_level = tier.level;
+        Ok(vec![SimulationEvent::new(
+            tick,
+            EventType::CivilizationEraAdvanced {
+                from_level: state.civilization_level,
+                to_level: tier.level,
+                era: tier.name.to_string(),
+                score: Fixed64::from_f64_lossy(score),
+            },
+        )])
+    }
+
     /// Events retained by the configured capture policy after completion.
     pub fn retained_events(&self) -> &[SimulationEvent] {
         self.replay
@@ -4362,6 +4438,196 @@ impl SimulationRuntime {
     /// Get current state.
     pub fn state(&self) -> &RunState {
         &self.state
+    }
+}
+
+#[derive(Clone, Copy)]
+struct CivilizationTier {
+    level: u32,
+    era: &'static str,
+    name: &'static str,
+    description: &'static str,
+    minimum: f64,
+    next: Option<f64>,
+}
+
+const CIVILIZATION_TIERS: [CivilizationTier; 5] = [
+    CivilizationTier {
+        level: 1,
+        era: "ERA I",
+        name: "Frontier Outpost",
+        description: "A fledgling outpost establishing essential power, water, food, and trust.",
+        minimum: 0.0,
+        next: Some(300.0),
+    },
+    CivilizationTier {
+        level: 2,
+        era: "ERA II",
+        name: "Thriving Settlement",
+        description: "Dense neighborhoods, civic institutions, and maker industry reinforce one another.",
+        minimum: 300.0,
+        next: Some(800.0),
+    },
+    CivilizationTier {
+        level: 3,
+        era: "ERA III",
+        name: "Industrial Heartland",
+        description: "High-throughput production and culture turn the city into a regional force.",
+        minimum: 800.0,
+        next: Some(1_800.0),
+    },
+    CivilizationTier {
+        level: 4,
+        era: "ERA IV",
+        name: "Cybernetic Metropolis",
+        description: "Autonomous logistics, clean power, and advanced intelligence reshape governance.",
+        minimum: 1_800.0,
+        next: Some(3_500.0),
+    },
+    CivilizationTier {
+        level: 5,
+        era: "ERA V",
+        name: "Planetary Arcology",
+        description: "Post-scarcity capacity links human prosperity with living planetary systems.",
+        minimum: 3_500.0,
+        next: None,
+    },
+];
+
+fn civilization_score(
+    city: &CityConfig,
+    state: &CityRuntimeState,
+    population: f64,
+    housing: u64,
+    wellbeing: f64,
+) -> f64 {
+    let researched = state.unlocked_technologies.len() as f64;
+    let built = city
+        .buildings
+        .iter()
+        .map(|building| city_building_count(state, &building.id) as f64)
+        .sum::<f64>();
+    population * 2.0 + housing as f64 + wellbeing * 20.0 + researched * 120.0 + built * 60.0
+}
+
+fn civilization_tier(score: f64) -> CivilizationTier {
+    CIVILIZATION_TIERS
+        .iter()
+        .rev()
+        .find(|tier| score >= tier.minimum)
+        .copied()
+        .unwrap_or(CIVILIZATION_TIERS[0])
+}
+
+fn build_civilization_progress(
+    city: &CityConfig,
+    state: &CityRuntimeState,
+    population: f64,
+    housing: u64,
+    wellbeing: f64,
+) -> CivilizationProgress {
+    let score = civilization_score(city, state, population, housing, wellbeing);
+    let tier = civilization_tier(score);
+    let progress = tier.next.map_or(1.0, |next| {
+        ((score - tier.minimum) / (next - tier.minimum)).clamp(0.0, 1.0)
+    });
+    let built = city
+        .buildings
+        .iter()
+        .map(|building| city_building_count(state, &building.id) as f64)
+        .sum::<f64>();
+    let researched = state.unlocked_technologies.len() as f64;
+    let has_clean_energy = state.unlocked_technologies.contains("solar-weave")
+        || state.unlocked_technologies.contains("fusion-core");
+    let has_transcended = state
+        .unlocked_technologies
+        .contains("arcology-singularity");
+    let has_zenith = state.building_levels.values().any(|level| *level >= 3);
+    let diplomatic_security = state.defense_posture == "fortified"
+        || state
+            .entity_stances
+            .values()
+            .any(|stance| stance == "coalition");
+
+    let achievement = |id: &str,
+                       title: &str,
+                       description: &str,
+                       value: f64,
+                       target: f64| AchievementProgress {
+        id: id.to_string(),
+        title: title.to_string(),
+        description: description.to_string(),
+        unlocked: value >= target,
+        progress: (value / target).clamp(0.0, 1.0),
+    };
+    let achievements = vec![
+        achievement(
+            "first-spark",
+            "First Spark of Progress",
+            "Research the first breakthrough in any development tree.",
+            researched,
+            1.0,
+        ),
+        achievement(
+            "master-architect",
+            "Master Architect",
+            "Construct four district buildings.",
+            built,
+            4.0,
+        ),
+        achievement(
+            "clean-energy",
+            "Clean Power Hegemony",
+            "Unlock solar weave or compact fusion.",
+            f64::from(has_clean_energy),
+            1.0,
+        ),
+        achievement(
+            "bastion-of-peace",
+            "Bastion of Peace",
+            "Create a coalition or establish a fortified defensive posture.",
+            f64::from(diplomatic_security),
+            1.0,
+        ),
+        achievement(
+            "secret-broker",
+            "Secret Broker",
+            "Acquire a corporate trade secret.",
+            state.stolen_secrets.len() as f64,
+            1.0,
+        ),
+        achievement(
+            "causal-navigator",
+            "Causal Navigator",
+            "Drive three trajectory turning points and read the feedback they create.",
+            state.trajectory_turning_points.len() as f64,
+            3.0,
+        ),
+        achievement(
+            "zenith-architecture",
+            "Zenith Architecture",
+            "Raise a municipal building to level three.",
+            f64::from(has_zenith),
+            1.0,
+        ),
+        achievement(
+            "planetary-arcology",
+            "Planetary Arcology",
+            "Unlock the arcology singularity synthesis technology.",
+            f64::from(has_transcended),
+            1.0,
+        ),
+    ];
+
+    CivilizationProgress {
+        level: tier.level,
+        era: tier.era.to_string(),
+        name: tier.name.to_string(),
+        description: tier.description.to_string(),
+        score,
+        next_threshold: tier.next,
+        progress,
+        achievements,
     }
 }
 

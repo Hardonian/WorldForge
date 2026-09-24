@@ -47,6 +47,12 @@ pub enum EventType {
         technology: String,
         branch: String,
     },
+    CivilizationEraAdvanced {
+        from_level: u32,
+        to_level: u32,
+        era: String,
+        score: Fixed64,
+    },
     PopulationChanged {
         amount: Fixed64,
         population: Fixed64,
@@ -237,6 +243,14 @@ impl SimulationEvent {
             EventType::TechnologyUnlocked { technology, branch } => {
                 format!("researched {technology} in the {branch} branch")
             }
+            EventType::CivilizationEraAdvanced {
+                from_level,
+                to_level,
+                era,
+                score,
+            } => format!(
+                "civilization advanced from era {from_level} to {to_level}: {era} ({score} influence)"
+            ),
             EventType::PopulationChanged {
                 amount,
                 population,

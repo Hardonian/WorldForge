@@ -5324,6 +5324,50 @@ const WorldForgeCG = {
             ctx.stroke();
             ctx.restore();
 
+            // Level 2+: Flanking Aquaponic Greenhouse Wings & Nutrient Feeder Conduits
+            if (buildingLevel >= 2) {
+                ctx.fillStyle = 'rgba(6, 182, 212, 0.4)';
+                ctx.fillRect(-22, -26, 6, 18);
+                ctx.fillRect(16, -26, 6, 18);
+                ctx.strokeStyle = '#06b6d4';
+                ctx.lineWidth = 1;
+                ctx.strokeRect(-22, -26, 6, 18);
+                ctx.strokeRect(16, -26, 6, 18);
+
+                // Cyan flowing nutrient pipes
+                ctx.strokeStyle = '#38bdf8';
+                ctx.lineWidth = 1.2;
+                ctx.beginPath();
+                ctx.moveTo(-16, -17); ctx.lineTo(-22, -17);
+                ctx.moveTo(16, -17); ctx.lineTo(22, -17);
+                ctx.stroke();
+            }
+
+            // Level 3: Rooftop Aeroponic Geodesic Biodome & Dual Orbiting Pollinators
+            if (buildingLevel >= 3) {
+                ctx.fillStyle = 'rgba(56, 189, 248, 0.45)';
+                ctx.beginPath();
+                ctx.arc(0, -66, 11, Math.PI, 0);
+                ctx.fill();
+                ctx.strokeStyle = '#38bdf8';
+                ctx.lineWidth = 1.2;
+                ctx.stroke();
+
+                // Geodesic lattice
+                ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
+                ctx.lineWidth = 0.8;
+                ctx.beginPath();
+                ctx.moveTo(-8, -66); ctx.lineTo(0, -74); ctx.lineTo(8, -66);
+                ctx.stroke();
+
+                // Orbiting micro-pollinator drone
+                const pAngle = now * 0.005;
+                const px = Math.cos(pAngle) * 16;
+                const py = -68 + Math.sin(pAngle) * 6;
+                ctx.fillStyle = '#facc15';
+                ctx.beginPath(); ctx.arc(px, py, 2, 0, Math.PI * 2); ctx.fill();
+            }
+
         // 2. LIVING WATER GARDEN
         } else if (buildingType === 'water-garden') {
             ctx.fillStyle = 'rgba(0,0,0,0.25)';
@@ -5343,6 +5387,47 @@ const WorldForgeCG = {
             ctx.fillStyle = '#10b981';
             for (let r = 0; r < 4; r++) {
                 ctx.fillRect(1 + r * 3, -12 - (r % 2) * 3, 2, 7);
+            }
+
+            // Level 2+: Stone Aqueduct Arch with Cascading Water Stream & Lotus Pads
+            if (buildingLevel >= 2) {
+                ctx.strokeStyle = '#94a3b8';
+                ctx.lineWidth = 3;
+                ctx.beginPath();
+                ctx.moveTo(-16, -20); ctx.lineTo(-2, -18); ctx.lineTo(6, -14);
+                ctx.stroke();
+
+                // Flowing stream & splash
+                ctx.strokeStyle = '#38bdf8';
+                ctx.lineWidth = 1.5;
+                ctx.beginPath();
+                ctx.moveTo(6, -14); ctx.lineTo(6, -6);
+                ctx.stroke();
+
+                // Water lilies
+                ctx.fillStyle = '#f472b6';
+                ctx.beginPath(); ctx.arc(10, -5, 2.5, 0, Math.PI * 2); ctx.fill();
+                ctx.beginPath(); ctx.arc(3, -2, 2, 0, Math.PI * 2); ctx.fill();
+            }
+
+            // Level 3: Crystalline Purifier Spire with Bioluminescent Halo
+            if (buildingLevel >= 3) {
+                ctx.fillStyle = '#67e8f9';
+                ctx.shadowColor = '#06b6d4';
+                ctx.shadowBlur = 12;
+                ctx.beginPath();
+                ctx.moveTo(0, -38); ctx.lineTo(-5, -18); ctx.lineTo(5, -18);
+                ctx.closePath();
+                ctx.fill();
+                ctx.shadowBlur = 0;
+
+                // Glowing ambient halo
+                const haloPulse = 14 + Math.sin(now * 0.006) * 3;
+                ctx.strokeStyle = 'rgba(6, 182, 212, 0.7)';
+                ctx.lineWidth = 1.2;
+                ctx.beginPath();
+                ctx.ellipse(0, -22, haloPulse, haloPulse * 0.5, 0, 0, Math.PI * 2);
+                ctx.stroke();
             }
 
         // 3. SOLAR CANOPY
@@ -5369,6 +5454,43 @@ const WorldForgeCG = {
             ctx.moveTo(glareX, -16); ctx.lineTo(glareX - 4, -26);
             ctx.stroke();
 
+            // Level 2+: Dual-Axis Sub-Wings & Grid Capacitor Bank
+            if (buildingLevel >= 2) {
+                ctx.fillStyle = '#2563eb';
+                ctx.beginPath();
+                ctx.moveTo(-28, -20); ctx.lineTo(-18, -24); ctx.lineTo(-18, -32); ctx.lineTo(-28, -28);
+                ctx.closePath(); ctx.fill();
+                ctx.beginPath();
+                ctx.moveTo(18, -24); ctx.lineTo(28, -28); ctx.lineTo(28, -36); ctx.lineTo(18, -32);
+                ctx.closePath(); ctx.fill();
+
+                // Ground battery capacitor
+                ctx.fillStyle = '#0f172a';
+                ctx.fillRect(-6, -4, 12, 6);
+                ctx.fillStyle = '#22c55e';
+                ctx.fillRect(-4, -3, 8, 2);
+            }
+
+            // Level 3: Quantum Concentrator Levitator & Energy Collector Beams
+            if (buildingLevel >= 3) {
+                const prismY = -44 + Math.sin(now * 0.005) * 3;
+                ctx.fillStyle = '#fde047';
+                ctx.shadowColor = '#facc15';
+                ctx.shadowBlur = 14;
+                ctx.beginPath();
+                ctx.moveTo(0, prismY - 6); ctx.lineTo(5, prismY); ctx.lineTo(0, prismY + 6); ctx.lineTo(-5, prismY);
+                ctx.closePath(); ctx.fill();
+                ctx.shadowBlur = 0;
+
+                // Downward golden optical collector rays
+                ctx.strokeStyle = 'rgba(250, 204, 21, 0.45)';
+                ctx.lineWidth = 1.5;
+                ctx.beginPath();
+                ctx.moveTo(0, prismY + 6); ctx.lineTo(-10, -24);
+                ctx.moveTo(0, prismY + 6); ctx.lineTo(10, -24);
+                ctx.stroke();
+            }
+
         // 4. COURTYARD HOMES
         } else if (buildingType === 'courtyard-homes') {
             ctx.fillStyle = 'rgba(0,0,0,0.25)';
@@ -5392,6 +5514,39 @@ const WorldForgeCG = {
             ctx.fillRect(-10, -12, 5, 5);
             ctx.fillRect(4, -12, 5, 5);
             ctx.shadowBlur = 0;
+
+            // Level 2+: Second-Story Timber Sky-Terrace & Hanging Lantern
+            if (buildingLevel >= 2) {
+                ctx.fillStyle = '#b45309';
+                ctx.fillRect(-9, -32, 18, 9);
+                ctx.fillStyle = '#9a3412';
+                ctx.beginPath();
+                ctx.moveTo(-10, -32); ctx.lineTo(0, -39); ctx.lineTo(10, -32);
+                ctx.closePath(); ctx.fill();
+
+                // Rooftop planter greens
+                ctx.fillStyle = '#22c55e';
+                ctx.fillRect(-8, -34, 6, 2);
+
+                // Warm lantern glow
+                ctx.fillStyle = '#fde047';
+                ctx.beginPath(); ctx.arc(8, -28, 2, 0, Math.PI * 2); ctx.fill();
+            }
+
+            // Level 3: Cantilevered Glass Sky-Bridge & Solar Shingle Roof
+            if (buildingLevel >= 3) {
+                ctx.fillStyle = 'rgba(56, 189, 248, 0.5)';
+                ctx.fillRect(-14, -38, 28, 4);
+                ctx.strokeStyle = '#38bdf8';
+                ctx.lineWidth = 1;
+                ctx.strokeRect(-14, -38, 28, 4);
+
+                // Solar shingle crown
+                ctx.fillStyle = '#0284c7';
+                ctx.beginPath();
+                ctx.moveTo(-12, -42); ctx.lineTo(0, -48); ctx.lineTo(12, -42);
+                ctx.closePath(); ctx.fill();
+            }
 
         // 5. CIVIC LAB
         } else if (buildingType === 'civic-lab') {
@@ -5431,6 +5586,46 @@ const WorldForgeCG = {
             ctx.moveTo(0, -56); ctx.lineTo(10 + bannerWave, -52); ctx.lineTo(0, -48);
             ctx.closePath(); ctx.fill();
 
+            // Level 2+: Holographic Planetary Orrery & Flanking Antennas
+            if (buildingLevel >= 2) {
+                ctx.save();
+                ctx.translate(0, -48);
+                ctx.rotate(now * 0.004);
+                ctx.strokeStyle = 'rgba(56, 189, 248, 0.8)';
+                ctx.lineWidth = 1.2;
+                ctx.beginPath(); ctx.ellipse(0, 0, 9, 4, 0.4, 0, Math.PI * 2); ctx.stroke();
+                ctx.fillStyle = '#38bdf8';
+                ctx.beginPath(); ctx.arc(0, 0, 2.5, 0, Math.PI * 2); ctx.fill();
+                ctx.restore();
+
+                // Flanking telemetry poles
+                ctx.strokeStyle = '#94a3b8';
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                ctx.moveTo(-16, -26); ctx.lineTo(-16, -42);
+                ctx.moveTo(16, -26); ctx.lineTo(16, -42);
+                ctx.stroke();
+                ctx.fillStyle = '#10b981';
+                ctx.fillRect(-17, -43, 2, 2);
+                ctx.fillRect(15, -43, 2, 2);
+            }
+
+            // Level 3: Triple Concentric Gyro-Rings & Quantum Civic Zenith Beam
+            if (buildingLevel >= 3) {
+                ctx.save();
+                ctx.translate(0, -48);
+                const gPulse = Math.sin(now * 0.006) * 2;
+                ctx.strokeStyle = 'rgba(168, 85, 247, 0.85)';
+                ctx.lineWidth = 1.4;
+                ctx.beginPath(); ctx.ellipse(0, 0, 14 + gPulse, 6, -0.3, 0, Math.PI * 2); ctx.stroke();
+                ctx.restore();
+
+                // Upward beacon beam
+                ctx.strokeStyle = 'rgba(192, 132, 252, 0.4)';
+                ctx.lineWidth = 2;
+                ctx.beginPath(); ctx.moveTo(0, -56); ctx.lineTo(0, -84); ctx.stroke();
+            }
+
         // 6. MAKER COOPERATIVE
         } else if (buildingType === 'maker-cooperative') {
             ctx.fillStyle = 'rgba(0,0,0,0.3)';
@@ -5454,6 +5649,42 @@ const WorldForgeCG = {
 
             ctx.fillStyle = '#7f1d1d';
             ctx.fillRect(8, -42, 6, 24);
+
+            // Level 2+: Articulated Robotic Crane Arm & Heat Exchanger Vents
+            if (buildingLevel >= 2) {
+                const craneAngle = Math.sin(now * 0.003) * 6;
+                ctx.strokeStyle = '#f59e0b';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.moveTo(-10, -25);
+                ctx.lineTo(-16 + craneAngle, -42);
+                ctx.lineTo(-8 + craneAngle, -42);
+                ctx.stroke();
+
+                // Suspended cargo pallet
+                ctx.fillStyle = '#d97706';
+                ctx.fillRect(-9 + craneAngle, -38, 4, 3);
+
+                // Secondary vent stack
+                ctx.fillStyle = '#64748b';
+                ctx.fillRect(-14, -34, 4, 14);
+            }
+
+            // Level 3: Plasma Induction Crucible & Magnetic Rail Conveyor
+            if (buildingLevel >= 3) {
+                ctx.fillStyle = '#fff7ed';
+                ctx.shadowColor = '#ea580c';
+                ctx.shadowBlur = 16;
+                ctx.beginPath(); ctx.arc(0, -22, 5, 0, Math.PI * 2); ctx.fill();
+                ctx.shadowBlur = 0;
+
+                // Elevated magnetic conveyor line
+                ctx.strokeStyle = '#0284c7';
+                ctx.lineWidth = 2;
+                ctx.beginPath(); ctx.moveTo(-18, -12); ctx.lineTo(-26, -6); ctx.stroke();
+                ctx.fillStyle = '#38bdf8';
+                ctx.fillRect(-24, -8, 3, 2);
+            }
 
         // 7. ARCOLOGY SPINE (Futuristic Mega-Structure)
         } else if (buildingType === 'arcology-spine') {
@@ -5501,6 +5732,37 @@ const WorldForgeCG = {
             ctx.fillStyle = `rgba(239, 68, 68, ${beaconAlpha})`;
             ctx.beginPath(); ctx.arc(0, -93, 3, 0, Math.PI * 2); ctx.fill();
 
+            // Level 2+: Glass Observation Pods & Transit Struts
+            if (buildingLevel >= 2) {
+                // Moving elevator car
+                const elevY = -20 - Math.abs(Math.sin(now * 0.003)) * 45;
+                ctx.fillStyle = '#38bdf8';
+                ctx.fillRect(13, elevY, 3, 5);
+
+                // Cantilevered observation lounge
+                ctx.fillStyle = 'rgba(56, 189, 248, 0.4)';
+                ctx.fillRect(-22, -45, 8, 5);
+                ctx.strokeStyle = '#38bdf8';
+                ctx.lineWidth = 1;
+                ctx.strokeRect(-22, -45, 8, 5);
+            }
+
+            // Level 3: Anti-Gravity Halo Stabilization Ring & Quadrant Beacons
+            if (buildingLevel >= 3) {
+                ctx.strokeStyle = 'rgba(56, 189, 248, 0.9)';
+                ctx.lineWidth = 2;
+                ctx.shadowColor = '#38bdf8';
+                ctx.shadowBlur = 12;
+                ctx.beginPath(); ctx.ellipse(0, -84, 18, 6, 0, 0, Math.PI * 2); ctx.stroke();
+                ctx.shadowBlur = 0;
+
+                // 4 Navigational corner LEDs
+                [[-18, -84], [18, -84], [0, -90], [0, -78]].forEach(([bx, by]) => {
+                    ctx.fillStyle = '#22c55e';
+                    ctx.beginPath(); ctx.arc(bx, by, 1.5, 0, Math.PI * 2); ctx.fill();
+                });
+            }
+
         // 8. TOKAMAK FUSION REACTOR (Clean Fusion Core)
         } else if (buildingType === 'fusion-reactor') {
             ctx.fillStyle = 'rgba(0,0,0,0.35)';
@@ -5531,6 +5793,37 @@ const WorldForgeCG = {
             ctx.fillStyle = '#e879f9';
             ctx.beginPath(); ctx.arc(0, -25, 6 + corePulse, 0, Math.PI * 2); ctx.fill();
             ctx.shadowBlur = 0;
+
+            // Level 2+: Quad Magnetic Boosters & Inter-Coil Energy Arcs
+            if (buildingLevel >= 2) {
+                ctx.strokeStyle = '#22d3ee';
+                ctx.lineWidth = 1.2;
+                ctx.beginPath();
+                ctx.moveTo(-14, -18); ctx.lineTo(-4, -30);
+                ctx.moveTo(14, -18); ctx.lineTo(4, -30);
+                ctx.stroke();
+
+                // Cryo conduits
+                ctx.strokeStyle = '#67e8f9';
+                ctx.lineWidth = 1.5;
+                ctx.beginPath();
+                ctx.arc(0, -10, 23, 0.2, 1.4); ctx.stroke();
+                ctx.beginPath();
+                ctx.arc(0, -10, 23, 3.4, 4.6); ctx.stroke();
+            }
+
+            // Level 3: Dual-Torus Matrix & Swirling Quantum Plasma Orbit
+            if (buildingLevel >= 3) {
+                const oAngle = now * 0.01;
+                const ox = Math.cos(oAngle) * 18;
+                const oy = -25 + Math.sin(oAngle) * 7;
+                ctx.fillStyle = '#f472b6';
+                ctx.shadowColor = '#e879f9';
+                ctx.shadowBlur = 14;
+                ctx.beginPath(); ctx.arc(ox, oy, 3.5, 0, Math.PI * 2); ctx.fill();
+                ctx.beginPath(); ctx.arc(-ox, -25 - Math.sin(oAngle) * 7, 3.5, 0, Math.PI * 2); ctx.fill();
+                ctx.shadowBlur = 0;
+            }
 
         // 9. NANOTECH FOUNDRY (Molecular Fabrication Cube)
         } else if (buildingType === 'nanotech-foundry') {
@@ -5565,6 +5858,32 @@ const WorldForgeCG = {
             ctx.closePath(); ctx.fill();
             ctx.shadowBlur = 0;
 
+            // Level 2+: Deposition Gantry Arms & Holographic Wireframe Cube
+            if (buildingLevel >= 2) {
+                ctx.strokeStyle = '#a855f7';
+                ctx.lineWidth = 1;
+                ctx.strokeRect(-8, crystalY - 14, 16, 12);
+
+                // Laser deposition beams
+                ctx.strokeStyle = 'rgba(16, 185, 129, 0.7)';
+                ctx.lineWidth = 1.2;
+                ctx.beginPath();
+                ctx.moveTo(-14, -20); ctx.lineTo(0, crystalY);
+                ctx.moveTo(14, -20); ctx.lineTo(0, crystalY);
+                ctx.stroke();
+            }
+
+            // Level 3: Tri-Crystal Molecular Lattice & Nanite Particle Swarm
+            if (buildingLevel >= 3) {
+                for (let k = 0; k < 3; k++) {
+                    const cAngle = (k / 3) * Math.PI * 2 + now * 0.004;
+                    const cx = Math.cos(cAngle) * 12;
+                    const cy = crystalY + Math.sin(cAngle) * 5;
+                    ctx.fillStyle = '#6ee7b7';
+                    ctx.beginPath(); ctx.arc(cx, cy, 2, 0, Math.PI * 2); ctx.fill();
+                }
+            }
+
         // 10. HYPERLOOP LOGISTICS TERMINAL
         } else if (buildingType === 'hyperloop-exchange') {
             ctx.fillStyle = 'rgba(0,0,0,0.3)';
@@ -5590,6 +5909,30 @@ const WorldForgeCG = {
             ctx.fillStyle = 'rgba(56, 189, 248, 0.6)';
             ctx.beginPath(); ctx.ellipse(podX, -11, 7, 2, 0, 0, Math.PI * 2); ctx.fill();
 
+            // Level 2+: Elevated Supersonic Departure Track & Airlocks
+            if (buildingLevel >= 2) {
+                ctx.strokeStyle = '#38bdf8';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.arc(0, -18, 22, Math.PI * 0.8, Math.PI * 0.2, true);
+                ctx.stroke();
+
+                // Boarding airlocks
+                ctx.fillStyle = '#10b981';
+                ctx.fillRect(-15, -12, 3, 4);
+                ctx.fillRect(12, -12, 3, 4);
+            }
+
+            // Level 3: 360° Transit Interchange Tube & Sonic Wave Ring
+            if (buildingLevel >= 3) {
+                const sRing = ((now * 0.02) % 24);
+                ctx.strokeStyle = `rgba(56, 189, 248, ${Math.max(0, 1 - sRing / 24)})`;
+                ctx.lineWidth = 1.2;
+                ctx.beginPath();
+                ctx.ellipse(0, -10, sRing, sRing * 0.5, 0, 0, Math.PI * 2);
+                ctx.stroke();
+            }
+
         // 11. QUANTUM TELEMETRY ARRAY
         } else if (buildingType === 'quantum-observatory') {
             ctx.fillStyle = 'rgba(0,0,0,0.35)';
@@ -5612,6 +5955,38 @@ const WorldForgeCG = {
             ctx.shadowBlur = 12;
             ctx.beginPath(); ctx.moveTo(0, -20); ctx.lineTo(0, -60); ctx.stroke();
             ctx.shadowBlur = 0;
+
+            // Level 2+: Tri-Dish Phased Array & Holographic Star Chart
+            if (buildingLevel >= 2) {
+                ctx.strokeStyle = '#94a3b8';
+                ctx.lineWidth = 2;
+                ctx.beginPath(); ctx.arc(0, -34, 7, 0.4, 2.6); ctx.stroke();
+
+                // Holographic star chart sphere
+                ctx.strokeStyle = 'rgba(192, 132, 252, 0.6)';
+                ctx.lineWidth = 1;
+                ctx.beginPath(); ctx.arc(0, -48, 8, 0, Math.PI * 2); ctx.stroke();
+                ctx.fillStyle = '#38bdf8';
+                ctx.beginPath(); ctx.arc(3, -50, 1.5, 0, Math.PI * 2); ctx.fill();
+                ctx.beginPath(); ctx.arc(-4, -46, 1.5, 0, Math.PI * 2); ctx.fill();
+            }
+
+            // Level 3: Deep-Space Subspace Emitter & Reconnaissance Sensors
+            if (buildingLevel >= 3) {
+                ctx.strokeStyle = '#ec4899';
+                ctx.shadowColor = '#f43f5e';
+                ctx.shadowBlur = 16;
+                ctx.lineWidth = 2.5;
+                ctx.beginPath(); ctx.moveTo(0, -60); ctx.lineTo(0, -90); ctx.stroke();
+                ctx.shadowBlur = 0;
+
+                // Orbiting sensor probe
+                const probeAngle = now * 0.007;
+                ctx.fillStyle = '#fbbf24';
+                ctx.beginPath();
+                ctx.arc(Math.cos(probeAngle) * 14, -60 + Math.sin(probeAngle) * 5, 2, 0, Math.PI * 2);
+                ctx.fill();
+            }
 
         // 12. STORY FORUM (Civic Agorá & Eternal Flame)
         } else if (buildingType === 'story-forum') {
@@ -5639,6 +6014,35 @@ const WorldForgeCG = {
             ctx.beginPath(); ctx.moveTo(-16, -6); ctx.lineTo(-12, -26); ctx.lineTo(0, -28); ctx.stroke();
             ctx.beginPath(); ctx.moveTo(16, -6); ctx.lineTo(12, -26); ctx.lineTo(0, -28); ctx.stroke();
 
+            // Level 2+: Ring of Marble Colonnades & Dual Ceremonial Braziers
+            if (buildingLevel >= 2) {
+                ctx.fillStyle = '#f8fafc';
+                for (let c = 0; c < 5; c++) {
+                    const ca = (c / 4) * Math.PI;
+                    const cx = Math.cos(ca) * 16;
+                    const cy = -6 + Math.sin(ca) * 6;
+                    ctx.fillRect(cx - 1, cy - 12, 2, 12);
+                }
+
+                // Dual braziers
+                ctx.fillStyle = '#f59e0b';
+                ctx.beginPath(); ctx.arc(-14, -7, 2, 0, Math.PI * 2); ctx.fill();
+                ctx.beginPath(); ctx.arc(14, -7, 2, 0, Math.PI * 2); ctx.fill();
+            }
+
+            // Level 3: Floating Holographic Mythogram Halo
+            if (buildingLevel >= 3) {
+                ctx.strokeStyle = 'rgba(250, 204, 21, 0.75)';
+                ctx.lineWidth = 1.2;
+                ctx.beginPath();
+                ctx.ellipse(0, -36, 14, 5, 0, 0, Math.PI * 2);
+                ctx.stroke();
+                ctx.fillStyle = '#fbbf24';
+                ctx.font = '7px ' + FONT_MONO;
+                ctx.textAlign = 'center';
+                ctx.fillText('✦ 🏛️ ✦', 0, -35);
+            }
+
         // 13. GRAND AMPHITHEATER (Civic Monument)
         } else if (buildingType === 'grand-amphitheater') {
             ctx.fillStyle = 'rgba(0,0,0,0.4)';
@@ -5660,15 +6064,63 @@ const WorldForgeCG = {
             ctx.strokeStyle = '#8b5cf6'; ctx.lineWidth = 1.5;
             ctx.beginPath(); ctx.moveTo(-18, -12); ctx.lineTo(-18, -26); ctx.stroke();
             ctx.beginPath(); ctx.moveTo(18, -12); ctx.lineTo(18, -26); ctx.stroke();
+
+            // Level 2+: Acoustic Shell Arcs & Grand Plaza Obelisks
+            if (buildingLevel >= 2) {
+                ctx.strokeStyle = 'rgba(236, 72, 153, 0.6)';
+                ctx.lineWidth = 1.5;
+                ctx.beginPath(); ctx.arc(0, -14, 22, Math.PI * 0.85, Math.PI * 0.15, true); ctx.stroke();
+
+                // Entrance plaza obelisks
+                ctx.fillStyle = '#94a3b8';
+                ctx.fillRect(-22, -18, 3, 14);
+                ctx.fillRect(19, -18, 3, 14);
+                ctx.fillStyle = '#38bdf8';
+                ctx.fillRect(-22, -20, 3, 2);
+                ctx.fillRect(19, -20, 3, 2);
+            }
+
+            // Level 3: Celestial Stage Aurora Projection Canopy
+            if (buildingLevel >= 3) {
+                const aShift = Math.sin(now * 0.005) * 6;
+                const aGrad = ctx.createLinearGradient(-15, -42, 15, -42);
+                aGrad.addColorStop(0, 'rgba(168, 85, 247, 0.4)');
+                aGrad.addColorStop(0.5, 'rgba(236, 72, 153, 0.6)');
+                aGrad.addColorStop(1, 'rgba(56, 189, 248, 0.4)');
+                ctx.fillStyle = aGrad;
+                ctx.beginPath();
+                ctx.moveTo(-18, -36); ctx.lineTo(aShift, -52); ctx.lineTo(18, -36);
+                ctx.closePath(); ctx.fill();
+            }
         }
 
-        // Structural Level Badges (★☆☆, ★★☆, ★★★)
+        // Structural Level Badges (Tactical Holographic Capsule Pill)
         if (!isGhost && buildingLevel >= 2) {
-            ctx.fillStyle = '#facc15';
-            ctx.font = 'bold 9px ' + FONT_SANS;
+            const isMax = buildingLevel >= 3;
+            const badgeY = -56;
+            const pillW = isMax ? 52 : 44;
+            const pillH = 14;
+
+            ctx.save();
+            ctx.shadowColor = isMax ? 'rgba(250, 204, 21, 0.65)' : 'rgba(56, 189, 248, 0.65)';
+            ctx.shadowBlur = 8;
+            ctx.fillStyle = 'rgba(11, 19, 38, 0.94)';
+            ctx.beginPath();
+            ctx.roundRect(-pillW / 2, badgeY - pillH / 2, pillW, pillH, pillH / 2);
+            ctx.fill();
+
+            ctx.strokeStyle = isMax ? '#facc15' : '#38bdf8';
+            ctx.lineWidth = 1.2;
+            ctx.stroke();
+
+            ctx.shadowBlur = 0;
+            ctx.font = 'bold 8.5px ' + FONT_MONO;
             ctx.textAlign = 'center';
-            const starText = buildingLevel === 2 ? '★★' : '★★★';
-            ctx.fillText(starText, 0, -48);
+            ctx.textBaseline = 'middle';
+            ctx.fillStyle = isMax ? '#fef08a' : '#bae6fd';
+            const badgeLabel = isMax ? 'LVL 3 ★' : 'LVL 2 ★';
+            ctx.fillText(badgeLabel, 0, badgeY + 0.5);
+            ctx.restore();
         }
 
         ctx.restore();
@@ -7641,6 +8093,10 @@ const TROPHIES_CATALOG = [
     { id: 'CLEAN_ENERGY', title: 'Clean Power Hegemony', icon: '☀️', desc: 'Research Solar Weave Photovoltaics or Compact Fusion Core.' },
     { id: 'POST_SCARCITY', title: 'Post-Scarcity Horizon', icon: '🌐', desc: 'Adopt the Post-Scarcity Dividend economy tree capstone.' },
     { id: 'TRANSCENDENCE', title: 'Transcendence Arcology', icon: '👑', desc: 'Unlock the Grand Singularity synthesis wonder.' },
+    { id: 'DEFENDER', title: 'Bastion of Peace', icon: '🛡️', desc: 'Secure diplomatic harmony across regional factions or fortify defenses to 80+ security.' },
+    { id: 'MERCHANT_PRINCE', title: 'Trade Route Sovereign', icon: '🚀', desc: 'Deploy automated sky-drone logistics and amass over 400 trade reserves or 8 district buildings.' },
+    { id: 'RESONANCE', title: 'Zenith Architecture', icon: '✨', desc: 'Elevate any municipal building to Level 3 Zenith Architecture.' },
+    { id: 'MEGACITY', title: 'Metropolis of Tomorrow', icon: '🌆', desc: 'Surpass 1,000 citizens or construct 10 thriving district structures.' },
 ];
 let unlockedTrophies = new Set(JSON.parse(localStorage.getItem('wf_trophies') || '[]'));
 
@@ -7668,6 +8124,10 @@ function checkTrophies(city) {
     if (researched.has('solar-weave') || researched.has('fusion-core')) award('CLEAN_ENERGY');
     if (researched.has('post-scarcity-commons')) award('POST_SCARCITY');
     if (researched.has('arcology-singularity')) award('TRANSCENDENCE');
+    if (city.geopolitics?.some?.(f => f.relation >= 80) || (city.security || 0) >= 80 || city.geopolitics?.defensePosture === 'fortified') award('DEFENDER');
+    if ((city.treasury || 0) >= 400 || builtCount >= 8) award('MERCHANT_PRINCE');
+    if ((city.buildings || []).some(b => (b.level || 1) >= 3)) award('RESONANCE');
+    if ((city.population || 0) >= 1000 || builtCount >= 10) award('MEGACITY');
 
     const badge = el('achieve-unlocked-count');
     if (badge) badge.textContent = `${unlockedTrophies.size}/${TROPHIES_CATALOG.length}`;
