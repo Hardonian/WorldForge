@@ -258,7 +258,11 @@ impl SimulationEvent {
                 ..
             } => format!(
                 "trajectory {axis}: {old_score} → {new_score} from {cause}{}",
-                if *turning_point { " (turning point)" } else { "" }
+                if *turning_point {
+                    " (turning point)"
+                } else {
+                    ""
+                }
             ),
             EventType::ObjectiveUpdated { objective, status } => {
                 format!("objective '{}': {}", objective, status)
@@ -349,13 +353,20 @@ impl SimulationEvent {
             EventType::SeasonChanged { season, cycle } => {
                 format!("season changed to {season} (year {cycle})")
             }
-            EventType::WeatherChanged { weather, temperature } => {
+            EventType::WeatherChanged {
+                weather,
+                temperature,
+            } => {
                 format!("weather: {weather} ({temperature:.1}°C)")
             }
             EventType::EcologicalDisaster { disaster, severity } => {
                 format!("ecological disaster: {disaster} (severity {severity:.1})")
             }
-            EventType::TradeCaravanArrived { source, resource, amount } => {
+            EventType::TradeCaravanArrived {
+                source,
+                resource,
+                amount,
+            } => {
                 format!("trade caravan from {source} delivered {amount:.1} {resource}")
             }
         }

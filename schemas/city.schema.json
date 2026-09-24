@@ -215,6 +215,8 @@
         "tick": { "type": "integer", "minimum": 0 },
         "resource_below": { "$ref": "#/definitions/resources" },
         "resource_above": { "$ref": "#/definitions/resources" },
+        "trajectory_below": { "$ref": "#/definitions/signedResources" },
+        "trajectory_above": { "$ref": "#/definitions/signedResources" },
         "requires_technologies": { "$ref": "#/definitions/ids" },
         "requires_choices": { "$ref": "#/definitions/choices" },
         "excludes_choices": { "$ref": "#/definitions/choices" }
@@ -243,6 +245,7 @@
         "cost": { "$ref": "#/definitions/resources" },
         "grants": { "$ref": "#/definitions/resources" },
         "faction_support": { "$ref": "#/definitions/signedResources" },
+        "trajectory": { "$ref": "#/definitions/signedResources" },
         "effects": { "$ref": "#/definitions/civicEffects" }
       },
       "additionalProperties": false

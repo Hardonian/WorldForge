@@ -427,6 +427,7 @@ pub struct CivicOptionProgress {
     pub cost: BTreeMap<String, f64>,
     pub grants: BTreeMap<String, f64>,
     pub faction_support: BTreeMap<String, f64>,
+    pub trajectory: BTreeMap<String, f64>,
     pub affordable: bool,
 }
 
@@ -1043,6 +1044,7 @@ impl SimulationRuntime {
 
             let mut tick_events = self.apply_scheduled_events(tick_num)?;
             tick_events.extend(self.update_civic_dilemmas(tick)?);
+            tick_events.extend(self.run_city_trajectory(tick)?);
 
             run_production(&mut self.world, &self.entity_ids, tick, &mut tick_events);
             tick_events.extend(self.run_city_economy(tick)?);
@@ -1352,7 +1354,10 @@ impl SimulationRuntime {
     ) -> Result<RunProgress, WorldForgeError> {
         self.ensure_player_action_allowed()?;
         let city = self.city_config.as_ref().ok_or_else(|| {
-            WorldForgeError::new(ErrorCode::ScenarioInvalid, "this world has no city-building rules")
+            WorldForgeError::new(
+                ErrorCode::ScenarioInvalid,
+                "this world has no city-building rules",
+            )
         })?;
         let building = city
             .buildings
@@ -1429,7 +1434,10 @@ impl SimulationRuntime {
     ) -> Result<RunProgress, WorldForgeError> {
         self.ensure_player_action_allowed()?;
         let city = self.city_config.as_ref().ok_or_else(|| {
-            WorldForgeError::new(ErrorCode::ScenarioInvalid, "this world has no city-building rules")
+            WorldForgeError::new(
+                ErrorCode::ScenarioInvalid,
+                "this world has no city-building rules",
+            )
         })?;
         let building = city
             .buildings
@@ -1586,12 +1594,14 @@ impl SimulationRuntime {
         let treasury_id = self.city_treasury_id.ok_or_else(|| {
             WorldForgeError::new(ErrorCode::RuntimeInitFailed, "city treasury is unavailable")
         })?;
-        let event =
+        let events =
             self.resolve_civic_option(&city, treasury_id, dilemma_id, option_id, true, true)?;
-        self.record_player_event(event.clone());
+        for event in &events {
+            self.record_player_event(event.clone());
+        }
         self.refresh_resource_totals(self.world.current_tick().value());
         self.state_fingerprint = self.world.fingerprint();
-        Ok(self.progress_with_events(vec![event]))
+        Ok(self.progress_with_events(events))
     }
 
     /// Execute a geopolitical realm action (tribute, emissary, defense posture, coalition, counter-strike).
@@ -1790,10 +1800,32 @@ impl SimulationRuntime {
             }
         };
 
-        self.record_player_event(event.clone());
+        let impacts: &[(&str, i32)] = match action {
+            "tribute" => &[
+                ("prosperity", 8),
+                ("cohesion", -5),
+                ("sovereignty", 5),
+                ("risk", 3),
+            ],
+            "emissary" => &[("cohesion", 7), ("risk", -3)],
+            "posture" => &[("sovereignty", 8), ("prosperity", -3)],
+            "coalition" => &[("cohesion", 8), ("sovereignty", 3)],
+            "strike" => &[("sovereignty", 10), ("risk", 10), ("cohesion", -4)],
+            _ => &[],
+        };
+        let mut events = vec![event];
+        events.extend(self.apply_system_trajectory_impacts(
+            treasury_id,
+            impacts,
+            &format!("geopolitics/{action}/{entity_id}"),
+            tick,
+        )?);
+        for event in &events {
+            self.record_player_event(event.clone());
+        }
         self.refresh_resource_totals(self.world.current_tick().value());
         self.state_fingerprint = self.world.fingerprint();
-        Ok(self.progress_with_events(vec![event]))
+        Ok(self.progress_with_events(events))
     }
 
     /// Execute a deterministic corporate-intrigue, cyber-defense, or crypto-market action.
@@ -2236,6 +2268,22 @@ impl SimulationRuntime {
             .expect("validated city state")
             .intrigue_nonce = nonce.saturating_add(1);
 
+        let impacts: &[(&str, i32)] = match action {
+            "infiltrate" => &[("innovation", 8), ("risk", 10), ("cohesion", -2)],
+            "deploy" => &[("innovation", 4), ("risk", 4)],
+            "contain" => &[("cohesion", 5), ("risk", -8)],
+            "counterintel" => &[("sovereignty", 6), ("risk", -5)],
+            "manipulate" => &[("prosperity", 6), ("risk", 15), ("cohesion", -4)],
+            "trade" => &[("prosperity", 2), ("risk", 1)],
+            _ => &[],
+        };
+        events.extend(self.apply_system_trajectory_impacts(
+            treasury_id,
+            impacts,
+            &format!("intrigue/{action}/{target}"),
+            tick,
+        )?);
+
         events.insert(
             0,
             SimulationEvent::new(
@@ -2254,6 +2302,82 @@ impl SimulationRuntime {
         self.refresh_resource_totals(tick.value());
         self.state_fingerprint = self.world.fingerprint();
         Ok(self.progress_with_events(events))
+    }
+
+    fn apply_system_trajectory_impacts(
+        &mut self,
+        treasury_id: EntityId,
+        impacts: &[(&str, i32)],
+        cause: &str,
+        tick: Tick,
+    ) -> Result<Vec<SimulationEvent>, WorldForgeError> {
+        let state = self
+            .world
+            .get_component_mut::<CityRuntimeState>(&treasury_id)
+            .ok_or_else(|| action_error("city trajectory state is unavailable"))?;
+        let mut events = Vec::with_capacity(impacts.len());
+        for (axis, delta) in impacts {
+            let old_score = state
+                .trajectory_scores
+                .get(*axis)
+                .copied()
+                .unwrap_or(Fixed64::ZERO);
+            let delta = Fixed64::from_int(*delta);
+            let reinforcement =
+                if old_score.raw().signum() == delta.raw().signum() && !old_score.is_zero() {
+                    old_score / Fixed64::from_int(10)
+                } else {
+                    Fixed64::ZERO
+                };
+            let new_score = (old_score + delta + reinforcement)
+                .max(Fixed64::from_int(-100))
+                .min(Fixed64::from_int(100));
+            let old_momentum = state
+                .trajectory_momentum
+                .get(*axis)
+                .copied()
+                .unwrap_or(Fixed64::ZERO);
+            let momentum = (old_momentum * Fixed64::from_ratio(3, 4) + delta)
+                .max(Fixed64::from_int(-100))
+                .min(Fixed64::from_int(100));
+            state
+                .trajectory_scores
+                .insert((*axis).to_string(), new_score);
+            state
+                .trajectory_momentum
+                .insert((*axis).to_string(), momentum);
+            let old_tier = old_score.abs().to_int() / 25;
+            let new_tier = new_score.abs().to_int() / 25;
+            let reversed = old_score.raw().signum() != new_score.raw().signum()
+                && !old_score.is_zero()
+                && !new_score.is_zero();
+            let turning_point = new_tier > old_tier || reversed;
+            if turning_point {
+                state
+                    .trajectory_turning_points
+                    .push(TrajectoryTurningPointState {
+                        tick: tick.value(),
+                        axis: (*axis).to_string(),
+                        score: new_score,
+                        cause: cause.to_string(),
+                    });
+                if state.trajectory_turning_points.len() > 32 {
+                    state.trajectory_turning_points.remove(0);
+                }
+            }
+            events.push(SimulationEvent::new(
+                tick,
+                EventType::TrajectoryShifted {
+                    axis: (*axis).to_string(),
+                    old_score,
+                    new_score,
+                    momentum,
+                    cause: cause.to_string(),
+                    turning_point,
+                },
+            ));
+        }
+        Ok(events)
     }
 
     fn ensure_player_action_allowed(&self) -> Result<(), WorldForgeError> {
@@ -2359,7 +2483,7 @@ impl SimulationRuntime {
             })
             .collect::<Vec<_>>();
         for (dilemma, option) in due {
-            events.push(self.resolve_civic_option(
+            events.extend(self.resolve_civic_option(
                 &city,
                 treasury_id,
                 &dilemma,
@@ -2379,7 +2503,7 @@ impl SimulationRuntime {
         option_id: &str,
         charge_cost: bool,
         player: bool,
-    ) -> Result<SimulationEvent, WorldForgeError> {
+    ) -> Result<Vec<SimulationEvent>, WorldForgeError> {
         let dilemma = city
             .dilemmas
             .iter()
@@ -2417,6 +2541,7 @@ impl SimulationRuntime {
                 inventory.add(resource, Fixed64::from_f64_lossy(*amount));
             }
         }
+        let tick = self.world.current_tick();
         let state = self
             .world
             .get_component_mut::<CityRuntimeState>(&treasury_id)
@@ -2434,6 +2559,7 @@ impl SimulationRuntime {
         state
             .decisions
             .insert(dilemma_id.to_string(), option_id.to_string());
+        let mut events = Vec::with_capacity(option.trajectory.len().saturating_add(1));
         let event_type = if player {
             EventType::PlayerCivicDecision {
                 dilemma: dilemma_id.to_string(),
@@ -2445,7 +2571,68 @@ impl SimulationRuntime {
                 option: option_id.to_string(),
             }
         };
-        Ok(SimulationEvent::new(self.world.current_tick(), event_type))
+        events.push(SimulationEvent::new(tick, event_type));
+        let cause = format!("{dilemma_id}/{option_id}");
+        for (axis, authored_delta) in &option.trajectory {
+            let old_score = state
+                .trajectory_scores
+                .get(axis)
+                .copied()
+                .unwrap_or(Fixed64::ZERO);
+            let delta = Fixed64::from_f64_lossy(*authored_delta);
+            let reinforcement = if old_score.raw().signum() == delta.raw().signum()
+                && !old_score.is_zero()
+                && !delta.is_zero()
+            {
+                old_score / Fixed64::from_int(10)
+            } else {
+                Fixed64::ZERO
+            };
+            let new_score = (old_score + delta + reinforcement)
+                .max(Fixed64::from_int(-100))
+                .min(Fixed64::from_int(100));
+            let old_momentum = state
+                .trajectory_momentum
+                .get(axis)
+                .copied()
+                .unwrap_or(Fixed64::ZERO);
+            let momentum = (old_momentum * Fixed64::from_ratio(3, 4) + delta)
+                .max(Fixed64::from_int(-100))
+                .min(Fixed64::from_int(100));
+            state.trajectory_scores.insert(axis.clone(), new_score);
+            state.trajectory_momentum.insert(axis.clone(), momentum);
+            let old_tier = old_score.abs().to_int() / 25;
+            let new_tier = new_score.abs().to_int() / 25;
+            let reversed = old_score.raw().signum() != new_score.raw().signum()
+                && !old_score.is_zero()
+                && !new_score.is_zero();
+            let turning_point = new_tier > old_tier || reversed;
+            if turning_point {
+                state
+                    .trajectory_turning_points
+                    .push(TrajectoryTurningPointState {
+                        tick: tick.value(),
+                        axis: axis.clone(),
+                        score: new_score,
+                        cause: cause.clone(),
+                    });
+                if state.trajectory_turning_points.len() > 32 {
+                    state.trajectory_turning_points.remove(0);
+                }
+            }
+            events.push(SimulationEvent::new(
+                tick,
+                EventType::TrajectoryShifted {
+                    axis: axis.clone(),
+                    old_score,
+                    new_score,
+                    momentum,
+                    cause: cause.clone(),
+                    turning_point,
+                },
+            ));
+        }
+        Ok(events)
     }
 
     fn finalize(&mut self) -> Result<(), WorldForgeError> {
@@ -2700,7 +2887,11 @@ impl SimulationRuntime {
                     footprint: building.footprint,
                     count: city_building_count(state, &building.id),
                     max_count: building.max_count,
-                    level: state.building_levels.get(&building.id).copied().unwrap_or(1),
+                    level: state
+                        .building_levels
+                        .get(&building.id)
+                        .copied()
+                        .unwrap_or(1),
                     cost: building.cost.clone(),
                     upkeep: building.upkeep.clone(),
                     outputs: building.outputs.clone(),
@@ -2783,6 +2974,7 @@ impl SimulationRuntime {
                                 cost: option.cost.clone(),
                                 grants: option.grants.clone(),
                                 faction_support: option.faction_support.clone(),
+                                trajectory: option.trajectory.clone(),
                                 affordable: resources_available(inventory, &option.cost),
                             })
                             .collect(),
@@ -3056,7 +3248,9 @@ impl SimulationRuntime {
             for (key, count) in &state.placements {
                 if let Some((_, b_id)) = key.split_once('/') {
                     if let Some(b) = city.buildings.iter().find(|b| b.id == b_id) {
-                        if b.tags.contains(&"green".to_string()) || b.tags.contains(&"water".to_string()) {
+                        if b.tags.contains(&"green".to_string())
+                            || b.tags.contains(&"water".to_string())
+                        {
                             green_count += *count as f64;
                         }
                         if b.tags.contains(&"maker".to_string()) || b.category == "industry" {
@@ -3066,11 +3260,16 @@ impl SimulationRuntime {
                 }
             }
 
-            let biosphere_health = (80.0 + (green_count * 5.0) - (industry_count * 6.0)).clamp(10.0, 100.0);
-            let air_quality = (85.0 + (green_count * 4.0) - (industry_count * 8.0)).clamp(15.0, 100.0);
-            let water_purity = (80.0 + (green_count * 6.0) - (industry_count * 4.0)).clamp(20.0, 100.0);
-            let drought_index = (((self.scenario.seed.wrapping_add(current_tick / 40)) % 100) as f64) / 100.0;
-            let soil_fertility = (88.0 - (drought_index * 35.0) + (green_count * 2.0)).clamp(20.0, 100.0);
+            let biosphere_health =
+                (80.0 + (green_count * 5.0) - (industry_count * 6.0)).clamp(10.0, 100.0);
+            let air_quality =
+                (85.0 + (green_count * 4.0) - (industry_count * 8.0)).clamp(15.0, 100.0);
+            let water_purity =
+                (80.0 + (green_count * 6.0) - (industry_count * 4.0)).clamp(20.0, 100.0);
+            let drought_index =
+                (((self.scenario.seed.wrapping_add(current_tick / 40)) % 100) as f64) / 100.0;
+            let soil_fertility =
+                (88.0 - (drought_index * 35.0) + (green_count * 2.0)).clamp(20.0, 100.0);
             let disaster_risk = if season_idx == 1 && drought_index > 0.6 {
                 drought_index * 100.0
             } else if season_idx == 3 && base_temp < 0.0 {
@@ -3115,7 +3314,11 @@ impl SimulationRuntime {
                 .collect();
             let dominant_axis = scores
                 .iter()
-                .max_by(|a, b| a.1.abs().partial_cmp(&b.1.abs()).unwrap_or(std::cmp::Ordering::Equal))
+                .max_by(|a, b| {
+                    a.1.abs()
+                        .partial_cmp(&b.1.abs())
+                        .unwrap_or(std::cmp::Ordering::Equal)
+                })
                 .map(|(k, _)| k.clone());
             let turning_points = state
                 .trajectory_turning_points
@@ -3160,6 +3363,97 @@ impl SimulationRuntime {
     /// Borrow the finalized replay after `run` completes.
     pub fn replay(&self) -> Option<&ReplayArtifact> {
         self.replay.as_ref()
+    }
+
+    fn run_city_trajectory(&mut self, tick: Tick) -> Result<Vec<SimulationEvent>, WorldForgeError> {
+        let Some(treasury_id) = self.city_treasury_id else {
+            return Ok(Vec::new());
+        };
+        if tick.value() == 0 || tick.value() % 10 != 0 {
+            return Ok(Vec::new());
+        }
+        let state = self
+            .world
+            .get_component_mut::<CityRuntimeState>(&treasury_id)
+            .ok_or_else(|| action_error("city trajectory state is unavailable"))?;
+        let axes = state
+            .trajectory_momentum
+            .keys()
+            .cloned()
+            .collect::<Vec<_>>();
+        let mut events = Vec::new();
+        for axis in axes {
+            let old_score = state
+                .trajectory_scores
+                .get(&axis)
+                .copied()
+                .unwrap_or(Fixed64::ZERO);
+            let old_momentum = state
+                .trajectory_momentum
+                .get(&axis)
+                .copied()
+                .unwrap_or(Fixed64::ZERO);
+            if old_momentum.is_zero() {
+                continue;
+            }
+            let new_score = (old_score + old_momentum / Fixed64::from_int(20))
+                .max(Fixed64::from_int(-100))
+                .min(Fixed64::from_int(100));
+            let mut new_momentum = old_momentum * Fixed64::from_ratio(19, 20);
+            if new_momentum.abs() < Fixed64::from_ratio(1, 20) {
+                new_momentum = Fixed64::ZERO;
+            }
+            state.trajectory_scores.insert(axis.clone(), new_score);
+            state.trajectory_momentum.insert(axis.clone(), new_momentum);
+            let old_tier = old_score.abs().to_int() / 25;
+            let new_tier = new_score.abs().to_int() / 25;
+            let turning_point = new_tier > old_tier;
+            if turning_point {
+                state
+                    .trajectory_turning_points
+                    .push(TrajectoryTurningPointState {
+                        tick: tick.value(),
+                        axis: axis.clone(),
+                        score: new_score,
+                        cause: "compounding momentum".to_string(),
+                    });
+                if state.trajectory_turning_points.len() > 32 {
+                    state.trajectory_turning_points.remove(0);
+                }
+            }
+            events.push(SimulationEvent::new(
+                tick,
+                EventType::TrajectoryShifted {
+                    axis,
+                    old_score,
+                    new_score,
+                    momentum: new_momentum,
+                    cause: "compounding momentum".to_string(),
+                    turning_point,
+                },
+            ));
+        }
+        if state
+            .trajectory_scores
+            .get("risk")
+            .copied()
+            .unwrap_or(Fixed64::ZERO)
+            > Fixed64::from_int(50)
+        {
+            state.intrigue_heat = (state.intrigue_heat + Fixed64::ONE).min(Fixed64::from_int(100));
+        }
+        if state
+            .trajectory_scores
+            .get("cohesion")
+            .copied()
+            .unwrap_or(Fixed64::ZERO)
+            < Fixed64::from_int(-50)
+        {
+            for support in state.faction_support.values_mut() {
+                *support = (*support - Fixed64::ONE).max(Fixed64::ZERO);
+            }
+        }
+        Ok(events)
     }
 
     fn run_city_economy(&mut self, tick: Tick) -> Result<Vec<SimulationEvent>, WorldForgeError> {
@@ -3398,10 +3692,7 @@ impl SimulationRuntime {
         Ok(events)
     }
 
-    fn run_city_ecology(
-        &mut self,
-        tick: Tick,
-    ) -> Result<Vec<SimulationEvent>, WorldForgeError> {
+    fn run_city_ecology(&mut self, tick: Tick) -> Result<Vec<SimulationEvent>, WorldForgeError> {
         let (Some(city), Some(treasury_id)) = (self.city_config.clone(), self.city_treasury_id)
         else {
             return Ok(Vec::new());
@@ -3893,7 +4184,32 @@ fn city_output_multiplier(
             }
         }
     }
+    multiplier *= trajectory_resource_multiplier(state, resource);
     multiplier.clamp(0.1, 100.0)
+}
+
+fn trajectory_resource_multiplier(state: &CityRuntimeState, resource: &str) -> f64 {
+    let score = |axis: &str| {
+        state
+            .trajectory_scores
+            .get(axis)
+            .copied()
+            .unwrap_or(Fixed64::ZERO)
+            .to_f64_lossy()
+    };
+    let mut multiplier = 1.0;
+    match resource {
+        "research" => multiplier *= 1.0 + score("innovation") / 250.0,
+        "credits" => multiplier *= 1.0 + score("prosperity") / 250.0,
+        "food" | "water" | "power" => {
+            multiplier *= 1.0 + score("sustainability") / 300.0;
+        }
+        "happiness" | "wellbeing" => multiplier *= 1.0 + score("cohesion") / 250.0,
+        "materials" | "security" => multiplier *= 1.0 + score("sovereignty") / 300.0,
+        _ => {}
+    }
+    multiplier *= 1.0 - score("risk").max(0.0) / 400.0;
+    multiplier.clamp(0.5, 1.6)
 }
 
 fn city_stats(city: &CityConfig, state: &CityRuntimeState) -> (u64, u64, f64) {
@@ -3964,14 +4280,24 @@ fn chosen_civic_options<'a>(
 }
 
 fn civic_population_growth_multiplier(city: &CityConfig, state: &CityRuntimeState) -> f64 {
-    chosen_civic_options(city, state)
+    let policy_multiplier = chosen_civic_options(city, state)
         .into_iter()
         .filter_map(|option| {
             (option.effects.population_growth_multiplier > 0.0)
                 .then_some(option.effects.population_growth_multiplier)
         })
-        .fold(1.0, |total, multiplier| total * multiplier)
-        .clamp(0.1, 100.0)
+        .fold(1.0, |total, multiplier| total * multiplier);
+    let score = |axis: &str| {
+        state
+            .trajectory_scores
+            .get(axis)
+            .copied()
+            .unwrap_or(Fixed64::ZERO)
+            .to_f64_lossy()
+    };
+    let trajectory_multiplier = 1.0 + score("cohesion") / 400.0 + score("sustainability") / 500.0
+        - score("risk").max(0.0) / 350.0;
+    (policy_multiplier * trajectory_multiplier).clamp(0.1, 100.0)
 }
 
 fn civic_trigger_met(
@@ -3995,6 +4321,30 @@ fn civic_trigger_met(
             .iter()
             .all(|(resource, threshold)| {
                 inventory.get(resource) > Fixed64::from_f64_lossy(*threshold)
+            })
+        && dilemma
+            .trigger
+            .trajectory_below
+            .iter()
+            .all(|(axis, threshold)| {
+                state
+                    .trajectory_scores
+                    .get(axis)
+                    .copied()
+                    .unwrap_or(Fixed64::ZERO)
+                    < Fixed64::from_f64_lossy(*threshold)
+            })
+        && dilemma
+            .trigger
+            .trajectory_above
+            .iter()
+            .all(|(axis, threshold)| {
+                state
+                    .trajectory_scores
+                    .get(axis)
+                    .copied()
+                    .unwrap_or(Fixed64::ZERO)
+                    > Fixed64::from_f64_lossy(*threshold)
             })
         && dilemma
             .trigger
@@ -4385,6 +4735,42 @@ goods = 2.0
     }
 
     #[test]
+    fn civic_choices_create_compounding_divergent_trajectories() {
+        let mut commons = SimulationRuntime::load(&example("micro-city"), 2026, Some(80)).unwrap();
+        let mut market = SimulationRuntime::load(&example("micro-city"), 2026, Some(80)).unwrap();
+        commons.step(5).unwrap();
+        market.step(5).unwrap();
+        let commons_choice = commons
+            .make_civic_decision("growth-charter", "civic-land-trust")
+            .unwrap();
+        let market_choice = market
+            .make_civic_decision("growth-charter", "open-development")
+            .unwrap();
+
+        let commons_trajectory = &commons_choice.city.as_ref().unwrap().trajectory;
+        let market_trajectory = &market_choice.city.as_ref().unwrap().trajectory;
+        assert!(commons_trajectory.scores["cohesion"] > 0.0);
+        assert!(market_trajectory.scores["cohesion"] < 0.0);
+        assert!(market_trajectory.scores["prosperity"] > 0.0);
+
+        let initial_commons_cohesion = commons_trajectory.scores["cohesion"];
+        let commons_later = commons.step(30).unwrap();
+        let market_later = market.step(30).unwrap();
+        assert!(
+            commons_later.city.as_ref().unwrap().trajectory.scores["cohesion"]
+                > initial_commons_cohesion
+        );
+        assert_ne!(
+            commons_later.state_fingerprint,
+            market_later.state_fingerprint
+        );
+        assert!(commons_later
+            .recent_events
+            .iter()
+            .any(|event| matches!(event.event_type, EventType::TrajectoryShifted { .. })));
+    }
+
+    #[test]
     fn civic_deadlines_apply_the_declared_default() {
         let mut runtime = SimulationRuntime::load(&example("micro-city"), 8, Some(20)).unwrap();
         let progress = runtime.step(17).unwrap();
@@ -4514,13 +4900,22 @@ goods = 2.0
     #[test]
     fn city_upgrade_and_demolish_are_deterministic() {
         let play = || {
-            let mut runtime = SimulationRuntime::load(&example("micro-city"), 777, Some(120)).unwrap();
+            let mut runtime =
+                SimulationRuntime::load(&example("micro-city"), 777, Some(120)).unwrap();
             // Construct two maker-cooperatives in old-grid
-            runtime.construct_building("maker-cooperative", "old-grid").unwrap();
-            runtime.construct_building("maker-cooperative", "old-grid").unwrap();
+            runtime
+                .construct_building("maker-cooperative", "old-grid")
+                .unwrap();
+            runtime
+                .construct_building("maker-cooperative", "old-grid")
+                .unwrap();
             let p1 = runtime.current_progress();
             let city1 = p1.city.as_ref().unwrap();
-            let b1 = city1.buildings.iter().find(|b| b.id == "maker-cooperative").unwrap();
+            let b1 = city1
+                .buildings
+                .iter()
+                .find(|b| b.id == "maker-cooperative")
+                .unwrap();
             assert_eq!(b1.level, 1);
             assert_eq!(b1.count, 2);
 
@@ -4528,27 +4923,43 @@ goods = 2.0
             runtime.upgrade_city_building("maker-cooperative").unwrap();
             let p2 = runtime.current_progress();
             let city2 = p2.city.as_ref().unwrap();
-            let b2 = city2.buildings.iter().find(|b| b.id == "maker-cooperative").unwrap();
+            let b2 = city2
+                .buildings
+                .iter()
+                .find(|b| b.id == "maker-cooperative")
+                .unwrap();
             assert_eq!(b2.level, 2);
 
             // Step through a season change (ticks 0..65)
             runtime.step(65).unwrap();
             let p3 = runtime.current_progress();
             let city3 = p3.city.as_ref().unwrap();
-            let eco = city3.ecology.as_ref().expect("ecology present in micro-city");
+            let eco = city3
+                .ecology
+                .as_ref()
+                .expect("ecology present in micro-city");
             assert_eq!(eco.season, "Summer"); // tick 65 is Summer (cycle 0, season 1)
             assert!(!eco.weather.is_empty());
 
             // Demolish one maker-cooperative
-            runtime.demolish_city_building("maker-cooperative", "old-grid").unwrap();
+            runtime
+                .demolish_city_building("maker-cooperative", "old-grid")
+                .unwrap();
             let p4 = runtime.current_progress();
             let city4 = p4.city.as_ref().unwrap();
-            let b4 = city4.buildings.iter().find(|b| b.id == "maker-cooperative").unwrap();
+            let b4 = city4
+                .buildings
+                .iter()
+                .find(|b| b.id == "maker-cooperative")
+                .unwrap();
             assert_eq!(b4.count, 1);
 
             runtime.step(60).unwrap();
             let result = runtime.completed_result().unwrap();
-            (result.final_state_fingerprint, result.proof.event_chain_root)
+            (
+                result.final_state_fingerprint,
+                result.proof.event_chain_root,
+            )
         };
 
         assert_eq!(play(), play());

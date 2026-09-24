@@ -1797,14 +1797,14 @@ function renderCityLayer(city) {
     updateCivilizationProgression(city);
     checkTrophies(city);
 
-    renderCivicGovernance(city.governance || { factions: [], pendingDilemmas: [], decisions: [] });
+    renderCivicGovernance(city.governance || { factions: [], pendingDilemmas: [], decisions: [] }, city.trajectory);
     renderGeopolitics(city.geopolitics);
     renderEcologyHud(city.ecology, state.play?.data?.tick);
     renderIntrigue(city.intrigue);
     syncCityBuildingSelection();
 }
 
-function renderCivicGovernance(governance) {
+function renderCivicGovernance(governance, trajectory) {
     const factions = el('civic-factions');
     factions.replaceChildren(...governance.factions.map(faction => {
         const node = document.createElement('article'); node.className = 'faction-card'; node.title = faction.description;
@@ -1834,7 +1834,8 @@ function renderCivicGovernance(governance) {
             const description = document.createElement('span'); description.textContent = option.description;
             const cost = document.createElement('small');
             const support = Object.entries(option.factionSupport || {}).map(([faction, delta]) => `${delta > 0 ? '+' : ''}${formatDecimal(delta, 0)} ${prettyName(faction)}`).join(' · ');
-            cost.textContent = `${resourceList(option.cost)}${support ? ` · ${support}` : ''}`;
+            const trajectoryEffects = Object.entries(option.trajectory || {}).map(([axis, delta]) => `${delta > 0 ? '↗' : '↘'} ${prettyName(axis)} ${delta > 0 ? '+' : ''}${formatDecimal(delta, 0)}`).join(' · ');
+            cost.textContent = `${resourceList(option.cost)}${support ? ` · ${support}` : ''}${trajectoryEffects ? ` · ${trajectoryEffects}` : ''}`;
             button.disabled = !option.affordable || state.play.requestInFlight || state.play.data?.completed;
             button.addEventListener('click', () => makeCivicDecision(dilemma.id, option.id));
             button.append(label, description, cost);
@@ -1853,6 +1854,27 @@ function renderCivicGovernance(governance) {
         item.append(title, choice);
         return item;
     }) : [emptyCivicState('No constitutional precedents yet.')]));
+
+    const trajectoryNode = el('civic-trajectory');
+    const scores = Object.entries(trajectory?.scores || {});
+    trajectoryNode?.replaceChildren(...(scores.length ? scores
+        .sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]))
+        .map(([axis, score]) => {
+            const node = document.createElement('article'); node.className = 'faction-card';
+            const header = document.createElement('span');
+            const name = document.createElement('b'); name.textContent = prettyName(axis);
+            const momentum = Number(trajectory?.momentum?.[axis] || 0);
+            const value = document.createElement('strong');
+            value.textContent = `${score >= 0 ? '+' : ''}${formatDecimal(score, 1)} ${momentum ? `(${momentum > 0 ? '↗' : '↘'}${formatDecimal(Math.abs(momentum), 1)})` : ''}`;
+            header.append(name, value);
+            const meter = document.createElement('i');
+            meter.style.setProperty('--faction-support', `${Math.max(0, Math.min(100, 50 + score / 2))}%`);
+            node.append(header, meter);
+            if (axis === trajectory?.dominantAxis) {
+                node.title = 'Dominant trajectory — this path currently exerts the strongest systemic feedback.';
+            }
+            return node;
+        }) : [emptyCivicState('No trajectory established. Your first major decision will set the city in motion.')]));
 }
 
 function emptyCivicState(message) {

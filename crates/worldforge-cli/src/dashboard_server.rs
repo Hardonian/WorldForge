@@ -1688,9 +1688,14 @@ fn event_document(event: &SimulationEvent) -> Value {
         | EventType::CivicDecisionResolved { dilemma, option } => {
             ("governance", dilemma.clone(), option.clone(), 1.0)
         }
-        EventType::TrajectoryShifted { axis, new_score, .. } => {
-            ("governance", format!("trajectory:{axis}"), format!("{new_score}"), new_score.to_f64_lossy())
-        }
+        EventType::TrajectoryShifted {
+            axis, new_score, ..
+        } => (
+            "governance",
+            format!("trajectory:{axis}"),
+            format!("{new_score}"),
+            new_score.to_f64_lossy(),
+        ),
         EventType::ObjectiveUpdated { objective, .. } => {
             ("system", "objective".to_string(), objective.clone(), 0.0)
         }
@@ -1773,18 +1778,29 @@ fn event_document(event: &SimulationEvent) -> Value {
         EventType::ModEventEmitted { module, value } => {
             ("mod", module.clone(), "event".to_string(), *value as f64)
         }
-        EventType::SeasonChanged { season, cycle } => {
-            ("ecology", "climate".to_string(), season.clone(), *cycle as f64)
-        }
-        EventType::WeatherChanged { weather, temperature } => {
-            ("ecology", "atmosphere".to_string(), weather.clone(), *temperature)
-        }
+        EventType::SeasonChanged { season, cycle } => (
+            "ecology",
+            "climate".to_string(),
+            season.clone(),
+            *cycle as f64,
+        ),
+        EventType::WeatherChanged {
+            weather,
+            temperature,
+        } => (
+            "ecology",
+            "atmosphere".to_string(),
+            weather.clone(),
+            *temperature,
+        ),
         EventType::EcologicalDisaster { disaster, severity } => {
             ("ecology", "hazard".to_string(), disaster.clone(), *severity)
         }
-        EventType::TradeCaravanArrived { source, resource, amount } => {
-            ("logistics", source.clone(), resource.clone(), *amount)
-        }
+        EventType::TradeCaravanArrived {
+            source,
+            resource,
+            amount,
+        } => ("logistics", source.clone(), resource.clone(), *amount),
     };
     json!({
         "tick": event.tick.value(),

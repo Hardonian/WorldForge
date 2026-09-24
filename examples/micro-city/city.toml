@@ -682,6 +682,10 @@ credits = 240.0
 commons-assembly = 12.0
 ecological-council = 6.0
 builders-guild = -7.0
+[dilemmas.options.trajectory]
+cohesion = 16.0
+sustainability = 9.0
+prosperity = -5.0
 [dilemmas.options.effects]
 housing_multiplier = 1.18
 population_growth_multiplier = 0.9
@@ -695,6 +699,11 @@ description = "Remove barriers, accelerate investment, and accept sharper distri
 builders-guild = 13.0
 systems-lab = 3.0
 commons-assembly = -8.0
+[dilemmas.options.trajectory]
+prosperity = 15.0
+innovation = 5.0
+cohesion = -11.0
+risk = 5.0
 [dilemmas.options.effects]
 jobs_multiplier = 1.2
 population_growth_multiplier = 1.12
@@ -721,6 +730,9 @@ credits = 150.0
 [dilemmas.options.faction_support]
 commons-assembly = 14.0
 builders-guild = -5.0
+[dilemmas.options.trajectory]
+cohesion = 18.0
+sovereignty = -4.0
 [dilemmas.options.effects]
 wellbeing_bonus = 8.0
 population_growth_multiplier = 0.92
@@ -732,6 +744,10 @@ description = "Preserve public ownership while giving trained stewards room to a
 [dilemmas.options.faction_support]
 commons-assembly = 5.0
 systems-lab = 7.0
+[dilemmas.options.trajectory]
+cohesion = 8.0
+sovereignty = 8.0
+innovation = 4.0
 [dilemmas.options.effects]
 housing_multiplier = 1.08
 jobs_multiplier = 1.05
@@ -759,6 +775,10 @@ research = 35.0
 commons-assembly = 10.0
 systems-lab = 8.0
 builders-guild = -6.0
+[dilemmas.options.trajectory]
+cohesion = 13.0
+innovation = 14.0
+prosperity = 4.0
 [dilemmas.options.effects]
 wellbeing_bonus = 7.0
 jobs_multiplier = 0.92
@@ -773,6 +793,11 @@ description = "Maximize productive output and trust new industries to absorb dis
 builders-guild = 12.0
 systems-lab = 4.0
 commons-assembly = -9.0
+[dilemmas.options.trajectory]
+innovation = 18.0
+prosperity = 16.0
+cohesion = -14.0
+risk = 8.0
 [dilemmas.options.effects]
 jobs_multiplier = 0.78
 [dilemmas.options.effects.resource_multipliers]
@@ -872,6 +897,10 @@ population = 25.0
 commons-assembly = 14.0
 ecological-council = 5.0
 builders-guild = -6.0
+[dilemmas.options.trajectory]
+cohesion = 17.0
+sovereignty = 6.0
+prosperity = -5.0
 [dilemmas.options.effects]
 wellbeing_bonus = 6.0
 population_growth_multiplier = 1.1
@@ -883,6 +912,10 @@ description = "Preserve municipal granary reserves and prioritize local resident
 [dilemmas.options.faction_support]
 builders-guild = 6.0
 commons-assembly = -12.0
+[dilemmas.options.trajectory]
+sovereignty = 12.0
+cohesion = -18.0
+risk = 7.0
 [dilemmas.options.effects]
 wellbeing_bonus = -8.0
 
@@ -905,6 +938,11 @@ food = 80.0
 commons-assembly = 10.0
 ecological-council = 8.0
 builders-guild = -5.0
+[dilemmas.options.trajectory]
+cohesion = 14.0
+sustainability = 8.0
+sovereignty = 6.0
+prosperity = -7.0
 [dilemmas.options.effects]
 wellbeing_bonus = 5.0
 
@@ -917,6 +955,11 @@ credits = 100.0
 [dilemmas.options.faction_support]
 builders-guild = 8.0
 commons-assembly = -14.0
+[dilemmas.options.trajectory]
+prosperity = 12.0
+sovereignty = 13.0
+cohesion = -17.0
+risk = 9.0
 [dilemmas.options.effects]
 wellbeing_bonus = -10.0
 
