@@ -1238,6 +1238,254 @@ async function constructCityBuildingDirect(building, district) {
     }
 }
 
+async function upgradeCityBuildingDirect(building) {
+    const play = state.play;
+    if (!play.sessionId || play.requestInFlight || play.data?.completed || !play.data?.city) return;
+    play.requestInFlight = true;
+    try {
+        const data = await api(`/api/play/sessions/${play.sessionId}/upgrade`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ building }),
+        });
+        if (state.play !== play) return;
+        consumePlayUpdate(data);
+        showToast('Building Upgraded', `${prettyName(building)} elevated to higher output tier.`);
+        WorldForgeCG.audio?.playConstruction?.();
+        spawnFloatingText(`⭐ UPGRADED: ${prettyName(building)}`, null, null, 'fx-surge');
+        // Refresh open inspector if open
+        const dialog = el('building-inspector-dialog');
+        if (dialog && dialog.open && dialog.dataset.building === building) {
+            openBuildingInspector(building, dialog.dataset.district);
+        }
+    } catch (error) {
+        showToast('Upgrade rejected', error.message, 'error');
+    } finally {
+        if (state.play !== play) return;
+        play.requestInFlight = false;
+        renderCityLayer(play.data?.city);
+    }
+}
+
+async function demolishCityBuildingDirect(building, district) {
+    const play = state.play;
+    if (!play.sessionId || play.requestInFlight || play.data?.completed || !play.data?.city) return;
+    play.requestInFlight = true;
+    try {
+        const data = await api(`/api/play/sessions/${play.sessionId}/demolish`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ building, district }),
+        });
+        if (state.play !== play) return;
+        consumePlayUpdate(data);
+        showToast('Structure Demolished', `${prettyName(building)} recycled in ${prettyName(district)} (40% cost refunded).`);
+        WorldForgeCG.audio?.playShortage?.();
+        spawnFloatingText(`♻️ DEMOLISHED: ${prettyName(building)}`, null, null, 'fx-shortage');
+        closeBuildingInspector();
+    } catch (error) {
+        showToast('Demolition rejected', error.message, 'error');
+    } finally {
+        if (state.play !== play) return;
+        play.requestInFlight = false;
+        renderCityLayer(play.data?.city);
+    }
+}
+
+function openBuildingInspector(buildingId, districtId) {
+    const dialog = el('building-inspector-dialog');
+    if (!dialog) return;
+    const city = state.play?.data?.city;
+    if (!city) return;
+    const bDef = city.buildings?.find(b => b.id === buildingId);
+    if (!bDef) return;
+
+    dialog.dataset.building = buildingId;
+    dialog.dataset.district = districtId || (bDef.allowed_districts?.[0] || 'civic-core');
+
+    const level = bDef.level || 1;
+    const stars = level === 1 ? '★☆☆' : (level === 2 ? '★★☆' : '★★★');
+    const bonusPct = (level - 1) * 50;
+
+    const badge = el('inspector-badge');
+    if (badge) badge.textContent = (bDef.category || 'RESIDENTIAL').toUpperCase();
+    const title = el('inspector-title');
+    if (title) title.textContent = bDef.name;
+    const starsEl = el('inspector-stars');
+    if (starsEl) starsEl.textContent = stars;
+    const distEl = el('inspector-district');
+    if (distEl) distEl.textContent = prettyName(dialog.dataset.district);
+    const lvlEl = el('inspector-level');
+    if (lvlEl) lvlEl.textContent = `Level ${level} / 3`;
+    const multEl = el('inspector-multiplier');
+    if (multEl) multEl.textContent = `+${bonusPct}% Output & Capacity`;
+    const cntEl = el('inspector-count');
+    if (cntEl) cntEl.textContent = `${bDef.count} built (${bDef.maxCount} max)`;
+    const descEl = el('inspector-desc');
+    if (descEl) descEl.textContent = bDef.description || '';
+
+    // Outputs
+    const outputsEl = el('inspector-outputs');
+    if (outputsEl) {
+        outputsEl.replaceChildren();
+        const entries = Object.entries(bDef.outputs || {});
+        if (entries.length) {
+            entries.forEach(([r, v]) => {
+                const item = document.createElement('span');
+                item.className = 'stat-item positive';
+                const scaled = (v * (1 + bonusPct / 100)).toFixed(1);
+                item.textContent = `+${scaled} ${prettyName(r)} / tick`;
+                outputsEl.append(item);
+            });
+        } else {
+            outputsEl.innerHTML = '<span class="stat-item">No direct outputs</span>';
+        }
+    }
+
+    // Upkeep
+    const upkeepEl = el('inspector-upkeep');
+    if (upkeepEl) {
+        upkeepEl.replaceChildren();
+        const entries = Object.entries(bDef.upkeep || {});
+        if (entries.length) {
+            entries.forEach(([r, v]) => {
+                const item = document.createElement('span');
+                item.className = 'stat-item negative';
+                item.textContent = `-${v} ${prettyName(r)} / tick`;
+                upkeepEl.append(item);
+            });
+        } else {
+            upkeepEl.innerHTML = '<span class="stat-item">No upkeep required</span>';
+        }
+    }
+
+    // Capacity (housing / jobs / wellbeing)
+    const capEl = el('inspector-capacity');
+    if (capEl) {
+        const parts = [];
+        if (bDef.housing) parts.push(`${Math.round(bDef.housing * (1 + bonusPct / 100))} Housing`);
+        if (bDef.jobs) parts.push(`${Math.round(bDef.jobs * (1 + bonusPct / 100))} Jobs`);
+        if (bDef.wellbeing) parts.push(`+${(bDef.wellbeing * (1 + bonusPct / 100)).toFixed(1)} Wellbeing`);
+        capEl.textContent = parts.join(' · ') || 'Standard infrastructure';
+    }
+
+    // Synergies
+    const synEl = el('inspector-synergies');
+    if (synEl) {
+        if (bDef.active_synergies && bDef.active_synergies.length) {
+            synEl.textContent = bDef.active_synergies.join(' · ');
+        } else {
+            synEl.textContent = 'Active with complementary tags';
+        }
+    }
+
+    // Action buttons
+    const btnUpgrade = el('btn-inspector-upgrade');
+    const upgradeCost = el('inspector-upgrade-cost');
+    if (btnUpgrade && upgradeCost) {
+        if (level >= 3) {
+            btnUpgrade.disabled = true;
+            btnUpgrade.querySelector('.btn-main').textContent = '⭐ Maximum Level Reached';
+            upgradeCost.textContent = 'Structure at peak architectural tier';
+        } else {
+            btnUpgrade.disabled = false;
+            btnUpgrade.querySelector('.btn-main').textContent = `⭐ Upgrade to Level ${level + 1}`;
+            const costStr = Object.entries(bDef.cost || {})
+                .map(([r, v]) => `${Math.round(v * 0.75 * level)} ${prettyName(r)}`)
+                .join(' · ');
+            upgradeCost.textContent = `Cost: ${costStr} (+50% bonus)`;
+        }
+    }
+
+    const btnDemolish = el('btn-inspector-demolish');
+    const demolishRefund = el('inspector-demolish-refund');
+    if (btnDemolish && demolishRefund) {
+        btnDemolish.disabled = bDef.count <= 0;
+        const refundStr = Object.entries(bDef.cost || {})
+            .map(([r, v]) => `${Math.round(v * 0.40)} ${prettyName(r)}`)
+            .join(' · ');
+        demolishRefund.textContent = `Recycle & refund 40% (${refundStr})`;
+    }
+
+    WorldForgeCG.audio?.playBlip?.(880, 0.06);
+    dialog.showModal();
+}
+
+function closeBuildingInspector() {
+    const dialog = el('building-inspector-dialog');
+    if (dialog && dialog.open) dialog.close();
+}
+
+function renderEcologyHud(ecology, tick = 0) {
+    if (!ecology) return;
+
+    // Season
+    const seasonVal = el('hud-season-val');
+    const seasonIcon = el('hud-season-icon');
+    const yearLabel = el('hud-year-label');
+    if (seasonVal) {
+        seasonVal.textContent = ecology.season || 'Spring';
+        const s = (ecology.season || '').toLowerCase();
+        if (seasonIcon) {
+            seasonIcon.textContent = s === 'summer' ? '☀️' : (s === 'autumn' ? '🍂' : (s === 'winter' ? '❄️' : '🌱'));
+        }
+    }
+    if (yearLabel) {
+        yearLabel.textContent = `YEAR ${ecology.year || 1}`;
+    }
+
+    // Weather & Temperature
+    const weatherVal = el('hud-weather-val');
+    const weatherIcon = el('hud-weather-icon');
+    const tempVal = el('hud-temp-val');
+    if (weatherVal) {
+        weatherVal.textContent = ecology.weather || 'Clear';
+        const w = (ecology.weather || '').toLowerCase();
+        if (weatherIcon) {
+            weatherIcon.textContent = w === 'rain' ? '🌧️' : (w === 'storm' ? '⛈️' : (w === 'drought' ? '🌫️' : (w === 'snow' ? '❄️' : '☀️')));
+        }
+    }
+    if (tempVal) {
+        tempVal.textContent = `${(ecology.temperature_c || 21.0).toFixed(1)}°C`;
+    }
+
+    // Solar Diurnal Clock
+    const clockVal = el('hud-clock-val');
+    const clockIcon = el('hud-clock-icon');
+    const diurnalLabel = el('hud-diurnal-label');
+    if (clockVal) {
+        const hour = Math.floor((tick * 0.25) % 24);
+        const mins = Math.floor(((tick * 0.25) % 1) * 60);
+        clockVal.textContent = `${String(hour).padStart(2, '0')}:${String(mins).padStart(2, '0')}`;
+        const isNight = hour >= 20 || hour < 5;
+        if (clockIcon) clockIcon.textContent = isNight ? '🌙' : (hour < 8 || hour >= 18 ? '🌅' : '☀️');
+        if (diurnalLabel) diurnalLabel.textContent = isNight ? 'NIGHT' : (hour < 8 ? 'DAWN' : (hour >= 18 ? 'DUSK' : 'DAY'));
+    }
+
+    // Biosphere & Pollution
+    const bioVal = el('hud-bio-val');
+    const polVal = el('hud-pollution-val');
+    if (bioVal) {
+        const bio = Math.round(ecology.biosphere_health || 95);
+        bioVal.textContent = `${bio}% Bio`;
+        bioVal.style.color = bio >= 75 ? 'var(--green)' : (bio >= 45 ? 'var(--amber)' : 'var(--coral)');
+    }
+    if (polVal) {
+        const pol = Math.round(ecology.pollution || 0);
+        polVal.textContent = `${pol} PPM`;
+    }
+
+    // Disaster Alert
+    const disasterChip = el('hud-disaster-chip');
+    const disasterVal = el('hud-disaster-val');
+    if (disasterChip && disasterVal) {
+        if (ecology.disaster_active) {
+            disasterChip.classList.remove('hidden');
+            disasterVal.textContent = ecology.disaster_name || 'Climate Shock';
+        } else {
+            disasterChip.classList.add('hidden');
+        }
+    }
+}
+
 async function toggleDefensePosture() {
     const current = state.play?.data?.city?.geopolitics?.defensePosture || 'standard';
     const next = current === 'fortified' ? 'standard' : 'fortified';
@@ -1276,6 +1524,25 @@ function setupBuildDock() {
     const dock = el('city-build-dock');
     if (!dock) return;
 
+    // Category Tabs Filtering
+    const tabs = el('dock-category-tabs');
+    if (tabs) {
+        tabs.querySelectorAll('.dock-tab').forEach(tab => {
+            tab.addEventListener('click', () => {
+                tabs.querySelectorAll('.dock-tab').forEach(t => t.classList.remove('active'));
+                tab.classList.add('active');
+                const cat = tab.dataset.cat;
+                dock.querySelectorAll('.dock-build-btn').forEach(btn => {
+                    if (cat === 'all' || btn.dataset.cat === cat) {
+                        btn.classList.remove('hidden');
+                    } else {
+                        btn.classList.add('hidden');
+                    }
+                });
+            });
+        });
+    }
+
     dock.querySelectorAll('.dock-build-btn').forEach(btn => {
         btn.addEventListener('click', () => {
             const bId = btn.dataset.building;
@@ -1297,6 +1564,21 @@ function setupBuildDock() {
 
     el('btn-cancel-placement')?.addEventListener('click', () => {
         WorldForgeCG.setPlacementBuilding(null);
+    });
+
+    // Inspector dialog buttons
+    el('inspector-close')?.addEventListener('click', closeBuildingInspector);
+    el('btn-inspector-upgrade')?.addEventListener('click', () => {
+        const dialog = el('building-inspector-dialog');
+        if (dialog && dialog.dataset.building) {
+            upgradeCityBuildingDirect(dialog.dataset.building);
+        }
+    });
+    el('btn-inspector-demolish')?.addEventListener('click', () => {
+        const dialog = el('building-inspector-dialog');
+        if (dialog && dialog.dataset.building) {
+            demolishCityBuildingDirect(dialog.dataset.building, dialog.dataset.district);
+        }
     });
 }
 
@@ -1514,6 +1796,7 @@ function renderCityLayer(city) {
 
     renderCivicGovernance(city.governance || { factions: [], pendingDilemmas: [], decisions: [] });
     renderGeopolitics(city.geopolitics);
+    renderEcologyHud(city.ecology, state.play?.data?.tick);
     renderIntrigue(city.intrigue);
     syncCityBuildingSelection();
 }
@@ -3318,18 +3601,25 @@ const WorldForgeCG = {
                 e.preventDefault();
                 this.setPlacementBuilding(null);
                 return;
-            } else if (['1', '2', '3', '4', '5', '6'].includes(key)) {
+            } else if (['1', '2', '3', '4', '5', '6', '7', '8', '9', '0', '-', '=', 'm'].includes(key)) {
                 if (this.worldLens === 'city') {
                     e.preventDefault();
                     const bMap = {
-                        '1': 'solar-canopy',
-                        '2': 'courtyard-homes',
-                        '3': 'maker-cooperative',
-                        '4': 'vertical-farm',
+                        '1': 'courtyard-homes',
+                        '2': 'arcology-spine',
+                        '3': 'solar-canopy',
+                        '4': 'fusion-reactor',
                         '5': 'water-garden',
-                        '6': 'civic-lab'
+                        '6': 'vertical-farm',
+                        '7': 'maker-cooperative',
+                        '8': 'nanotech-foundry',
+                        '9': 'hyperloop-exchange',
+                        '0': 'civic-lab',
+                        '-': 'quantum-observatory',
+                        '=': 'story-forum',
+                        'm': 'grand-amphitheater',
                     };
-                    this.setPlacementBuilding(bMap[key]);
+                    if (bMap[key]) this.setPlacementBuilding(bMap[key]);
                 } else {
                     const speeds = { '1': 1, '2': 2, '3': 5, '4': 10, '5': 20 };
                     const speedSelect = el('play-speed');
@@ -3459,6 +3749,12 @@ const WorldForgeCG = {
                     if (this.placementBuilding) {
                         if (district) {
                             constructCityBuildingDirect(this.placementBuilding, district);
+                            this.cityPlotMap = this.cityPlotMap || new Map();
+                            this.cityPlotMap.set(`${tile.gx},${tile.gy}`, {
+                                id: this.placementBuilding,
+                                level: 1,
+                                name: prettyName(this.placementBuilding)
+                            });
                             this.audio.playConstruction();
                             const iso = this.toIso(tile.gx, tile.gy);
                             this.shockwaves.push({
@@ -3473,7 +3769,10 @@ const WorldForgeCG = {
                             this.audio.playShortage();
                         }
                     } else {
-                        if (district) {
+                        const existing = this.getBuildingAtTile(tile.gx, tile.gy);
+                        if (existing) {
+                            openBuildingInspector(existing.id, district);
+                        } else if (district) {
                             showToast('District Selected', `${prettyName(district)} selected.`);
                             this.audio.playBlip(720, 0.05);
                         }
@@ -4273,6 +4572,56 @@ const WorldForgeCG = {
         return null;
     },
 
+    getBuildingAtTile(gx, gy) {
+        if (!this.cityPlotMap) this.cityPlotMap = new Map();
+        const key = `${gx},${gy}`;
+        if (this.cityPlotMap.has(key)) {
+            return this.cityPlotMap.get(key);
+        }
+
+        const city = state.play?.data?.city;
+        if (!city || !city.buildings) return null;
+
+        const district = this.getDistrictForTile(gx, gy);
+        if (!district) return null;
+
+        // Structured slot assignment for each district quadrant
+        const districtPlots = {
+            'civic-core': [[2,2], [1,2], [2,1], [3,2], [2,3], [1,1], [3,1], [1,3], [3,3]],
+            'river-ward': [[7,2], [8,2], [7,1], [6,2], [7,3], [6,1], [8,1], [6,3], [8,3]],
+            'old-grid':   [[2,7], [2,6], [1,7], [3,7], [2,8], [1,6], [3,6], [1,8], [3,8]],
+            'sun-belt':   [[7,7], [6,7], [7,6], [8,7], [7,8], [6,6], [8,6], [6,8], [8,8]],
+        };
+
+        const plots = districtPlots[district] || [];
+        const plotIndex = plots.findIndex(([px, py]) => px === gx && py === gy);
+        if (plotIndex === -1) return null;
+
+        // Collect all placed buildings in this district
+        const buildingsInDistrict = [];
+        city.buildings.forEach(b => {
+            if (b.count > 0 && (!b.allowed_districts || b.allowed_districts.includes(district))) {
+                for (let i = 0; i < b.count; i++) {
+                    buildingsInDistrict.push({ id: b.id, level: b.level || 1, name: b.name, category: b.category });
+                }
+            }
+        });
+
+        if (plotIndex < buildingsInDistrict.length) {
+            return buildingsInDistrict[plotIndex];
+        }
+
+        // Fallback initial starter buildings if city is just founded
+        if (district === 'civic-core' && gx === 2 && gy === 2) return { id: 'civic-lab', level: 1, name: 'Civic Lab', category: 'knowledge' };
+        if (district === 'civic-core' && gx === 1 && gy === 2) return { id: 'courtyard-homes', level: 1, name: 'Courtyard Homes', category: 'residential' };
+        if (district === 'river-ward' && gx === 7 && gy === 2) return { id: 'vertical-farm', level: 1, name: 'Vertical Farm', category: 'food' };
+        if (district === 'river-ward' && gx === 8 && gy === 2) return { id: 'water-garden', level: 1, name: 'Living Water Garden', category: 'water' };
+        if (district === 'old-grid' && gx === 2 && gy === 7) return { id: 'maker-cooperative', level: 1, name: 'Maker Cooperative', category: 'industry' };
+        if (district === 'sun-belt' && gx === 7 && gy === 7) return { id: 'solar-canopy', level: 1, name: 'Solar Canopy', category: 'energy' };
+
+        return null;
+    },
+
     setPlacementBuilding(buildingId) {
         this.placementBuilding = buildingId;
         const status = el('dock-placement-status');
@@ -4322,8 +4671,22 @@ const WorldForgeCG = {
     renderCityView(ctx, w, h, now) {
         this.initCityLife();
         const city = state.play?.data?.city;
+        const eco = city?.ecology;
+        const season = (eco?.season || 'Spring').toLowerCase();
+        const weather = (eco?.weather || 'Clear').toLowerCase();
+        const tick = state.play?.data?.tick || 0;
+
+        const diurnalHour = (tick * 0.25) % 24;
+        this.currentDiurnalHour = diurnalHour;
+        const isNight = diurnalHour >= 19.5 || diurnalHour < 5.5;
+        const isDusk = diurnalHour >= 17 && diurnalHour < 19.5;
+        const isDawn = diurnalHour >= 5.5 && diurnalHour < 8;
+
         const dIndex = city?.geopolitics?.droughtIndex || 0;
-        const isDrought = dIndex > 35;
+        const isDrought = dIndex > 35 || weather === 'drought';
+        const isWinter = season === 'winter' || weather === 'snow';
+        const isAutumn = season === 'autumn';
+        const isSpring = season === 'spring';
         const isFortified = city?.geopolitics?.defensePosture === 'fortified';
         const raidThreat = city?.geopolitics?.borderThreat || 0;
         const tileW = 76;
@@ -4377,14 +4740,14 @@ const WorldForgeCG = {
                 ctx.lineWidth = 1;
                 ctx.stroke();
             } else if (isRoad) {
-                ctx.fillStyle = '#1e293b';
+                ctx.fillStyle = isNight ? '#090e1a' : '#1e293b';
                 ctx.fill();
                 ctx.strokeStyle = '#334155';
                 ctx.lineWidth = 1;
                 ctx.stroke();
 
                 ctx.save();
-                ctx.strokeStyle = 'rgba(253, 224, 71, 0.45)';
+                ctx.strokeStyle = isNight ? 'rgba(253, 224, 71, 0.65)' : 'rgba(253, 224, 71, 0.45)';
                 ctx.setLineDash([4, 4]);
                 ctx.beginPath();
                 if (gx === 4 || gx === 5) {
@@ -4396,27 +4759,52 @@ const WorldForgeCG = {
                 }
                 ctx.stroke();
                 ctx.restore();
+
+                // Night streetlamps
+                if (isNight || isDusk) {
+                    this.drawRoadStreetlamps(ctx, gx, gy, ix, iy, now);
+                }
             } else if (isPerimeter) {
-                ctx.fillStyle = isDrought ? '#3d2b1f' : '#1e293b';
+                ctx.fillStyle = isWinter ? '#334155' : (isDrought ? '#3d2b1f' : '#1e293b');
                 ctx.fill();
                 ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
                 ctx.stroke();
             } else {
                 const grad = ctx.createLinearGradient(ix, iy, ix, iy + tileH);
-                if (isDrought) {
+                if (isWinter) {
+                    grad.addColorStop(0, '#475569');
+                    grad.addColorStop(1, '#334155');
+                } else if (isAutumn) {
+                    grad.addColorStop(0, '#543a1f');
+                    grad.addColorStop(1, '#3f2914');
+                } else if (isDrought) {
                     grad.addColorStop(0, '#543d2b');
                     grad.addColorStop(1, '#3f2c1d');
+                } else if (isSpring) {
+                    grad.addColorStop(0, '#1c4d28');
+                    grad.addColorStop(1, '#13381c');
                 } else {
-                    grad.addColorStop(0, '#1c4524');
-                    grad.addColorStop(1, '#14331a');
+                    grad.addColorStop(0, '#2d451b');
+                    grad.addColorStop(1, '#1f3012');
                 }
                 ctx.fillStyle = grad;
                 ctx.fill();
 
-                ctx.strokeStyle = district === 'civic-core' ? 'rgba(66, 211, 234, 0.25)' :
-                                  district === 'river-ward' ? 'rgba(56, 189, 248, 0.25)' :
-                                  district === 'old-grid' ? 'rgba(245, 158, 11, 0.25)' :
-                                  'rgba(234, 179, 8, 0.25)';
+                // Seasonal flora flecks
+                if (isSpring) {
+                    ctx.fillStyle = Math.sin(gx * 7 + gy) > 0 ? '#f472b6' : '#fef08a';
+                    ctx.fillRect(ix - 8, iy + 14, 2, 2);
+                    ctx.fillRect(ix + 6, iy + 22, 2, 2);
+                } else if (isWinter) {
+                    ctx.fillStyle = 'rgba(255, 255, 255, 0.45)';
+                    ctx.fillRect(ix - 10, iy + 10, 4, 1.5);
+                    ctx.fillRect(ix + 8, iy + 24, 3, 1.5);
+                }
+
+                ctx.strokeStyle = district === 'civic-core' ? 'rgba(66, 211, 234, 0.28)' :
+                                  district === 'river-ward' ? 'rgba(56, 189, 248, 0.28)' :
+                                  district === 'old-grid' ? 'rgba(245, 158, 11, 0.28)' :
+                                  'rgba(234, 179, 8, 0.28)';
                 ctx.lineWidth = 1;
                 ctx.stroke();
             }
@@ -4433,16 +4821,16 @@ const WorldForgeCG = {
 
                 if (this.placementBuilding) {
                     if (district) {
-                        ctx.fillStyle = 'rgba(16, 185, 129, 0.28)';
+                        ctx.fillStyle = 'rgba(16, 185, 129, 0.3)';
                         ctx.strokeStyle = '#10b981';
                         ctx.lineWidth = 2.5;
                     } else {
-                        ctx.fillStyle = 'rgba(239, 68, 68, 0.28)';
+                        ctx.fillStyle = 'rgba(239, 68, 68, 0.3)';
                         ctx.strokeStyle = '#ef4444';
                         ctx.lineWidth = 2.5;
                     }
                 } else {
-                    ctx.fillStyle = 'rgba(245, 158, 11, 0.18)';
+                    ctx.fillStyle = 'rgba(245, 158, 11, 0.22)';
                     ctx.strokeStyle = '#f59e0b';
                     ctx.lineWidth = 2;
                 }
@@ -4456,6 +4844,7 @@ const WorldForgeCG = {
 
         this.drawChimneySmoke(ctx, now);
         this.drawCitizens(ctx, now);
+        this.drawLogisticsCaravans(ctx, now, eco);
 
         if (raidThreat > 25) {
             this.drawRaiders(ctx, now, raidThreat);
@@ -4465,11 +4854,162 @@ const WorldForgeCG = {
             this.drawShieldDome(ctx, now);
         }
 
+        this.drawAtmosphericWeather(ctx, w, h, now, weather, season);
+
+        // Ambient nocturnal lighting tint
+        if (isNight || isDusk) {
+            const alpha = isNight ? 0.42 : 0.22;
+            ctx.save();
+            ctx.fillStyle = `rgba(8, 15, 36, ${alpha})`;
+            ctx.fillRect(-w * 2, -h * 2, w * 4, h * 4);
+            ctx.restore();
+        }
+
         ctx.restore();
+    },
+
+    drawRoadStreetlamps(ctx, gx, gy, ix, iy, now) {
+        if (!((gx === 4 && gy === 4) || (gx === 5 && gy === 4) || (gx === 4 && gy === 5) || (gx === 5 && gy === 5) || (gx === 4 && gy === 1) || (gx === 5 && gy === 8) || (gx === 1 && gy === 4) || (gx === 8 && gy === 5))) {
+            return;
+        }
+        ctx.save();
+        const lampX = ix + 12;
+        const lampY = iy + 10;
+
+        // Lamp post
+        ctx.strokeStyle = '#475569';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.moveTo(lampX, lampY);
+        ctx.lineTo(lampX, lampY - 18);
+        ctx.lineTo(lampX - 4, lampY - 21);
+        ctx.stroke();
+
+        // Lamp light bulb
+        ctx.fillStyle = '#fef08a';
+        ctx.beginPath();
+        ctx.arc(lampX - 4, lampY - 21, 2.5, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Ambient light pool on ground
+        const poolGrad = ctx.createRadialGradient(lampX - 4, lampY + 5, 2, lampX - 4, lampY + 5, 26);
+        poolGrad.addColorStop(0, 'rgba(253, 224, 71, 0.45)');
+        poolGrad.addColorStop(1, 'rgba(253, 224, 71, 0)');
+        ctx.fillStyle = poolGrad;
+        ctx.beginPath();
+        ctx.ellipse(lampX - 4, lampY + 5, 26, 13, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+    },
+
+    drawLogisticsCaravans(ctx, now, eco) {
+        if (!this.cityCaravans) {
+            this.cityCaravans = [
+                { axis: 'x', coord: 4.5, t: 0.1, speed: 0.003, color: '#38bdf8', cargo: '⚡ Power' },
+                { axis: 'y', coord: 4.5, t: 0.6, speed: 0.0025, color: '#f59e0b', cargo: '🍞 Food' },
+                { axis: 'x', coord: 5.5, t: 0.85, speed: -0.0028, color: '#22c55e', cargo: '📦 Materials' },
+            ];
+        }
+
+        const isTradeActive = eco?.trade_caravan_active;
+
+        this.cityCaravans.forEach((car, idx) => {
+            car.t = (car.t + car.speed + 1) % 1;
+            const posAlong = car.t * 8 + 1; // 1 to 9 along road
+            const gx = car.axis === 'x' ? posAlong : car.coord;
+            const gy = car.axis === 'x' ? car.coord : posAlong;
+            const { x: cx, y: cy } = this.toIso(gx, gy);
+
+            ctx.save();
+            ctx.translate(cx, cy + 12);
+
+            // Hover shadow
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.35)';
+            ctx.beginPath();
+            ctx.ellipse(0, 4, 10, 5, 0, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Hover thruster glow
+            ctx.fillStyle = 'rgba(56, 189, 248, 0.65)';
+            ctx.beginPath();
+            ctx.ellipse(0, 2, 7, 3, 0, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Vehicle chassis
+            ctx.fillStyle = '#0f172a';
+            ctx.fillRect(-8, -8, 16, 8);
+            ctx.fillStyle = car.color;
+            ctx.fillRect(-6, -13, 12, 6); // Cargo pod
+            ctx.fillStyle = '#38bdf8';
+            ctx.fillRect(4, -8, 4, 3); // Windshield
+
+            // Floating cargo badge on first truck
+            if (idx === 0 || isTradeActive) {
+                ctx.fillStyle = 'rgba(15, 23, 42, 0.85)';
+                ctx.strokeStyle = car.color;
+                ctx.lineWidth = 1;
+                ctx.strokeRect(-16, -24, 32, 11);
+                ctx.fillRect(-16, -24, 32, 11);
+                ctx.fillStyle = '#f8fafc';
+                ctx.font = 'bold 8px sans-serif';
+                ctx.textAlign = 'center';
+                ctx.fillText(car.cargo, 0, -16);
+            }
+
+            ctx.restore();
+        });
+    },
+
+    drawAtmosphericWeather(ctx, w, h, now, weather, season) {
+        if (!this.vfxEnabled) return;
+
+        if (weather === 'rain' || weather === 'storm') {
+            ctx.save();
+            ctx.strokeStyle = 'rgba(186, 230, 253, 0.42)';
+            ctx.lineWidth = 1.3;
+            for (let i = 0; i < 40; i++) {
+                const rx = ((Math.sin(i * 99 + now * 0.002) * 600) + 600) % 800 - 400;
+                const ry = ((i * 37 + now * 0.9) % 600) - 200;
+                ctx.beginPath();
+                ctx.moveTo(rx, ry);
+                ctx.lineTo(rx - 6, ry + 16);
+                ctx.stroke();
+            }
+            if (weather === 'storm' && Math.random() < 0.012) {
+                // Lightning flash
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.35)';
+                ctx.fillRect(-w, -h, w * 2, h * 2);
+            }
+            ctx.restore();
+        } else if (season === 'winter' || weather === 'snow') {
+            ctx.save();
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+            for (let i = 0; i < 45; i++) {
+                const sx = ((i * 47) % 800) - 400 + Math.sin(now * 0.003 + i) * 16;
+                const sy = ((i * 29 + now * 0.08) % 600) - 200;
+                const r = (i % 3 === 0) ? 2.2 : 1.4;
+                ctx.beginPath();
+                ctx.arc(sx, sy, r, 0, Math.PI * 2);
+                ctx.fill();
+            }
+            ctx.restore();
+        } else if (weather === 'drought') {
+            ctx.save();
+            ctx.fillStyle = 'rgba(245, 158, 11, 0.22)';
+            for (let i = 0; i < 30; i++) {
+                const dx = ((i * 61 + now * 0.15) % 900) - 450;
+                const dy = ((i * 31 + Math.sin(i + now * 0.002) * 40) % 500) - 150;
+                ctx.beginPath();
+                ctx.arc(dx, dy, 1.8, 0, Math.PI * 2);
+                ctx.fill();
+            }
+            ctx.restore();
+        }
     },
 
     drawTileStructure(ctx, gx, gy, ix, iy, now, isGhost) {
         if (gx === 4 && gy === 4) {
+            // Central Public Plaza Fountain
             ctx.save();
             ctx.translate(ix + 38, iy + 19);
             ctx.fillStyle = '#64748b';
@@ -4509,6 +5049,7 @@ const WorldForgeCG = {
             return;
         }
 
+        // Perimeter Defensive Watchtowers
         if ((gx === 0 && gy === 0) || (gx === 9 && gy === 0) || (gx === 0 && gy === 9) || (gx === 9 && gy === 9)) {
             ctx.save();
             ctx.translate(ix, iy);
@@ -4536,19 +5077,23 @@ const WorldForgeCG = {
         }
 
         let buildingType = null;
-        if (gx === 2 && gy === 2) buildingType = 'civic-lab';
-        else if ((gx === 1 && gy === 2) || (gx === 2 && gy === 1)) buildingType = 'courtyard-homes';
-        else if (gx === 7 && gy === 2) buildingType = 'vertical-farm';
-        else if (gx === 6 && gy === 2) buildingType = 'vertical-farm';
-        else if (gx === 8 && gy === 2 || (gx === 7 && gy === 1)) buildingType = 'water-garden';
-        else if (gx === 2 && gy === 7 || (gx === 2 && gy === 6)) buildingType = 'maker-cooperative';
-        else if (gx === 7 && gy === 7 || (gx === 6 && gy === 7)) buildingType = 'solar-canopy';
+        let buildingLevel = 1;
 
         if (isGhost) {
             buildingType = this.placementBuilding;
+        } else {
+            const info = this.getBuildingAtTile(gx, gy);
+            if (info) {
+                buildingType = info.id;
+                buildingLevel = info.level || 1;
+            }
         }
 
         if (!buildingType) return;
+
+        const isNight = this.currentDiurnalHour >= 19.5 || this.currentDiurnalHour < 5.5;
+        const isDusk = this.currentDiurnalHour >= 17 && this.currentDiurnalHour < 19.5;
+        const windowGlow = isNight || isDusk;
 
         ctx.save();
         if (isGhost) {
@@ -4557,29 +5102,20 @@ const WorldForgeCG = {
 
         ctx.translate(ix, iy + 14);
 
+        // 1. VERTICAL FARM
         if (buildingType === 'vertical-farm') {
             ctx.fillStyle = 'rgba(0,0,0,0.3)';
-            ctx.beginPath();
-            ctx.ellipse(0, 0, 18, 9, 0, 0, Math.PI * 2);
-            ctx.fill();
+            ctx.beginPath(); ctx.ellipse(0, 0, 18, 9, 0, 0, Math.PI * 2); ctx.fill();
 
             ctx.fillStyle = '#1e1b4b';
             ctx.beginPath();
-            ctx.moveTo(-16, 0);
-            ctx.lineTo(0, 8);
-            ctx.lineTo(0, -48);
-            ctx.lineTo(-16, -56);
-            ctx.closePath();
-            ctx.fill();
+            ctx.moveTo(-16, 0); ctx.lineTo(0, 8); ctx.lineTo(0, -48); ctx.lineTo(-16, -56);
+            ctx.closePath(); ctx.fill();
 
             ctx.fillStyle = '#312e81';
             ctx.beginPath();
-            ctx.moveTo(0, 8);
-            ctx.lineTo(16, 0);
-            ctx.lineTo(16, -56);
-            ctx.lineTo(0, -48);
-            ctx.closePath();
-            ctx.fill();
+            ctx.moveTo(0, 8); ctx.lineTo(16, 0); ctx.lineTo(16, -56); ctx.lineTo(0, -48);
+            ctx.closePath(); ctx.fill();
 
             for (let tier = 0; tier < 4; tier++) {
                 const ty = -10 - tier * 11;
@@ -4608,11 +5144,10 @@ const WorldForgeCG = {
             ctx.stroke();
             ctx.restore();
 
+        // 2. LIVING WATER GARDEN
         } else if (buildingType === 'water-garden') {
             ctx.fillStyle = 'rgba(0,0,0,0.25)';
-            ctx.beginPath();
-            ctx.ellipse(0, 0, 20, 10, 0, 0, Math.PI * 2);
-            ctx.fill();
+            ctx.beginPath(); ctx.ellipse(0, 0, 20, 10, 0, 0, Math.PI * 2); ctx.fill();
 
             ctx.fillStyle = '#64748b';
             ctx.beginPath(); ctx.ellipse(-9, -16, 7, 4, 0, 0, Math.PI * 2); ctx.fill();
@@ -4630,6 +5165,7 @@ const WorldForgeCG = {
                 ctx.fillRect(1 + r * 3, -12 - (r % 2) * 3, 2, 7);
             }
 
+        // 3. SOLAR CANOPY
         } else if (buildingType === 'solar-canopy') {
             ctx.strokeStyle = '#64748b';
             ctx.lineWidth = 2.5;
@@ -4640,12 +5176,8 @@ const WorldForgeCG = {
 
             ctx.fillStyle = '#1e40af';
             ctx.beginPath();
-            ctx.moveTo(-18, -14);
-            ctx.lineTo(18, -22);
-            ctx.lineTo(14, -30);
-            ctx.lineTo(-22, -22);
-            ctx.closePath();
-            ctx.fill();
+            ctx.moveTo(-18, -14); ctx.lineTo(18, -22); ctx.lineTo(14, -30); ctx.lineTo(-22, -22);
+            ctx.closePath(); ctx.fill();
             ctx.strokeStyle = '#60a5fa';
             ctx.lineWidth = 1.2;
             ctx.stroke();
@@ -4657,30 +5189,31 @@ const WorldForgeCG = {
             ctx.moveTo(glareX, -16); ctx.lineTo(glareX - 4, -26);
             ctx.stroke();
 
+        // 4. COURTYARD HOMES
         } else if (buildingType === 'courtyard-homes') {
             ctx.fillStyle = 'rgba(0,0,0,0.25)';
-            ctx.beginPath();
-            ctx.ellipse(0, 0, 18, 9, 0, 0, Math.PI * 2);
-            ctx.fill();
+            ctx.beginPath(); ctx.ellipse(0, 0, 18, 9, 0, 0, Math.PI * 2); ctx.fill();
 
             ctx.fillStyle = '#e2e8f0';
             ctx.beginPath();
             ctx.moveTo(-15, 0); ctx.lineTo(0, 7); ctx.lineTo(15, 0);
             ctx.lineTo(15, -18); ctx.lineTo(0, -25); ctx.lineTo(-15, -18);
-            ctx.closePath();
-            ctx.fill();
+            ctx.closePath(); ctx.fill();
 
             ctx.fillStyle = '#ea580c';
             ctx.beginPath();
             ctx.moveTo(-16, -18); ctx.lineTo(0, -26); ctx.lineTo(16, -18);
             ctx.lineTo(0, -34);
-            ctx.closePath();
-            ctx.fill();
+            ctx.closePath(); ctx.fill();
 
-            ctx.fillStyle = '#fbbf24';
+            // Windows
+            ctx.fillStyle = windowGlow ? '#fde047' : '#94a3b8';
+            if (windowGlow) { ctx.shadowColor = '#facc15'; ctx.shadowBlur = 8; }
             ctx.fillRect(-10, -12, 5, 5);
             ctx.fillRect(4, -12, 5, 5);
+            ctx.shadowBlur = 0;
 
+        // 5. CIVIC LAB
         } else if (buildingType === 'civic-lab') {
             ctx.fillStyle = 'rgba(0,0,0,0.3)';
             ctx.beginPath(); ctx.ellipse(0, 0, 22, 11, 0, 0, Math.PI * 2); ctx.fill();
@@ -4696,13 +5229,18 @@ const WorldForgeCG = {
             ctx.fillStyle = '#cbd5e1';
             ctx.beginPath();
             ctx.moveTo(-18, -26); ctx.lineTo(0, -36); ctx.lineTo(18, -26);
-            ctx.closePath();
-            ctx.fill();
+            ctx.closePath(); ctx.fill();
 
             ctx.fillStyle = '#f59e0b';
             ctx.beginPath();
             ctx.arc(0, -36, 8, Math.PI, 0);
             ctx.fill();
+
+            // Night dome glow
+            if (windowGlow) {
+                ctx.fillStyle = 'rgba(250, 204, 21, 0.45)';
+                ctx.beginPath(); ctx.arc(0, -36, 12, 0, Math.PI * 2); ctx.fill();
+            }
 
             const bannerWave = Math.sin(now * 0.005) * 3;
             ctx.strokeStyle = '#64748b';
@@ -4713,6 +5251,7 @@ const WorldForgeCG = {
             ctx.moveTo(0, -56); ctx.lineTo(10 + bannerWave, -52); ctx.lineTo(0, -48);
             ctx.closePath(); ctx.fill();
 
+        // 6. MAKER COOPERATIVE
         } else if (buildingType === 'maker-cooperative') {
             ctx.fillStyle = 'rgba(0,0,0,0.3)';
             ctx.beginPath(); ctx.ellipse(0, 0, 18, 9, 0, 0, Math.PI * 2); ctx.fill();
@@ -4721,15 +5260,13 @@ const WorldForgeCG = {
             ctx.beginPath();
             ctx.moveTo(-16, 0); ctx.lineTo(0, 7); ctx.lineTo(16, 0);
             ctx.lineTo(16, -20); ctx.lineTo(0, -28); ctx.lineTo(-16, -20);
-            ctx.closePath();
-            ctx.fill();
+            ctx.closePath(); ctx.fill();
 
             ctx.fillStyle = '#475569';
             ctx.beginPath();
             ctx.moveTo(-17, -20); ctx.lineTo(0, -29); ctx.lineTo(17, -20);
             ctx.lineTo(0, -36);
-            ctx.closePath();
-            ctx.fill();
+            ctx.closePath(); ctx.fill();
 
             const furnacePulse = 0.8 + Math.sin(now * 0.01) * 0.2;
             ctx.fillStyle = `rgba(249, 115, 22, ${furnacePulse})`;
@@ -4737,6 +5274,221 @@ const WorldForgeCG = {
 
             ctx.fillStyle = '#7f1d1d';
             ctx.fillRect(8, -42, 6, 24);
+
+        // 7. ARCOLOGY SPINE (Futuristic Mega-Structure)
+        } else if (buildingType === 'arcology-spine') {
+            ctx.fillStyle = 'rgba(0,0,0,0.4)';
+            ctx.beginPath(); ctx.ellipse(0, 0, 22, 11, 0, 0, Math.PI * 2); ctx.fill();
+
+            // Tower body (Left & Right Facets)
+            ctx.fillStyle = '#0f172a';
+            ctx.beginPath();
+            ctx.moveTo(-16, 0); ctx.lineTo(0, 9); ctx.lineTo(0, -68); ctx.lineTo(-14, -76);
+            ctx.closePath(); ctx.fill();
+
+            ctx.fillStyle = '#1e293b';
+            ctx.beginPath();
+            ctx.moveTo(0, 9); ctx.lineTo(16, 0); ctx.lineTo(14, -76); ctx.lineTo(0, -68);
+            ctx.closePath(); ctx.fill();
+
+            // Sky-gardens & Cantilevered Balconies
+            ctx.fillStyle = '#0ea5e9';
+            ctx.fillRect(-17, -30, 34, 4);
+            ctx.fillStyle = '#22c55e';
+            ctx.fillRect(-15, -33, 10, 3);
+            ctx.fillRect(5, -33, 10, 3);
+
+            ctx.fillStyle = '#0284c7';
+            ctx.fillRect(-15, -52, 30, 4);
+
+            // Windows Matrices
+            const winColor = windowGlow ? '#38bdf8' : '#475569';
+            if (windowGlow) { ctx.shadowColor = '#38bdf8'; ctx.shadowBlur = 10; }
+            for (let f = 0; f < 5; f++) {
+                const wy = -14 - f * 11;
+                ctx.fillStyle = winColor;
+                ctx.fillRect(-11, wy, 8, 4);
+                ctx.fillStyle = windowGlow ? '#facc15' : '#64748b';
+                ctx.fillRect(3, wy, 8, 4);
+            }
+            ctx.shadowBlur = 0;
+
+            // Spire Peak Beacon
+            ctx.strokeStyle = '#38bdf8';
+            ctx.lineWidth = 2;
+            ctx.beginPath(); ctx.moveTo(0, -74); ctx.lineTo(0, -92); ctx.stroke();
+            const beaconAlpha = 0.5 + Math.sin(now * 0.008) * 0.5;
+            ctx.fillStyle = `rgba(239, 68, 68, ${beaconAlpha})`;
+            ctx.beginPath(); ctx.arc(0, -93, 3, 0, Math.PI * 2); ctx.fill();
+
+        // 8. TOKAMAK FUSION REACTOR (Clean Fusion Core)
+        } else if (buildingType === 'fusion-reactor') {
+            ctx.fillStyle = 'rgba(0,0,0,0.35)';
+            ctx.beginPath(); ctx.ellipse(0, 0, 24, 12, 0, 0, Math.PI * 2); ctx.fill();
+
+            // Torus Base Chamber
+            ctx.fillStyle = '#1e293b';
+            ctx.beginPath(); ctx.ellipse(0, -10, 20, 10, 0, 0, Math.PI * 2); ctx.fill();
+            ctx.strokeStyle = '#06b6d4';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+
+            // Magnetic Coils
+            for (let c = 0; c < 6; c++) {
+                const ca = (c / 6) * Math.PI * 2;
+                const cx = Math.cos(ca) * 16;
+                const cy = -10 + Math.sin(ca) * 8;
+                ctx.fillStyle = '#475569';
+                ctx.fillRect(cx - 2, cy - 8, 4, 16);
+            }
+
+            // Central Vertical Plasma Column
+            const corePulse = Math.sin(now * 0.012) * 3;
+            ctx.shadowColor = '#00f2fe';
+            ctx.shadowBlur = 18;
+            ctx.fillStyle = '#38bdf8';
+            ctx.fillRect(-4, -40, 8, 30);
+            ctx.fillStyle = '#e879f9';
+            ctx.beginPath(); ctx.arc(0, -25, 6 + corePulse, 0, Math.PI * 2); ctx.fill();
+            ctx.shadowBlur = 0;
+
+        // 9. NANOTECH FOUNDRY (Molecular Fabrication Cube)
+        } else if (buildingType === 'nanotech-foundry') {
+            ctx.fillStyle = 'rgba(0,0,0,0.35)';
+            ctx.beginPath(); ctx.ellipse(0, 0, 20, 10, 0, 0, Math.PI * 2); ctx.fill();
+
+            // Obsidian Cube
+            ctx.fillStyle = '#090d16';
+            ctx.beginPath();
+            ctx.moveTo(-16, 0); ctx.lineTo(0, 8); ctx.lineTo(0, -28); ctx.lineTo(-16, -36);
+            ctx.closePath(); ctx.fill();
+            ctx.fillStyle = '#111827';
+            ctx.beginPath();
+            ctx.moveTo(0, 8); ctx.lineTo(16, 0); ctx.lineTo(16, -36); ctx.lineTo(0, -28);
+            ctx.closePath(); ctx.fill();
+
+            // Neon Circuit Inlays
+            ctx.strokeStyle = '#10b981';
+            ctx.lineWidth = 1.2;
+            ctx.beginPath();
+            ctx.moveTo(-12, -8); ctx.lineTo(-4, -12); ctx.lineTo(-4, -24);
+            ctx.moveTo(4, -12); ctx.lineTo(12, -8); ctx.lineTo(12, -24);
+            ctx.stroke();
+
+            // Central Levitating Nanite Crystal
+            const crystalY = -42 + Math.sin(now * 0.006) * 3;
+            ctx.fillStyle = '#34d399';
+            ctx.shadowColor = '#10b981';
+            ctx.shadowBlur = 14;
+            ctx.beginPath();
+            ctx.moveTo(0, crystalY - 8); ctx.lineTo(6, crystalY); ctx.lineTo(0, crystalY + 8); ctx.lineTo(-6, crystalY);
+            ctx.closePath(); ctx.fill();
+            ctx.shadowBlur = 0;
+
+        // 10. HYPERLOOP LOGISTICS TERMINAL
+        } else if (buildingType === 'hyperloop-exchange') {
+            ctx.fillStyle = 'rgba(0,0,0,0.3)';
+            ctx.beginPath(); ctx.ellipse(0, 0, 22, 11, 0, 0, Math.PI * 2); ctx.fill();
+
+            // Sleek Terminal Dome
+            ctx.fillStyle = '#1e3a8a';
+            ctx.beginPath(); ctx.arc(0, -10, 16, Math.PI, 0); ctx.fill();
+            ctx.strokeStyle = '#60a5fa'; ctx.lineWidth = 1.5; ctx.stroke();
+
+            // Twin Sub-surface Vacuum Tubes
+            ctx.fillStyle = '#475569';
+            ctx.fillRect(-22, -8, 10, 6);
+            ctx.fillRect(12, -8, 10, 6);
+            ctx.fillStyle = '#38bdf8';
+            ctx.fillRect(-22, -6, 10, 2);
+            ctx.fillRect(12, -6, 10, 2);
+
+            // Hover Freight Pod
+            const podX = Math.sin(now * 0.005) * 6;
+            ctx.fillStyle = '#f59e0b';
+            ctx.fillRect(podX - 6, -18, 12, 6);
+            ctx.fillStyle = 'rgba(56, 189, 248, 0.6)';
+            ctx.beginPath(); ctx.ellipse(podX, -11, 7, 2, 0, 0, Math.PI * 2); ctx.fill();
+
+        // 11. QUANTUM TELEMETRY ARRAY
+        } else if (buildingType === 'quantum-observatory') {
+            ctx.fillStyle = 'rgba(0,0,0,0.35)';
+            ctx.beginPath(); ctx.ellipse(0, 0, 20, 10, 0, 0, Math.PI * 2); ctx.fill();
+
+            // Tiered Pedestal
+            ctx.fillStyle = '#334155';
+            ctx.fillRect(-12, -12, 24, 14);
+
+            // Parabolic Dishes
+            ctx.strokeStyle = '#cbd5e1';
+            ctx.lineWidth = 2.5;
+            ctx.beginPath(); ctx.arc(-7, -24, 9, 0.4, 2.6); ctx.stroke();
+            ctx.beginPath(); ctx.arc(7, -24, 9, 0.4, 2.6); ctx.stroke();
+
+            // Laser Telemetry Column
+            ctx.strokeStyle = 'rgba(168, 85, 247, 0.8)';
+            ctx.lineWidth = 2;
+            ctx.shadowColor = '#c084fc';
+            ctx.shadowBlur = 12;
+            ctx.beginPath(); ctx.moveTo(0, -20); ctx.lineTo(0, -60); ctx.stroke();
+            ctx.shadowBlur = 0;
+
+        // 12. STORY FORUM (Civic Agorá & Eternal Flame)
+        } else if (buildingType === 'story-forum') {
+            ctx.fillStyle = 'rgba(0,0,0,0.3)';
+            ctx.beginPath(); ctx.ellipse(0, 0, 22, 11, 0, 0, Math.PI * 2); ctx.fill();
+
+            // Stepped Circular Agorá
+            ctx.fillStyle = '#fef08a';
+            ctx.beginPath(); ctx.ellipse(0, -4, 18, 9, 0, 0, Math.PI * 2); ctx.fill();
+            ctx.fillStyle = '#fde047';
+            ctx.beginPath(); ctx.ellipse(0, -8, 12, 6, 0, 0, Math.PI * 2); ctx.fill();
+
+            // Central Brazier with Eternal Flame
+            ctx.fillStyle = '#475569';
+            ctx.fillRect(-3, -13, 6, 6);
+            const flameH = 6 + Math.sin(now * 0.015) * 3;
+            ctx.fillStyle = '#ef4444';
+            ctx.beginPath(); ctx.moveTo(-3, -13); ctx.lineTo(0, -13 - flameH); ctx.lineTo(3, -13); ctx.closePath(); ctx.fill();
+            ctx.fillStyle = '#f59e0b';
+            ctx.beginPath(); ctx.arc(0, -13 - flameH * 0.4, 2, 0, Math.PI * 2); ctx.fill();
+
+            // Canopy Sails
+            ctx.strokeStyle = '#f97316';
+            ctx.lineWidth = 1.5;
+            ctx.beginPath(); ctx.moveTo(-16, -6); ctx.lineTo(-12, -26); ctx.lineTo(0, -28); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(16, -6); ctx.lineTo(12, -26); ctx.lineTo(0, -28); ctx.stroke();
+
+        // 13. GRAND AMPHITHEATER (Civic Monument)
+        } else if (buildingType === 'grand-amphitheater') {
+            ctx.fillStyle = 'rgba(0,0,0,0.4)';
+            ctx.beginPath(); ctx.ellipse(0, 0, 24, 12, 0, 0, Math.PI * 2); ctx.fill();
+
+            // Layered Semicircular Colosseum
+            ctx.fillStyle = '#cbd5e1';
+            ctx.beginPath(); ctx.arc(0, -8, 20, Math.PI, 0); ctx.fill();
+            ctx.fillStyle = '#e2e8f0';
+            ctx.beginPath(); ctx.arc(0, -12, 14, Math.PI, 0); ctx.fill();
+
+            // Holographic Stage Spotlight
+            ctx.fillStyle = 'rgba(236, 72, 153, 0.25)';
+            ctx.beginPath(); ctx.moveTo(0, -8); ctx.lineTo(-14, -36); ctx.lineTo(14, -36); ctx.closePath(); ctx.fill();
+            ctx.fillStyle = '#ec4899';
+            ctx.beginPath(); ctx.arc(0, -8, 4, 0, Math.PI * 2); ctx.fill();
+
+            // Festal Banners
+            ctx.strokeStyle = '#8b5cf6'; ctx.lineWidth = 1.5;
+            ctx.beginPath(); ctx.moveTo(-18, -12); ctx.lineTo(-18, -26); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(18, -12); ctx.lineTo(18, -26); ctx.stroke();
+        }
+
+        // Structural Level Badges (★☆☆, ★★☆, ★★★)
+        if (!isGhost && buildingLevel >= 2) {
+            ctx.fillStyle = '#facc15';
+            ctx.font = 'bold 9px sans-serif';
+            ctx.textAlign = 'center';
+            const starText = buildingLevel === 2 ? '★★' : '★★★';
+            ctx.fillText(starText, 0, -48);
         }
 
         ctx.restore();
@@ -4994,6 +5746,480 @@ const WorldForgeCG = {
         });
     },
 
+    renderWildernessEcosystemView(ctx, w, h, now) {
+        ctx.save();
+        ctx.translate(0, -60);
+
+        // 1. Lush rolling wilderness terrain
+        const terrainGrad = ctx.createLinearGradient(0, -300, 0, 300);
+        terrainGrad.addColorStop(0, '#14532d');
+        terrainGrad.addColorStop(0.5, '#166534');
+        terrainGrad.addColorStop(1, '#15803d');
+        ctx.fillStyle = terrainGrad;
+        ctx.beginPath();
+        ctx.ellipse(0, 0, 480, 260, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(74, 222, 128, 0.25)';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
+        // 2. Winding River
+        ctx.strokeStyle = '#0284c7';
+        ctx.lineWidth = 36;
+        ctx.lineCap = 'round';
+        ctx.beginPath();
+        ctx.moveTo(-360, -180);
+        ctx.bezierCurveTo(-150, -40, -50, -140, 60, 20);
+        ctx.bezierCurveTo(150, 140, 280, 80, 380, 180);
+        ctx.stroke();
+
+        // River specular shimmer
+        ctx.strokeStyle = 'rgba(186, 230, 253, 0.45)';
+        ctx.lineWidth = 6;
+        ctx.beginPath();
+        ctx.moveTo(-350, -180);
+        ctx.bezierCurveTo(-145, -40, -45, -140, 65, 20);
+        ctx.bezierCurveTo(155, 140, 285, 80, 375, 180);
+        ctx.stroke();
+
+        // 3. Pine groves & Deciduous forest clumps
+        const groves = [
+            { x: -240, y: -90, count: 6, color: '#064e3b' },
+            { x: -180, y: 110, count: 5, color: '#065f46' },
+            { x: 220, y: -120, count: 7, color: '#047857' },
+            { x: 190, y: 60, count: 6, color: '#064e3b' },
+        ];
+        groves.forEach(g => {
+            for (let t = 0; t < g.count; t++) {
+                const tx = g.x + Math.sin(t * 3) * 32;
+                const ty = g.y + Math.cos(t * 4) * 20;
+                ctx.fillStyle = '#78350f';
+                ctx.fillRect(tx - 2, ty, 4, 10);
+                ctx.fillStyle = g.color;
+                ctx.beginPath();
+                ctx.moveTo(tx - 12, ty);
+                ctx.lineTo(tx, ty - 22);
+                ctx.lineTo(tx + 12, ty);
+                ctx.closePath();
+                ctx.fill();
+            }
+        });
+
+        // 4. Herbivore Deer Herd
+        if (!this.deerEntities) {
+            this.deerEntities = Array.from({ length: 8 }, (_, i) => ({
+                x: -120 + Math.random() * 140,
+                y: -40 + Math.random() * 120,
+                vx: (Math.random() - 0.5) * 0.4,
+                vy: (Math.random() - 0.5) * 0.3,
+                bob: Math.random() * 10,
+                isBuck: i === 0,
+            }));
+        }
+
+        this.deerEntities.forEach(d => {
+            d.x += d.vx;
+            d.y += d.vy;
+            d.bob += 0.05;
+            if (d.x < -180) { d.x = -180; d.vx *= -1; }
+            if (d.x > 80) { d.x = 80; d.vx *= -1; }
+            if (d.y < -100) { d.y = -100; d.vy *= -1; }
+            if (d.y > 140) { d.y = 140; d.vy *= -1; }
+
+            ctx.save();
+            ctx.translate(d.x, d.y);
+
+            // Shadow
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.25)';
+            ctx.beginPath(); ctx.ellipse(0, 8, 8, 4, 0, 0, Math.PI * 2); ctx.fill();
+
+            // Legs
+            ctx.strokeStyle = '#78350f';
+            ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            ctx.moveTo(-4, 0); ctx.lineTo(-4, 9);
+            ctx.moveTo(4, 0); ctx.lineTo(4, 9);
+            ctx.stroke();
+
+            // Body
+            ctx.fillStyle = '#b45309';
+            ctx.beginPath(); ctx.ellipse(0, 0, 9, 5, 0, 0, Math.PI * 2); ctx.fill();
+            ctx.fillStyle = '#fef3c7';
+            ctx.fillRect(7, -2, 3, 3);
+
+            // Head
+            const headBob = Math.sin(d.bob) * 3;
+            ctx.fillStyle = '#b45309';
+            ctx.beginPath();
+            ctx.arc(-8, -4 + headBob, 3.5, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Antlers
+            if (d.isBuck) {
+                ctx.strokeStyle = '#451a03';
+                ctx.lineWidth = 1.2;
+                ctx.beginPath();
+                ctx.moveTo(-9, -7 + headBob); ctx.lineTo(-12, -14 + headBob);
+                ctx.moveTo(-9, -7 + headBob); ctx.lineTo(-7, -14 + headBob);
+                ctx.stroke();
+            }
+
+            ctx.restore();
+        });
+
+        // 5. Carnivore Wolf Pack
+        if (!this.wolfEntities) {
+            this.wolfEntities = Array.from({ length: 4 }, (_, i) => ({
+                x: 100 + Math.random() * 120,
+                y: -60 + Math.random() * 100,
+                vx: (Math.random() - 0.5) * 0.5,
+                vy: (Math.random() - 0.5) * 0.35,
+                prowl: Math.random() * 10,
+                alpha: i === 0,
+            }));
+        }
+
+        this.wolfEntities.forEach(w => {
+            w.x += w.vx;
+            w.y += w.vy;
+            w.prowl += 0.08;
+            if (w.x < 40) { w.x = 40; w.vx *= -1; }
+            if (w.x > 260) { w.x = 260; w.vx *= -1; }
+            if (w.y < -120) { w.y = -120; w.vy *= -1; }
+            if (w.y > 120) { w.y = 120; w.vy *= -1; }
+
+            ctx.save();
+            ctx.translate(w.x, w.y);
+
+            // Shadow
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+            ctx.beginPath(); ctx.ellipse(0, 7, 7, 3.5, 0, 0, Math.PI * 2); ctx.fill();
+
+            // Body
+            ctx.fillStyle = w.alpha ? '#1e293b' : '#334155';
+            ctx.beginPath(); ctx.ellipse(0, 0, 8, 4.5, 0, 0, Math.PI * 2); ctx.fill();
+
+            // Head
+            ctx.beginPath(); ctx.arc(-7, -1, 3.2, 0, Math.PI * 2); ctx.fill();
+            ctx.beginPath();
+            ctx.moveTo(-8, -4); ctx.lineTo(-10, -7); ctx.lineTo(-6, -4);
+            ctx.fill();
+
+            // Glowing Amber Eyes
+            ctx.fillStyle = '#f59e0b';
+            ctx.fillRect(-8, -2, 1.5, 1.5);
+
+            // Tail
+            ctx.strokeStyle = w.alpha ? '#1e293b' : '#334155';
+            ctx.lineWidth = 2;
+            ctx.beginPath(); ctx.moveTo(6, 0); ctx.lineTo(11, 4); ctx.stroke();
+
+            ctx.restore();
+        });
+
+        // 6. Tactical Wilderness HUD Chip
+        ctx.fillStyle = 'rgba(15, 23, 42, 0.88)';
+        ctx.strokeStyle = '#4ade80';
+        ctx.lineWidth = 1.5;
+        ctx.strokeRect(-160, 190, 320, 34);
+        ctx.fillRect(-160, 190, 320, 34);
+
+        ctx.fillStyle = '#f8fafc';
+        ctx.font = 'bold 11px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('🌿 LIVING WILDERNESS ECOSYSTEM · PREDATOR-PREY WEB', 0, 205);
+        ctx.font = '10px sans-serif';
+        ctx.fillStyle = '#86efac';
+        ctx.fillText('🦌 8-12 Herbivore Deer  ·  🐺 4-6 Wolf Pack Hunters  ·  🌾 Savanna Biomass', 0, 218);
+
+        ctx.restore();
+    },
+
+    renderCoastalResilienceView(ctx, w, h, now) {
+        ctx.save();
+        ctx.translate(0, -50);
+
+        // 1. Deep Ocean & Coastal Waters
+        const oceanGrad = ctx.createLinearGradient(-400, -200, 400, 300);
+        oceanGrad.addColorStop(0, '#0c4a6e');
+        oceanGrad.addColorStop(0.4, '#0369a1');
+        oceanGrad.addColorStop(0.7, '#0284c7');
+        oceanGrad.addColorStop(1, '#38bdf8');
+        ctx.fillStyle = oceanGrad;
+        ctx.beginPath();
+        ctx.ellipse(0, 40, 520, 260, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Ocean Wave Swells & Surf Animation
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.28)';
+        ctx.lineWidth = 2.5;
+        for (let i = 0; i < 7; i++) {
+            const waveY = -60 + i * 42 + Math.sin(now * 0.0025 + i * 1.5) * 8;
+            const waveAmp = 12 + Math.sin(now * 0.003 + i) * 6;
+            ctx.beginPath();
+            ctx.moveTo(-360, waveY);
+            ctx.bezierCurveTo(-180, waveY + waveAmp, 0, waveY - waveAmp, 200, waveY + waveAmp);
+            ctx.stroke();
+        }
+
+        // 2. Coastal Shoreline & Sandy Beach Bluff
+        const landGrad = ctx.createLinearGradient(-100, -260, 360, 100);
+        landGrad.addColorStop(0, '#15803d'); // Green belt
+        landGrad.addColorStop(0.55, '#166534');
+        landGrad.addColorStop(0.85, '#d97706'); // Sandy bluff
+        landGrad.addColorStop(1, '#fde68a'); // Surf sand
+        ctx.fillStyle = landGrad;
+        ctx.beginPath();
+        ctx.moveTo(80, -240);
+        ctx.bezierCurveTo(240, -180, 380, -40, 340, 120);
+        ctx.bezierCurveTo(300, 220, 120, 240, -40, 200);
+        ctx.bezierCurveTo(-10, 120, 20, 40, 60, -80);
+        ctx.closePath();
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(254, 243, 199, 0.4)';
+        ctx.lineWidth = 3;
+        ctx.stroke();
+
+        // Coastal Shore Surf Foam
+        const surfPhase = Math.sin(now * 0.004) * 6;
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.65)';
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        ctx.moveTo(330 + surfPhase, 110);
+        ctx.bezierCurveTo(290 + surfPhase, 210, 110 + surfPhase, 230, -35 + surfPhase, 190);
+        ctx.stroke();
+
+        // 3. Storm Surge Barrier Wall & Floodgates
+        ctx.save();
+        ctx.translate(-20, 110);
+        ctx.fillStyle = '#334155';
+        ctx.fillRect(-80, -14, 160, 28);
+        ctx.strokeStyle = '#64748b';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(-80, -14, 160, 28);
+
+        // Hydraulic floodgate pylons
+        for (let p = -60; p <= 60; p += 30) {
+            ctx.fillStyle = '#1e293b';
+            ctx.fillRect(p - 6, -22, 12, 44);
+            ctx.fillStyle = '#f59e0b'; // Hazard warning chevrons
+            ctx.fillRect(p - 4, -20, 8, 4);
+            ctx.fillStyle = '#22c55e'; // Green operational beacon
+            ctx.beginPath();
+            ctx.arc(p, -24, 2.5, 0, Math.PI * 2);
+            ctx.fill();
+        }
+        ctx.restore();
+
+        // 4. Offshore Wind Farm (4 Turbines)
+        const turbines = [
+            { x: -280, y: -90, scale: 0.85, phase: 0 },
+            { x: -210, y: -160, scale: 0.75, phase: 1.2 },
+            { x: -160, y: -40, scale: 0.95, phase: 2.1 },
+            { x: -250, y: 50, scale: 1.05, phase: 0.7 },
+        ];
+
+        turbines.forEach(tb => {
+            ctx.save();
+            ctx.translate(tb.x, tb.y);
+            ctx.scale(tb.scale, tb.scale);
+
+            // Underwater foundation shadow
+            ctx.fillStyle = 'rgba(2, 44, 34, 0.45)';
+            ctx.beginPath(); ctx.ellipse(0, 18, 14, 7, 0, 0, Math.PI * 2); ctx.fill();
+
+            // Concrete base platform
+            ctx.fillStyle = '#e2e8f0';
+            ctx.beginPath(); ctx.ellipse(0, 16, 9, 4.5, 0, 0, Math.PI * 2); ctx.fill();
+            ctx.fillStyle = '#eab308'; // High-visibility yellow deck
+            ctx.fillRect(-6, 12, 12, 4);
+
+            // Turbine tower mast
+            ctx.fillStyle = '#f8fafc';
+            ctx.beginPath();
+            ctx.moveTo(-2.5, 12);
+            ctx.lineTo(-1.2, -45);
+            ctx.lineTo(1.2, -45);
+            ctx.lineTo(2.5, 12);
+            ctx.closePath();
+            ctx.fill();
+            ctx.strokeStyle = '#cbd5e1';
+            ctx.lineWidth = 1;
+            ctx.stroke();
+
+            // Nacelle pod
+            ctx.fillStyle = '#f1f5f9';
+            ctx.fillRect(-5, -49, 10, 6);
+
+            // Aeronautical safety beacon
+            const flash = Math.sin(now * 0.005 + tb.phase * 3) > 0.5;
+            ctx.fillStyle = flash ? '#ef4444' : '#7f1d1d';
+            ctx.beginPath(); ctx.arc(0, -51, 2, 0, Math.PI * 2); ctx.fill();
+
+            // Spinning 3-Blade Rotor
+            const rot = now * 0.0035 + tb.phase;
+            for (let b = 0; b < 3; b++) {
+                const angle = rot + (b * Math.PI * 2) / 3;
+                ctx.save();
+                ctx.translate(0, -46);
+                ctx.rotate(angle);
+                ctx.fillStyle = '#f8fafc';
+                ctx.beginPath();
+                ctx.moveTo(-1.2, 0);
+                ctx.lineTo(-0.6, -34);
+                ctx.lineTo(0.6, -34);
+                ctx.lineTo(1.2, 0);
+                ctx.closePath();
+                ctx.fill();
+                // Red blade tips
+                ctx.fillStyle = '#ef4444';
+                ctx.fillRect(-0.8, -34, 1.6, 6);
+                ctx.restore();
+            }
+
+            // Rotor central hub cap
+            ctx.fillStyle = '#0f172a';
+            ctx.beginPath(); ctx.arc(0, -46, 2.5, 0, Math.PI * 2); ctx.fill();
+
+            ctx.restore();
+        });
+
+        // 5. Shoreline Desalination Plant Complex
+        ctx.save();
+        ctx.translate(140, 10);
+
+        // Seawater Intake Pipe running into ocean
+        ctx.strokeStyle = '#38bdf8';
+        ctx.lineWidth = 6;
+        ctx.beginPath();
+        ctx.moveTo(0, 20);
+        ctx.bezierCurveTo(-40, 30, -90, 10, -130, 25);
+        ctx.stroke();
+
+        // Pulsing water flow along pipe
+        const flowOff = (now * 0.05) % 20;
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 2.5;
+        ctx.setLineDash([6, 14]);
+        ctx.lineDashOffset = -flowOff;
+        ctx.beginPath();
+        ctx.moveTo(0, 20);
+        ctx.bezierCurveTo(-40, 30, -90, 10, -130, 25);
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        // Desalination Main Hall & Filtration Modules
+        ctx.fillStyle = '#1e293b';
+        ctx.fillRect(-10, -20, 60, 40);
+        ctx.fillStyle = '#0284c7';
+        ctx.fillRect(-6, -16, 52, 12);
+        ctx.fillStyle = '#f8fafc';
+        ctx.font = 'bold 8px sans-serif';
+        ctx.fillText('DESAL', 4, -7);
+
+        // Water Storage Silos
+        for (let s = 0; s < 2; s++) {
+            ctx.fillStyle = '#e2e8f0';
+            ctx.beginPath();
+            ctx.ellipse(12 + s * 22, -32, 9, 5, 0, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillRect(3 + s * 22, -32, 18, 16);
+            ctx.fillStyle = '#0284c7';
+            ctx.fillRect(3 + s * 22, -22, 18, 4);
+        }
+
+        // Vapor plume
+        const plumeY = Math.sin(now * 0.004) * 4;
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.45)';
+        ctx.beginPath();
+        ctx.arc(44, -40 + plumeY, 7, 0, Math.PI * 2);
+        ctx.arc(48, -48 + plumeY, 9, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.restore();
+
+        // 6. Working Harbor & Berthed Cargo Vessel
+        ctx.save();
+        ctx.translate(210, 110);
+
+        // Concrete Pier
+        ctx.fillStyle = '#475569';
+        ctx.fillRect(-20, -10, 70, 20);
+        ctx.strokeStyle = '#94a3b8';
+        ctx.lineWidth = 1.5;
+        ctx.strokeRect(-20, -10, 70, 20);
+
+        // Cargo Ship Vessel in Berth
+        ctx.fillStyle = '#991b1b'; // Red hull
+        ctx.beginPath();
+        ctx.moveTo(-10, 12);
+        ctx.lineTo(60, 12);
+        ctx.lineTo(75, 22);
+        ctx.lineTo(-20, 22);
+        ctx.closePath();
+        ctx.fill();
+
+        // Container stacks
+        const containerColors = ['#0284c7', '#f59e0b', '#16a34a', '#dc2626'];
+        for (let c = 0; c < 4; c++) {
+            ctx.fillStyle = containerColors[c];
+            ctx.fillRect(0 + c * 13, 2, 11, 10);
+            ctx.strokeStyle = '#0f172a';
+            ctx.lineWidth = 0.8;
+            ctx.strokeRect(0 + c * 13, 2, 11, 10);
+        }
+
+        // Harbor Quay Crane
+        ctx.strokeStyle = '#eab308';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(35, -8);
+        ctx.lineTo(45, -34);
+        ctx.lineTo(15, -42);
+        ctx.stroke();
+
+        ctx.restore();
+
+        // 7. Green Belt Vertical Farming Towers
+        ctx.save();
+        ctx.translate(230, -120);
+        for (let f = 0; f < 3; f++) {
+            const fx = f * 34;
+            const fy = f * 12;
+            ctx.fillStyle = '#0f172a';
+            ctx.fillRect(fx, fy - 36, 24, 42);
+            ctx.fillStyle = '#22c55e'; // Green interior hydroponic racks
+            for (let row = 0; row < 3; row++) {
+                ctx.fillRect(fx + 3, fy - 32 + row * 11, 18, 6);
+            }
+            ctx.fillStyle = '#38bdf8'; // Solar glass angled roof
+            ctx.beginPath();
+            ctx.moveTo(fx, fy - 36);
+            ctx.lineTo(fx + 12, fy - 46);
+            ctx.lineTo(fx + 24, fy - 36);
+            ctx.closePath();
+            ctx.fill();
+        }
+        ctx.restore();
+
+        // 8. Coastal Resilience Tactical HUD Banner
+        ctx.fillStyle = 'rgba(15, 23, 42, 0.9)';
+        ctx.strokeStyle = '#38bdf8';
+        ctx.lineWidth = 1.5;
+        ctx.strokeRect(-190, 195, 380, 36);
+        ctx.fillRect(-190, 195, 380, 36);
+
+        ctx.fillStyle = '#f8fafc';
+        ctx.font = 'bold 11px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('🌊 COASTAL RESILIENCE MATRIX · SEASCAPE & INFRASTRUCTURE', 0, 210);
+        ctx.font = '10px sans-serif';
+        ctx.fillStyle = '#7dd3fc';
+        ctx.fillText('⚡ 4 Offshore Turbines  ·  💧 Desal Plant Active  ·  🛡️ Surge Barrier Ready  ·  🚢 Harbor Cargo', 0, 224);
+
+        ctx.restore();
+    },
+
     render(now) {
         if (!this.canvas || !this.ctx) return;
         const ctx = this.ctx;
@@ -5034,10 +6260,15 @@ const WorldForgeCG = {
         if (this.perspectiveMode === 'first') ctx.rotate(-this.walker.heading);
         ctx.scale(this.camera.zoom, this.camera.zoom);
 
-        if (this.worldLens === 'city') {
+        const curWorld = (state.selectedWorld || '').toLowerCase();
+        if (this.worldLens === 'city' || (curWorld.includes('city') && this.worldLens !== 'schematic' && this.worldLens !== 'realm')) {
             this.renderCityView(ctx, w, h, now);
         } else if (this.worldLens === 'realm') {
             this.renderRealmView(ctx, w, h, now);
+        } else if (curWorld.includes('eco') && this.viewMode === 'cg') {
+            this.renderWildernessEcosystemView(ctx, w, h, now);
+        } else if (curWorld.includes('coastal') && this.viewMode === 'cg') {
+            this.renderCoastalResilienceView(ctx, w, h, now);
         } else {
             // 2. Draw conduits
             this.drawConduits(ctx, now);

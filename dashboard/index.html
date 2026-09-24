@@ -492,7 +492,42 @@
                             <!-- 3rd World Farmer Hardship & Survival HUD -->
                             <div class="city-hardship-hud" id="city-hardship-hud">
                                 <div class="hardship-gauges">
-                                    <div class="hardship-chip" id="hud-drought-chip" title="Drought Severity (3rd World Farmer: water scarcity directly cuts farm yields)">
+                                    <div class="hardship-chip ecology-chip" id="hud-season-chip" title="Planetary Season & Cycle (Spring, Summer, Autumn, Winter)">
+                                        <span class="hardship-icon" id="hud-season-icon">🌱</span>
+                                        <div class="hardship-meta">
+                                            <small id="hud-year-label">YEAR 1</small>
+                                            <strong id="hud-season-val">Spring</strong>
+                                        </div>
+                                    </div>
+                                    <div class="hardship-chip ecology-chip" id="hud-weather-chip" title="Atmospheric Weather & Ambient Temperature">
+                                        <span class="hardship-icon" id="hud-weather-icon">☀️</span>
+                                        <div class="hardship-meta">
+                                            <small id="hud-temp-val">22.0°C</small>
+                                            <strong id="hud-weather-val">Clear</strong>
+                                        </div>
+                                    </div>
+                                    <div class="hardship-chip ecology-chip" id="hud-clock-chip" title="Solar Day/Night Cycle (Simulated diurnal time)">
+                                        <span class="hardship-icon" id="hud-clock-icon">☀️</span>
+                                        <div class="hardship-meta">
+                                            <small id="hud-diurnal-label">DAY</small>
+                                            <strong id="hud-clock-val">12:00</strong>
+                                        </div>
+                                    </div>
+                                    <div class="hardship-chip ecology-chip" id="hud-bio-chip" title="Biosphere Health vs Urban Pollution (PPM)">
+                                        <span class="hardship-icon">🌿</span>
+                                        <div class="hardship-meta">
+                                            <small id="hud-pollution-val">0 PPM</small>
+                                            <strong id="hud-bio-val">98% Bio</strong>
+                                        </div>
+                                    </div>
+                                    <div class="hardship-chip ecology-chip disaster-alert hidden" id="hud-disaster-chip" title="Ecological Crisis In Progress">
+                                        <span class="hardship-icon">⚠️</span>
+                                        <div class="hardship-meta">
+                                            <small>CRISIS</small>
+                                            <strong id="hud-disaster-val">Heatwave</strong>
+                                        </div>
+                                    </div>
+                                    <div class="hardship-chip" id="hud-drought-chip" title="Drought Severity (water scarcity directly cuts farm yields)">
                                         <span class="hardship-icon">☀️</span>
                                         <div class="hardship-meta">
                                             <small>DROUGHT</small>
@@ -541,43 +576,57 @@
                             <!-- SimCity / Age of Empires RTS Quick-Build Dock -->
                             <div class="city-build-dock" id="city-build-dock" aria-label="Quick Construction Toolbar">
                                 <div class="dock-header">
-                                    <span class="dock-title">🏗️ City Construction</span>
-                                    <span class="dock-hotkey-hint">Click a building, then click a district plot to place</span>
+                                    <div class="dock-header-left">
+                                        <span class="dock-title">🏗️ City Construction</span>
+                                        <span class="dock-hotkey-hint">Click a building card, then click a district plot to place</span>
+                                    </div>
+                                    <div class="dock-category-tabs" id="dock-category-tabs" role="tablist" aria-label="Building Categories">
+                                        <button type="button" class="dock-tab active" data-cat="all">All (13)</button>
+                                        <button type="button" class="dock-tab" data-cat="residential">🏠 Housing</button>
+                                        <button type="button" class="dock-tab" data-cat="energy-water">⚡ Energy &amp; Water</button>
+                                        <button type="button" class="dock-tab" data-cat="industry-food">🌾 Industry &amp; Food</button>
+                                        <button type="button" class="dock-tab" data-cat="civic-culture">🏛️ Civic &amp; Culture</button>
+                                    </div>
                                 </div>
-                                <div class="dock-cards-scroll">
-                                    <button type="button" class="dock-build-btn" data-building="solar-canopy" title="Solar Canopy: Rooftop photovoltaic energy (+15 Power, +3 Wellbeing)">
-                                        <span class="dock-icon">☀️</span>
-                                        <span class="dock-info">
-                                            <strong>Solar Canopy</strong>
-                                            <small>520 Cr · 50 Mat</small>
-                                        </span>
-                                        <span class="dock-hotkey">[1]</span>
-                                    </button>
-                                    <button type="button" class="dock-build-btn" data-building="courtyard-homes" title="Courtyard Homes: Modular urban housing (+32 Housing, +1.5 Wellbeing)">
+                                <div class="dock-cards-scroll" id="dock-cards-scroll">
+                                    <!-- 1. Courtyard Homes -->
+                                    <button type="button" class="dock-build-btn" data-building="courtyard-homes" data-cat="residential" title="Courtyard Homes: Modular urban housing (+90 Housing, +8 Jobs, +4 Wellbeing)">
                                         <span class="dock-icon">🏠</span>
                                         <span class="dock-info">
                                             <strong>Courtyard Homes</strong>
-                                            <small>600 Cr · 60 Mat</small>
+                                            <small>650 Cr · 90 Mat</small>
+                                        </span>
+                                        <span class="dock-hotkey">[1]</span>
+                                    </button>
+                                    <!-- 2. Arcology Spine -->
+                                    <button type="button" class="dock-build-btn" data-building="arcology-spine" data-cat="residential" title="Arcology Spine: High-density vertical metropolis (+260 Housing, +35 Jobs, +15 Cr)">
+                                        <span class="dock-icon">🏙️</span>
+                                        <span class="dock-info">
+                                            <strong>Arcology Spine</strong>
+                                            <small>1800 Cr · 240 Mat</small>
                                         </span>
                                         <span class="dock-hotkey">[2]</span>
                                     </button>
-                                    <button type="button" class="dock-build-btn" data-building="maker-cooperative" title="Maker Cooperative: Flexible light manufacturing (+12 Materials, +18 Jobs)">
-                                        <span class="dock-icon">⚙️</span>
+                                    <!-- 3. Solar Canopy -->
+                                    <button type="button" class="dock-build-btn" data-building="solar-canopy" data-cat="energy-water" title="Solar Canopy: Rooftop photovoltaic energy (+10 Power, +10 Jobs)">
+                                        <span class="dock-icon">☀️</span>
                                         <span class="dock-info">
-                                            <strong>Maker Co-op</strong>
-                                            <small>650 Cr · 90 Mat</small>
+                                            <strong>Solar Canopy</strong>
+                                            <small>520 Cr · 70 Mat</small>
                                         </span>
                                         <span class="dock-hotkey">[3]</span>
                                     </button>
-                                    <button type="button" class="dock-build-btn" data-building="vertical-farm" title="Vertical Farm: Closed-loop hydroponic crops (+8 Food, +28 Jobs)">
-                                        <span class="dock-icon">🌾</span>
+                                    <!-- 4. Tokamak Fusion Reactor -->
+                                    <button type="button" class="dock-build-btn" data-building="fusion-reactor" data-cat="energy-water" title="Tokamak Fusion Reactor: Magnetic confinement clean power (+45 Power, +40 Jobs)">
+                                        <span class="dock-icon">⚛️</span>
                                         <span class="dock-info">
-                                            <strong>Vertical Farm</strong>
-                                            <small>780 Cr · 110 Mat</small>
+                                            <strong>Fusion Reactor</strong>
+                                            <small>2400 Cr · 320 Mat</small>
                                         </span>
                                         <span class="dock-hotkey">[4]</span>
                                     </button>
-                                    <button type="button" class="dock-build-btn" data-building="water-garden" title="Living Water Garden: Wetland water filtration (+9 Clean Water, +5 Wellbeing)">
+                                    <!-- 5. Living Water Garden -->
+                                    <button type="button" class="dock-build-btn" data-building="water-garden" data-cat="energy-water" title="Living Water Garden: Wetland filtration infrastructure (+9 Water, +5 Wellbeing)">
                                         <span class="dock-icon">💧</span>
                                         <span class="dock-info">
                                             <strong>Water Garden</strong>
@@ -585,13 +634,77 @@
                                         </span>
                                         <span class="dock-hotkey">[5]</span>
                                     </button>
-                                    <button type="button" class="dock-build-btn" data-building="civic-lab" title="Civic Lab: Urban research center (+15 Research, +16 Jobs)">
+                                    <!-- 6. Vertical Farm -->
+                                    <button type="button" class="dock-build-btn" data-building="vertical-farm" data-cat="industry-food" title="Vertical Farm: Closed-loop hydroponic crops (+8 Food, +28 Jobs)">
+                                        <span class="dock-icon">🌾</span>
+                                        <span class="dock-info">
+                                            <strong>Vertical Farm</strong>
+                                            <small>780 Cr · 110 Mat</small>
+                                        </span>
+                                        <span class="dock-hotkey">[6]</span>
+                                    </button>
+                                    <!-- 7. Maker Cooperative -->
+                                    <button type="button" class="dock-build-btn" data-building="maker-cooperative" data-cat="industry-food" title="Maker Cooperative: Flexible local fabrication (+12 Cr, +1 Mat, +55 Jobs)">
+                                        <span class="dock-icon">⚙️</span>
+                                        <span class="dock-info">
+                                            <strong>Maker Co-op</strong>
+                                            <small>700 Cr · 100 Mat</small>
+                                        </span>
+                                        <span class="dock-hotkey">[7]</span>
+                                    </button>
+                                    <!-- 8. Nanotech Foundry -->
+                                    <button type="button" class="dock-build-btn" data-building="nanotech-foundry" data-cat="industry-food" title="Nanotech Foundry: Molecular materials synthesis (+5 Mat, +18 Cr, +45 Jobs)">
+                                        <span class="dock-icon">🔬</span>
+                                        <span class="dock-info">
+                                            <strong>Nanotech Foundry</strong>
+                                            <small>1900 Cr · 250 Mat</small>
+                                        </span>
+                                        <span class="dock-hotkey">[8]</span>
+                                    </button>
+                                    <!-- 9. Hyperloop Exchange -->
+                                    <button type="button" class="dock-build-btn" data-building="hyperloop-exchange" data-cat="industry-food" title="Hyperloop Logistics Exchange: Sub-surface trade conduits (+30 Cr, +25 Jobs)">
+                                        <span class="dock-icon">🚄</span>
+                                        <span class="dock-info">
+                                            <strong>Hyperloop Docks</strong>
+                                            <small>1750 Cr · 210 Mat</small>
+                                        </span>
+                                        <span class="dock-hotkey">[9]</span>
+                                    </button>
+                                    <!-- 10. Civic Lab -->
+                                    <button type="button" class="dock-build-btn" data-building="civic-lab" data-cat="civic-culture" title="Civic Lab: Urban research center (+4 Research, +35 Jobs, +2 Wellbeing)">
                                         <span class="dock-icon">🏛️</span>
                                         <span class="dock-info">
                                             <strong>Civic Lab</strong>
-                                            <small>800 Cr · 100 Mat</small>
+                                            <small>900 Cr · 120 Mat</small>
                                         </span>
-                                        <span class="dock-hotkey">[6]</span>
+                                        <span class="dock-hotkey">[0]</span>
+                                    </button>
+                                    <!-- 11. Quantum Telemetry Array -->
+                                    <button type="button" class="dock-build-btn" data-building="quantum-observatory" data-cat="civic-culture" title="Quantum Telemetry Array: Deep cognitive observatory (+15 Research, +30 Jobs)">
+                                        <span class="dock-icon">🔭</span>
+                                        <span class="dock-info">
+                                            <strong>Quantum Array</strong>
+                                            <small>2100 Cr · 220 Mat</small>
+                                        </span>
+                                        <span class="dock-hotkey">[-]</span>
+                                    </button>
+                                    <!-- 12. Story Forum -->
+                                    <button type="button" class="dock-build-btn" data-building="story-forum" data-cat="civic-culture" title="Story Forum: Collective memory & civic discourse (+10 Wellbeing, +1.5 Research)">
+                                        <span class="dock-icon">🎭</span>
+                                        <span class="dock-info">
+                                            <strong>Story Forum</strong>
+                                            <small>600 Cr · 55 Mat</small>
+                                        </span>
+                                        <span class="dock-hotkey">[=]</span>
+                                    </button>
+                                    <!-- 13. Grand Amphitheater -->
+                                    <button type="button" class="dock-build-btn" data-building="grand-amphitheater" data-cat="civic-culture" title="Grand Amphitheater: Monumental civic arts sanctuary (+24 Wellbeing, +20 Cr, +40 Jobs)">
+                                        <span class="dock-icon">🎪</span>
+                                        <span class="dock-info">
+                                            <strong>Amphitheater</strong>
+                                            <small>2200 Cr · 180 Mat</small>
+                                        </span>
+                                        <span class="dock-hotkey">[M]</span>
                                     </button>
                                 </div>
                                 <div class="dock-placement-status hidden" id="dock-placement-status">
@@ -950,6 +1063,74 @@
                 </div>
                 <div class="realm-entities-grid" id="war-room-entities-grid">
                     <!-- Populated dynamically via renderGeopolitics() -->
+                </div>
+            </div>
+        </div>
+    <dialog class="tool-dialog inspector-dialog" id="building-inspector-dialog" aria-labelledby="inspector-title">
+        <div class="dialog-shell inspector-shell">
+            <header class="dialog-header inspector-header">
+                <div class="inspector-identity">
+                    <span class="inspector-badge" id="inspector-badge">RESIDENTIAL</span>
+                    <h2 id="inspector-title">Courtyard Homes</h2>
+                    <div class="inspector-stars" id="inspector-stars" title="Structure Tier">★☆☆</div>
+                </div>
+                <button class="icon-button dialog-close" id="inspector-close" type="button" aria-label="Close Inspector"><svg viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></svg></button>
+            </header>
+            <div class="dialog-body inspector-body">
+                <div class="inspector-meta-bar">
+                    <div class="inspector-chip">
+                        <span>District</span>
+                        <strong id="inspector-district">Civic Core</strong>
+                    </div>
+                    <div class="inspector-chip">
+                        <span>Active Level</span>
+                        <strong id="inspector-level">Level 1</strong>
+                    </div>
+                    <div class="inspector-chip">
+                        <span>Efficiency Multiplier</span>
+                        <strong id="inspector-multiplier">+0% (Level 1)</strong>
+                    </div>
+                    <div class="inspector-chip">
+                        <span>Total Built</span>
+                        <strong id="inspector-count">1 instance</strong>
+                    </div>
+                </div>
+                <p class="inspector-desc" id="inspector-desc">Human-scale modular housing that turns civic services into steady growth.</p>
+                <div class="inspector-stats-grid">
+                    <div class="inspector-stat-card">
+                        <span class="stat-kicker">Resource Outputs</span>
+                        <div class="stat-list" id="inspector-outputs">
+                            <span class="stat-item positive">+5.0 Credits / tick</span>
+                        </div>
+                    </div>
+                    <div class="inspector-stat-card">
+                        <span class="stat-kicker">Upkeep Demands</span>
+                        <div class="stat-list" id="inspector-upkeep">
+                            <span class="stat-item negative">-1.2 Food · -1.6 Water · -1.0 Power</span>
+                        </div>
+                    </div>
+                    <div class="inspector-stat-card">
+                        <span class="stat-kicker">Civic Capacity</span>
+                        <div class="stat-list" id="inspector-capacity">
+                            <span class="stat-item highlight">90 Housing · 8 Jobs · +4.0 Wellbeing</span>
+                        </div>
+                    </div>
+                    <div class="inspector-stat-card">
+                        <span class="stat-kicker">Active Synergies</span>
+                        <div class="stat-list" id="inspector-synergies">
+                            <span class="stat-item synergy">+35% Output beside Culture</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="inspector-actions">
+                    <button class="button button-accent inspector-btn-upgrade" id="btn-inspector-upgrade" type="button">
+                        <span class="btn-main">⭐ Upgrade to Level 2</span>
+                        <small id="inspector-upgrade-cost">Cost: 450 Credits · 60 Materials (+50% output)</small>
+                    </button>
+                    <button class="button button-danger inspector-btn-demolish" id="btn-inspector-demolish" type="button">
+                        <span class="btn-main">♻️ Demolish Structure</span>
+                        <small id="inspector-demolish-refund">Recycle &amp; refund 40% (260 Credits · 36 Materials)</small>
+                    </button>
                 </div>
             </div>
         </div>

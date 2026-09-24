@@ -1448,9 +1448,10 @@ impl SimulationRuntime {
 
         let event = SimulationEvent::new(
             self.world.current_tick(),
-            EventType::CapacityChanged {
-                entity: district_id.to_string(),
-                new_capacity: remaining as f64,
+            EventType::BuildingConstructed {
+                building: building.id,
+                district: district_id.to_string(),
+                count: remaining as u32,
             },
         );
         self.record_player_event(event.clone());
@@ -4441,5 +4442,48 @@ goods = 2.0
             serde_json::to_value(runtime.current_progress()).expect("progress serializes"),
             before_progress
         );
+    }
+
+    #[test]
+    fn city_upgrade_and_demolish_are_deterministic() {
+        let play = || {
+            let mut runtime = SimulationRuntime::load(&example("micro-city"), 777, Some(120)).unwrap();
+            // Construct two maker-cooperatives in old-grid
+            runtime.construct_building("maker-cooperative", "old-grid").unwrap();
+            runtime.construct_building("maker-cooperative", "old-grid").unwrap();
+            let p1 = runtime.current_progress();
+            let city1 = p1.city.as_ref().unwrap();
+            let b1 = city1.buildings.iter().find(|b| b.id == "maker-cooperative").unwrap();
+            assert_eq!(b1.level, 1);
+            assert_eq!(b1.count, 2);
+
+            // Upgrade it to level 2
+            runtime.upgrade_city_building("maker-cooperative").unwrap();
+            let p2 = runtime.current_progress();
+            let city2 = p2.city.as_ref().unwrap();
+            let b2 = city2.buildings.iter().find(|b| b.id == "maker-cooperative").unwrap();
+            assert_eq!(b2.level, 2);
+
+            // Step through a season change (ticks 0..65)
+            runtime.step(65).unwrap();
+            let p3 = runtime.current_progress();
+            let city3 = p3.city.as_ref().unwrap();
+            let eco = city3.ecology.as_ref().expect("ecology present in micro-city");
+            assert_eq!(eco.season, "Summer"); // tick 65 is Summer (cycle 0, season 1)
+            assert!(!eco.weather.is_empty());
+
+            // Demolish one maker-cooperative
+            runtime.demolish_city_building("maker-cooperative", "old-grid").unwrap();
+            let p4 = runtime.current_progress();
+            let city4 = p4.city.as_ref().unwrap();
+            let b4 = city4.buildings.iter().find(|b| b.id == "maker-cooperative").unwrap();
+            assert_eq!(b4.count, 1);
+
+            runtime.step(60).unwrap();
+            let result = runtime.completed_result().unwrap();
+            (result.final_state_fingerprint, result.proof.event_chain_root)
+        };
+
+        assert_eq!(play(), play());
     }
 }

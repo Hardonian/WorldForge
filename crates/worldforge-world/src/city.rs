@@ -151,6 +151,12 @@ pub struct CivicTrigger {
     pub resource_below: BTreeMap<String, f64>,
     #[serde(default)]
     pub resource_above: BTreeMap<String, f64>,
+    /// Persistent trajectory axes that must be below the authored threshold.
+    #[serde(default)]
+    pub trajectory_below: BTreeMap<String, f64>,
+    /// Persistent trajectory axes that must be above the authored threshold.
+    #[serde(default)]
+    pub trajectory_above: BTreeMap<String, f64>,
     #[serde(default)]
     pub requires_technologies: Vec<String>,
     #[serde(default)]
@@ -171,6 +177,10 @@ pub struct CivicOption {
     pub grants: BTreeMap<String, f64>,
     #[serde(default)]
     pub faction_support: BTreeMap<String, f64>,
+    /// Long-lived directional consequences. Axes are world-authored IDs such
+    /// as `innovation`, `cohesion`, `sustainability`, `prosperity`, or `risk`.
+    #[serde(default)]
+    pub trajectory: BTreeMap<String, f64>,
     #[serde(default)]
     pub effects: CivicEffects,
 }
@@ -596,6 +606,10 @@ impl CityConfig {
                         )));
                     }
                 }
+                validate_trajectory_values(
+                    &option.trajectory,
+                    &format!("dilemma '{}.{}' trajectory", dilemma.id, option.id),
+                )?;
                 validate_civic_effects(
                     &option.effects,
                     &building_ids,
@@ -635,6 +649,14 @@ impl CityConfig {
             validate_amounts(
                 &dilemma.trigger.resource_above,
                 &format!("dilemma '{}' resource_above", dilemma.id),
+            )?;
+            validate_trajectory_values(
+                &dilemma.trigger.trajectory_below,
+                &format!("dilemma '{}' trajectory_below", dilemma.id),
+            )?;
+            validate_trajectory_values(
+                &dilemma.trigger.trajectory_above,
+                &format!("dilemma '{}' trajectory_above", dilemma.id),
             )?;
             for technology in &dilemma.trigger.requires_technologies {
                 if !technology_ids.contains(technology.as_str()) {
@@ -899,6 +921,21 @@ fn validate_amounts(values: &BTreeMap<String, f64>, context: &str) -> Result<(),
     for (resource, amount) in values {
         validate_id(resource, "resource")?;
         validate_amount(*amount, &format!("{context}.{resource}"), false)?;
+    }
+    Ok(())
+}
+
+fn validate_trajectory_values(
+    values: &BTreeMap<String, f64>,
+    context: &str,
+) -> Result<(), WorldForgeError> {
+    for (axis, value) in values {
+        validate_id(axis, "trajectory axis")?;
+        if !value.is_finite() || !(-100.0..=100.0).contains(value) {
+            return Err(city_error(format!(
+                "{context} axis '{axis}' must be finite and between -100 and 100"
+            )));
+        }
     }
     Ok(())
 }
