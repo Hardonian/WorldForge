@@ -2720,7 +2720,9 @@ mod tests {
             .as_array()
             .unwrap()
             .iter()
-            .any(|market| market["id"] == "forgecoin" && market["holdings"].as_f64().unwrap() > 0.0));
+            .any(
+                |market| market["id"] == "forgecoin" && market["holdings"].as_f64().unwrap() > 0.0
+            ));
         let save = save_play_session(
             &state,
             SaveRequest {
@@ -2741,7 +2743,9 @@ mod tests {
             .as_array()
             .unwrap()
             .iter()
-            .any(|market| market["id"] == "forgecoin" && market["holdings"].as_f64().unwrap() > 0.0));
+            .any(
+                |market| market["id"] == "forgecoin" && market["holdings"].as_f64().unwrap() > 0.0
+            ));
         let resumed_id = resumed["sessionId"].as_str().unwrap();
         let resumed_final = step_play_session(&state, resumed_id, 20).unwrap();
         assert_eq!(

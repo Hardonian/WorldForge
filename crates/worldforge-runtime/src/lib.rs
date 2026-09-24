@@ -3822,10 +3822,10 @@ goods = 2.0
 
             let result = runtime.completed_result().unwrap();
             assert!(result.event_type_counts.intrigue >= 10);
-            assert!(runtime.retained_events().iter().any(|event| matches!(
-                event.event_type,
-                EventType::RogueAgentIncident { .. }
-            )));
+            assert!(runtime
+                .retained_events()
+                .iter()
+                .any(|event| matches!(event.event_type, EventType::RogueAgentIncident { .. })));
             (
                 result.final_state_fingerprint,
                 result.proof.event_chain_root,

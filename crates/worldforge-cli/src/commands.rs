@@ -613,6 +613,7 @@ fn simulation_export_with_event_limit(
         ("research", result.event_type_counts.research),
         ("governance", result.event_type_counts.governance),
         ("geopolitics", result.event_type_counts.geopolitics),
+        ("intrigue", result.event_type_counts.intrigue),
     ]);
     let retained_events = runtime.retained_events();
     let event_start = result.event_count.saturating_sub(retained_events.len());

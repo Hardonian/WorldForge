@@ -2569,6 +2569,7 @@ const WorldForgeCG = {
     lastTime: 0,
     radarAngle: 0,
     perspectiveMode: 'strategic',
+    worldLens: 'flow',
     pressedKeys: new Set(),
     walker: { x: 0, y: 0, heading: 0, bob: 0 },
     immersionPulse: { color: '#42d3ea', alpha: 0, label: '' },
@@ -3043,6 +3044,8 @@ const WorldForgeCG = {
         this.init();
         el('btn-view-cg')?.addEventListener('click', () => this.setViewMode('cg'));
         el('btn-view-schematic')?.addEventListener('click', () => this.setViewMode('schematic'));
+        el('btn-view-city')?.addEventListener('click', () => this.setViewMode('city'));
+        el('btn-view-realm')?.addEventListener('click', () => this.setViewMode('realm'));
         el('btn-view-third')?.addEventListener('click', () => this.setViewMode('third'));
         el('btn-view-first')?.addEventListener('click', () => this.setViewMode('first'));
         el('cg-btn-zoom-in')?.addEventListener('click', () => this.zoomBy(1.28));
@@ -3179,17 +3182,22 @@ const WorldForgeCG = {
     setViewMode(mode) {
         this.viewMode = mode === 'schematic' ? 'schematic' : 'cg';
         this.perspectiveMode = mode === 'first' || mode === 'third' ? mode : 'strategic';
+        if (mode === 'city' || mode === 'realm' || mode === 'cg') this.worldLens = mode;
         const btnCg = el('btn-view-cg');
         const btnSchem = el('btn-view-schematic');
         const btnFirst = el('btn-view-first');
         const btnThird = el('btn-view-third');
+        const btnCity = el('btn-view-city');
+        const btnRealm = el('btn-view-realm');
         const canvas = el('play-cg-canvas');
         const svg = el('play-network');
         const toolbar = el('cg-toolbar');
         const hud = el('cg-hud-card');
 
         if (mode !== 'schematic') {
-            btnCg?.classList.toggle('active', this.perspectiveMode === 'strategic');
+            btnCg?.classList.toggle('active', this.perspectiveMode === 'strategic' && this.worldLens === 'cg');
+            btnCity?.classList.toggle('active', this.perspectiveMode === 'strategic' && this.worldLens === 'city');
+            btnRealm?.classList.toggle('active', this.perspectiveMode === 'strategic' && this.worldLens === 'realm');
             btnSchem?.classList.remove('active');
             btnFirst?.classList.toggle('active', this.perspectiveMode === 'first');
             btnThird?.classList.toggle('active', this.perspectiveMode === 'third');
@@ -3205,6 +3213,8 @@ const WorldForgeCG = {
             btnSchem?.classList.add('active');
             btnFirst?.classList.remove('active');
             btnThird?.classList.remove('active');
+            btnCity?.classList.remove('active');
+            btnRealm?.classList.remove('active');
             canvas?.classList.add('hidden');
             svg?.classList.remove('hidden');
             toolbar?.classList.add('hidden');
