@@ -2979,7 +2979,7 @@ impl SimulationRuntime {
             .cloned()
             .ok_or_else(|| action_error("city state is unavailable"))?;
 
-        if tick_val > 0 && tick_val % 25 == 0 {
+        if tick_val > 0 && tick_val.is_multiple_of(25) {
             let has_hostiles = city.political_entities.iter().any(|e| {
                 let stance = state
                     .entity_stances
@@ -3087,7 +3087,7 @@ impl SimulationRuntime {
 
         state.intrigue_heat = (state.intrigue_heat - Fixed64::from_ratio(1, 2)).max(Fixed64::ZERO);
 
-        if tick_value > 0 && tick_value % 5 == 0 {
+        if tick_value > 0 && tick_value.is_multiple_of(5) {
             for asset in &city.crypto_assets {
                 let price = state
                     .crypto_prices
@@ -3113,7 +3113,7 @@ impl SimulationRuntime {
             }
         }
 
-        if tick_value > 0 && tick_value % 10 == 0 {
+        if tick_value > 0 && tick_value.is_multiple_of(10) {
             let rogue_agents = city
                 .cyber_agents
                 .iter()
@@ -3128,7 +3128,7 @@ impl SimulationRuntime {
                 .cloned()
                 .collect::<Vec<_>>();
             for agent in rogue_agents {
-                let resource = if tick_value % 20 == 0 {
+                let resource = if tick_value.is_multiple_of(20) {
                     "research"
                 } else {
                     "credits"

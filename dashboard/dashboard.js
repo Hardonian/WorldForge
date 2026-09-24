@@ -190,6 +190,12 @@ function bindInteractions() {
     el('btn-achievements-dock')?.addEventListener('click', openTrophiesModal);
     el('trophies-close')?.addEventListener('click', closeTrophiesModal);
     el('level-up-dismiss')?.addEventListener('click', closeLevelUpBanner);
+    el('btn-header-play-game')?.addEventListener('click', launchPlayGameMode);
+    el('btn-hud-posture')?.addEventListener('click', toggleDefensePosture);
+    el('btn-war-room-posture')?.addEventListener('click', toggleDefensePosture);
+    el('btn-hud-war-room')?.addEventListener('click', openWarRoomModal);
+    el('war-room-close')?.addEventListener('click', closeWarRoomModal);
+    setupBuildDock();
     setupTreeTabs();
     setupCommanderPowers();
     document.querySelectorAll('[data-proof]').forEach(button => {
@@ -1195,7 +1201,11 @@ async function executeGeopoliticalAction(action, entity, option = null) {
         if (state.play !== play) return;
         consumePlayUpdate(data);
         showToast('Strategic order executed', `${prettyName(action)} changed the balance of power.`);
-        WorldForgeCG.audio.playOverdrive();
+        if (action === 'tribute') WorldForgeCG.audio?.playTribute?.();
+        else if (action === 'strike') WorldForgeCG.audio?.playBattleClash?.();
+        else if (action === 'posture') WorldForgeCG.audio?.playServoLock?.();
+        else if (action === 'emissary' || action === 'coalition') WorldForgeCG.audio?.playWarHorn?.();
+        else WorldForgeCG.audio?.playOverdrive?.();
     } catch (error) {
         showToast('Strategic order rejected', error.message, 'error');
     } finally {
@@ -1203,6 +1213,195 @@ async function executeGeopoliticalAction(action, entity, option = null) {
         play.requestInFlight = false;
         renderCityLayer(play.data?.city);
     }
+}
+
+async function constructCityBuildingDirect(building, district) {
+    const play = state.play;
+    if (!play.sessionId || play.requestInFlight || play.data?.completed || !play.data?.city) return;
+    play.requestInFlight = true;
+    try {
+        const data = await api(`/api/play/sessions/${play.sessionId}/construct`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ building, district }),
+        });
+        if (state.play !== play) return;
+        consumePlayUpdate(data);
+        showToast('Building constructed', `${prettyName(building)} active in ${prettyName(district)}.`);
+        WorldForgeCG.audio?.playConstruction?.();
+        spawnFloatingText(`🏗️ CONSTRUCTED: ${prettyName(building)}`, null, null, 'fx-surge');
+    } catch (error) {
+        showToast('Construction rejected', error.message, 'error');
+    } finally {
+        if (state.play !== play) return;
+        play.requestInFlight = false;
+        renderCityLayer(play.data?.city);
+    }
+}
+
+async function toggleDefensePosture() {
+    const current = state.play?.data?.city?.geopolitics?.defensePosture || 'standard';
+    const next = current === 'fortified' ? 'standard' : 'fortified';
+    WorldForgeCG.audio?.playServoLock?.();
+    await executeGeopoliticalAction('posture', 'defense-garrison', next);
+}
+
+function openWarRoomModal() {
+    const dialog = el('war-room-dialog');
+    if (dialog) {
+        WorldForgeCG.audio?.playWarHorn?.();
+        dialog.showModal();
+        if (state.play?.data?.city?.geopolitics) {
+            renderGeopolitics(state.play.data.city.geopolitics);
+        }
+    }
+}
+
+function closeWarRoomModal() {
+    const dialog = el('war-room-dialog');
+    if (dialog) dialog.close();
+}
+
+function launchPlayGameMode() {
+    openPlayMode();
+    const microCityWorld = state.worlds.find(w => w.id === 'micro-city');
+    if (microCityWorld) {
+        selectWorld('micro-city');
+        startPlaySession();
+        WorldForgeCG.audio?.playUnlock?.();
+        showToast('City Builder Online', 'Sanctuary Haven activated! Build districts and govern the realm.');
+    }
+}
+
+function setupBuildDock() {
+    const dock = el('city-build-dock');
+    if (!dock) return;
+
+    dock.querySelectorAll('.dock-build-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const bId = btn.dataset.building;
+            const bDef = state.play?.data?.city?.buildings?.find(b => b.id === bId);
+            if (bDef && !bDef.unlocked) {
+                showToast('Technology Required', `${bDef.name} requires research: ${bDef.requiresTechnologies?.join(', ') || 'advancement'}.`, 'error');
+                WorldForgeCG.audio?.playShortage?.();
+                return;
+            }
+            if (bId) {
+                if (WorldForgeCG.placementBuilding === bId) {
+                    WorldForgeCG.setPlacementBuilding(null);
+                } else {
+                    WorldForgeCG.setPlacementBuilding(bId);
+                }
+            }
+        });
+    });
+
+    el('btn-cancel-placement')?.addEventListener('click', () => {
+        WorldForgeCG.setPlacementBuilding(null);
+    });
+}
+
+function renderRealmCard(realm) {
+    const card = document.createElement('article');
+    card.className = `realm-card power-${realm.powerStructure} stance-${realm.stance}`;
+    
+    const crests = {
+        fiefdom: '🏰',
+        vassal: '🌾',
+        hegemon: '🦅',
+        coalition: '⚖️',
+        insurgency: '⚔️'
+    };
+    const icon = crests[realm.powerStructure] || '🛡️';
+
+    card.innerHTML = `
+        <div class="realm-card-header">
+            <div class="realm-crest">${icon}</div>
+            <div class="realm-identity">
+                <h4>${realm.name}</h4>
+                <div class="realm-tags">
+                    <span class="power-badge ${realm.powerStructure}">${prettyName(realm.powerStructure)}</span>
+                    <span class="stance-badge stance-${realm.stance}">${realm.stance.toUpperCase()}</span>
+                </div>
+            </div>
+        </div>
+        <p class="realm-desc">${realm.description || ''}</p>
+        <div class="realm-ruler">
+            <span class="ruler-title">Ruler</span>
+            <strong>${realm.rulerTitle}</strong>
+        </div>
+        <div class="realm-meters">
+            <div class="realm-meter-row">
+                <span>Loyalty</span>
+                <div class="meter-bar"><i style="width: ${Math.max(0, Math.min(100, realm.loyalty))}%"></i></div>
+                <span>${Math.round(realm.loyalty)}%</span>
+            </div>
+            <div class="realm-meter-row">
+                <span>Military Power</span>
+                <div class="meter-bar military"><i style="width: ${Math.max(5, Math.min(100, realm.militaryPower / 3))}%"></i></div>
+                <span>${Math.round(realm.militaryPower)}</span>
+            </div>
+        </div>
+        <div class="realm-tribute-info">
+            <span class="tribute-label">Tribute Offering:</span>
+            <span class="tribute-amount">${Object.entries(realm.tribute || {}).map(([res, amt]) => `+${amt} ${prettyName(res)}`).join(', ') || 'None'}</span>
+        </div>
+    `;
+
+    const actions = document.createElement('div');
+    actions.className = 'realm-card-actions';
+
+    if (Object.keys(realm.tribute || {}).length) {
+        const btnTribute = document.createElement('button');
+        btnTribute.type = 'button';
+        btnTribute.className = 'button button-primary tribute-btn';
+        btnTribute.textContent = '👑 Demand Tribute';
+        btnTribute.disabled = !realm.tributeAvailable || state.play?.requestInFlight;
+        btnTribute.addEventListener('click', () => {
+            WorldForgeCG.audio?.playTribute?.();
+            executeGeopoliticalAction('tribute', realm.id);
+        });
+        actions.append(btnTribute);
+    }
+
+    const btnEmissary = document.createElement('button');
+    btnEmissary.type = 'button';
+    btnEmissary.className = 'button emissary-btn';
+    btnEmissary.textContent = '🕊️ Emissary (20 Cr)';
+    btnEmissary.disabled = state.play?.requestInFlight;
+    btnEmissary.addEventListener('click', () => {
+        WorldForgeCG.audio?.playWarHorn?.();
+        executeGeopoliticalAction('emissary', realm.id);
+    });
+    actions.append(btnEmissary);
+
+    if (realm.stance !== 'coalition' && realm.powerStructure !== 'insurgency') {
+        const btnCoalition = document.createElement('button');
+        btnCoalition.type = 'button';
+        btnCoalition.className = 'button coalition-btn';
+        btnCoalition.textContent = '🤝 Defensive Pact';
+        btnCoalition.disabled = state.play?.requestInFlight;
+        btnCoalition.addEventListener('click', () => {
+            WorldForgeCG.audio?.playWarHorn?.();
+            executeGeopoliticalAction('coalition', realm.id);
+        });
+        actions.append(btnCoalition);
+    }
+
+    if (realm.raidThreat > 0 || realm.powerStructure === 'insurgency') {
+        const btnStrike = document.createElement('button');
+        btnStrike.type = 'button';
+        btnStrike.className = 'button button-danger strike-btn';
+        btnStrike.textContent = '⚔️ Preemptive Strike';
+        btnStrike.disabled = state.play?.requestInFlight;
+        btnStrike.addEventListener('click', () => {
+            WorldForgeCG.audio?.playBattleClash?.();
+            executeGeopoliticalAction('strike', realm.id);
+        });
+        actions.append(btnStrike);
+    }
+
+    card.append(actions);
+    return card;
 }
 
 async function executeIntrigueAction(action, target, agent = null, option = null) {
@@ -1258,6 +1457,21 @@ function renderCityLayer(city) {
         });
     }
     if (ids.includes(currentBuilding)) buildingSelect.value = currentBuilding;
+
+    // Sync RTS Quick-Build Dock buttons
+    const dock = el('city-build-dock');
+    if (dock && city.buildings) {
+        dock.querySelectorAll('.dock-build-btn').forEach(btn => {
+            const bDef = city.buildings.find(b => b.id === btn.dataset.building);
+            if (bDef) {
+                btn.disabled = !bDef.unlocked || !bDef.affordable;
+                btn.classList.toggle('locked', !bDef.unlocked);
+                btn.title = bDef.unlocked ?
+                    `${bDef.name} (${bDef.count}/${bDef.maxCount}): ${bDef.description}` :
+                    `${bDef.name} [LOCKED]: Requires research: ${bDef.requiresTechnologies?.join(', ') || 'advancement'}`;
+            }
+        });
+    }
 
     const districts = el('city-districts');
     districts.replaceChildren(...city.districts.map(district => {
@@ -1361,33 +1575,97 @@ function emptyCivicState(message) {
 }
 
 function renderGeopolitics(geopolitics) {
+    // 1. Update 3rd World Farmer Hardship HUD
+    const hud = el('city-hardship-hud');
+    if (hud) {
+        hud.classList.toggle('hidden', !geopolitics);
+    }
+    if (geopolitics) {
+        const droughtVal = el('hud-drought-val');
+        if (droughtVal) {
+            const d = geopolitics.droughtIndex || 0;
+            droughtVal.textContent = d > 50 ? 'Severe (Crit)' : (d > 25 ? 'Moderate' : 'Normal');
+            droughtVal.style.color = d > 50 ? 'var(--coral)' : (d > 25 ? 'var(--amber)' : 'var(--mint)');
+        }
+        const famineVal = el('hud-famine-val');
+        if (famineVal) {
+            const f = geopolitics.famineRisk || 0;
+            famineVal.textContent = f > 0.6 ? 'Crisis!' : (f > 0.25 ? 'Elevated' : 'Low');
+            famineVal.style.color = f > 0.6 ? 'var(--coral)' : (f > 0.25 ? 'var(--amber)' : 'var(--mint)');
+        }
+        const raidVal = el('hud-raid-val');
+        const threatFill = el('hud-threat-fill');
+        const raidChip = el('hud-raid-chip');
+        if (raidVal && threatFill) {
+            const threat = Math.round(geopolitics.borderThreat || 0);
+            raidVal.textContent = `${threat}%`;
+            threatFill.style.width = `${Math.min(100, threat)}%`;
+            if (raidChip) {
+                raidChip.classList.toggle('active-raid', threat >= 70);
+            }
+        }
+        const isFortified = geopolitics.defensePosture === 'fortified';
+        const postureLabel = el('hud-posture-label');
+        if (postureLabel) {
+            postureLabel.textContent = isFortified ? 'Fortified Citadel' : 'Standard Garrison';
+        }
+        const warPosture = el('war-stat-posture');
+        if (warPosture) {
+            warPosture.textContent = isFortified ? 'Fortified Citadel' : 'Standard Garrison';
+        }
+        const warPostureBtnText = el('war-room-posture-text');
+        if (warPostureBtnText) {
+            warPostureBtnText.textContent = isFortified ? 'Fortified Citadel' : 'Standard Garrison';
+        }
+        const warThreat = el('war-stat-threat');
+        if (warThreat) {
+            const t = Math.round(geopolitics.borderThreat || 0);
+            warThreat.textContent = `${t}% Incursion Risk`;
+            warThreat.style.color = t >= 70 ? 'var(--coral)' : (t >= 35 ? 'var(--amber)' : 'var(--mint)');
+        }
+        const warCoalition = el('war-stat-coalition');
+        if (warCoalition) {
+            warCoalition.textContent = geopolitics.activeCoalition ? prettyName(geopolitics.activeCoalition) : 'None';
+        }
+
+        // War Room Entities Grid
+        const grid = el('war-room-entities-grid');
+        if (grid && geopolitics.entities) {
+            grid.replaceChildren(...geopolitics.entities.map(renderRealmCard));
+        }
+    }
+
     const consoleNode = el('geopolitics-console');
     if (!consoleNode) return;
     consoleNode.classList.toggle('hidden', !geopolitics);
     if (!geopolitics) return;
     const stats = el('geopolitics-stats');
-    stats.replaceChildren(
-        strategyStat('Defense', geopolitics.defensePosture),
-        strategyStat('Power', formatDecimal(geopolitics.militaryPower, 0)),
-        strategyStat('Border threat', `${formatDecimal(geopolitics.borderThreat, 0)}%`),
-        strategyStat('Famine risk', `${formatDecimal(geopolitics.famineRisk * 100, 0)}%`),
-    );
+    if (stats) {
+        stats.replaceChildren(
+            strategyStat('Defense', geopolitics.defensePosture),
+            strategyStat('Power', formatDecimal(geopolitics.militaryPower, 0)),
+            strategyStat('Border threat', `${formatDecimal(geopolitics.borderThreat, 0)}%`),
+            strategyStat('Famine risk', `${formatDecimal((geopolitics.famineRisk || 0) * 100, 0)}%`),
+        );
+    }
     const realms = el('geopolitics-entities');
-    realms.replaceChildren(...geopolitics.entities.map(realm => {
-        const card = document.createElement('article'); card.className = 'realm-card';
-        const head = document.createElement('div');
-        const title = document.createElement('strong'); title.textContent = realm.name;
-        const stance = document.createElement('span'); stance.className = `stance stance-${realm.stance}`; stance.textContent = realm.stance;
-        head.append(title, stance);
-        const copy = document.createElement('p'); copy.textContent = `${realm.rulerTitle} · ${prettyName(realm.powerStructure)} · loyalty ${formatDecimal(realm.loyalty, 0)} · power ${formatDecimal(realm.militaryPower, 0)}`;
-        const actions = document.createElement('div'); actions.className = 'mini-actions';
-        if (Object.keys(realm.tribute || {}).length) actions.append(strategyButton('Tribute', () => executeGeopoliticalAction('tribute', realm.id), !realm.tributeAvailable));
-        actions.append(strategyButton('Emissary', () => executeGeopoliticalAction('emissary', realm.id)));
-        if (realm.stance !== 'coalition') actions.append(strategyButton('Coalition', () => executeGeopoliticalAction('coalition', realm.id)));
-        if (realm.raidThreat > 0) actions.append(strategyButton('Strike', () => executeGeopoliticalAction('strike', realm.id), false, 'danger'));
-        card.append(head, copy, actions);
-        return card;
-    }));
+    if (realms && geopolitics.entities) {
+        realms.replaceChildren(...geopolitics.entities.map(realm => {
+            const card = document.createElement('article'); card.className = 'realm-card';
+            const head = document.createElement('div');
+            const title = document.createElement('strong'); title.textContent = realm.name;
+            const stance = document.createElement('span'); stance.className = `stance stance-${realm.stance}`; stance.textContent = realm.stance;
+            head.append(title, stance);
+            const copy = document.createElement('p'); copy.textContent = `${realm.rulerTitle} · ${prettyName(realm.powerStructure)} · loyalty ${formatDecimal(realm.loyalty, 0)} · power ${formatDecimal(realm.militaryPower, 0)}`;
+            const actions = document.createElement('div'); actions.className = 'mini-actions';
+            if (Object.keys(realm.tribute || {}).length) actions.append(strategyButton('Tribute', () => executeGeopoliticalAction('tribute', realm.id), !realm.tributeAvailable));
+            actions.append(strategyButton('Emissary', () => executeGeopoliticalAction('emissary', realm.id)));
+            if (realm.stance !== 'coalition') actions.append(strategyButton('Coalition', () => executeGeopoliticalAction('coalition', realm.id)));
+            if (realm.raidThreat > 0) actions.append(strategyButton('Strike', () => executeGeopoliticalAction('strike', realm.id), false, 'danger'));
+            card.append(head, copy, actions);
+            return card;
+        }));
+    }
 }
 
 function renderIntrigue(intrigue) {
@@ -2569,10 +2847,18 @@ const WorldForgeCG = {
     lastTime: 0,
     radarAngle: 0,
     perspectiveMode: 'strategic',
-    worldLens: 'flow',
+    worldLens: 'city',
     pressedKeys: new Set(),
     walker: { x: 0, y: 0, heading: 0, bob: 0 },
     immersionPulse: { color: '#42d3ea', alpha: 0, label: '' },
+    placementBuilding: null,
+    hoveredTile: null,
+    hoveredDistrict: null,
+    hoveredRealmEntity: null,
+    cityCitizens: [],
+    chimneySmoke: [],
+    cityLifeInit: false,
+    hasChosenLens: false,
 
     data: null,
     nodes: new Map(),
@@ -3028,12 +3314,29 @@ const WorldForgeCG = {
             } else if (key === 'm') {
                 e.preventDefault();
                 this.setViewMode(this.viewMode === 'cg' ? 'schematic' : 'cg');
-            } else if (['1', '2', '3', '4', '5'].includes(key)) {
-                const speeds = { '1': 1, '2': 2, '3': 5, '4': 10, '5': 20 };
-                const speedSelect = el('play-speed');
-                if (speedSelect && speeds[key]) {
-                    speedSelect.value = String(speeds[key]);
-                    setPlaySpeed(speeds[key]);
+            } else if (key === 'escape' && this.placementBuilding) {
+                e.preventDefault();
+                this.setPlacementBuilding(null);
+                return;
+            } else if (['1', '2', '3', '4', '5', '6'].includes(key)) {
+                if (this.worldLens === 'city') {
+                    e.preventDefault();
+                    const bMap = {
+                        '1': 'solar-canopy',
+                        '2': 'courtyard-homes',
+                        '3': 'maker-cooperative',
+                        '4': 'vertical-farm',
+                        '5': 'water-garden',
+                        '6': 'civic-lab'
+                    };
+                    this.setPlacementBuilding(bMap[key]);
+                } else {
+                    const speeds = { '1': 1, '2': 2, '3': 5, '4': 10, '5': 20 };
+                    const speedSelect = el('play-speed');
+                    if (speedSelect && speeds[key]) {
+                        speedSelect.value = String(speeds[key]);
+                        setPlaySpeed(speeds[key]);
+                    }
                 }
             }
         });
@@ -3148,6 +3451,44 @@ const WorldForgeCG = {
             const rect = c.getBoundingClientRect();
             const px = e.clientX - rect.left;
             const py = e.clientY - rect.top;
+
+            if (this.worldLens === 'city') {
+                const tile = this.fromIso(px, py);
+                if (tile.gx >= 0 && tile.gx < 10 && tile.gy >= 0 && tile.gy < 10) {
+                    const district = this.getDistrictForTile(tile.gx, tile.gy);
+                    if (this.placementBuilding) {
+                        if (district) {
+                            constructCityBuildingDirect(this.placementBuilding, district);
+                            this.audio.playConstruction();
+                            const iso = this.toIso(tile.gx, tile.gy);
+                            this.shockwaves.push({
+                                x: iso.x, y: iso.y, r: 10, maxR: 70,
+                                color: '#38ef7d', alpha: 1, width: 3,
+                            });
+                            if (!e.shiftKey) {
+                                this.setPlacementBuilding(null);
+                            }
+                        } else {
+                            showToast('Invalid Plot', 'Cannot construct on roadways or public plaza.', 'error');
+                            this.audio.playShortage();
+                        }
+                    } else {
+                        if (district) {
+                            showToast('District Selected', `${prettyName(district)} selected.`);
+                            this.audio.playBlip(720, 0.05);
+                        }
+                    }
+                }
+                return;
+            } else if (this.worldLens === 'realm') {
+                const realmHit = this.getRealmEntityAt(px, py);
+                if (realmHit) {
+                    openWarRoomModal();
+                    this.audio.playWarHorn();
+                }
+                return;
+            }
+
             const hit = this.getNodeAt(px, py);
             if (hit) {
                 this.setSelectedEntity(hit.name);
@@ -3205,6 +3546,7 @@ const WorldForgeCG = {
             svg?.classList.add('hidden');
             toolbar?.classList.remove('hidden');
             el('immersion-hud')?.classList.toggle('hidden', this.perspectiveMode === 'strategic');
+            el('city-build-dock')?.classList.toggle('hidden', this.worldLens !== 'city');
             el('play-network-container')?.setAttribute('data-perspective', this.perspectiveMode);
             if (this.perspectiveMode !== 'strategic') this.enterImmersiveMode();
             this.start();
@@ -3220,6 +3562,7 @@ const WorldForgeCG = {
             toolbar?.classList.add('hidden');
             hud?.classList.add('hidden');
             el('immersion-hud')?.classList.add('hidden');
+            el('city-build-dock')?.classList.add('hidden');
             el('play-network-container')?.removeAttribute('data-perspective');
             this.stop();
         }
@@ -3335,6 +3678,12 @@ const WorldForgeCG = {
         if (data.world && this.lastWorld !== data.world) {
             this.lastWorld = data.world;
             this.initEnvWeather(data.world);
+        }
+
+        if (data.city && !this.hasChosenLens) {
+            this.hasChosenLens = true;
+            this.worldLens = 'city';
+            this.setViewMode('city');
         }
 
         const entities = data.entityStates.slice(0, MAX_NETWORK_NODES);
@@ -3747,6 +4096,27 @@ const WorldForgeCG = {
     },
 
     checkHover(px, py) {
+        if (this.worldLens === 'city') {
+            const tile = this.fromIso(px, py);
+            if (tile.gx >= 0 && tile.gx < 10 && tile.gy >= 0 && tile.gy < 10) {
+                this.hoveredTile = tile;
+                this.hoveredDistrict = this.getDistrictForTile(tile.gx, tile.gy);
+                this.canvas.style.cursor = this.placementBuilding ? 'crosshair' : 'pointer';
+            } else {
+                this.hoveredTile = null;
+                this.hoveredDistrict = null;
+                this.canvas.style.cursor = this.camera.isDragging ? 'grabbing' : 'grab';
+            }
+            if (this.hud) this.hud.classList.add('hidden');
+            return;
+        } else if (this.worldLens === 'realm') {
+            const realmHit = this.getRealmEntityAt(px, py);
+            this.hoveredRealmEntity = realmHit;
+            this.canvas.style.cursor = realmHit ? 'pointer' : (this.camera.isDragging ? 'grabbing' : 'grab');
+            if (this.hud) this.hud.classList.add('hidden');
+            return;
+        }
+
         const hit = this.getNodeAt(px, py);
         this.hoveredNode = hit;
         this.canvas.style.cursor = hit ? 'pointer' : (this.camera.isDragging ? 'grabbing' : 'grab');
@@ -3828,6 +4198,802 @@ const WorldForgeCG = {
         this.hud.classList.remove('hidden');
     },
 
+    initCityLife() {
+        if (this.cityLifeInit) return;
+        this.cityLifeInit = true;
+        const professions = [
+            { role: 'Farmer', emoji: '🌾', color: '#84cc16' },
+            { role: 'Engineer', emoji: '⚙️', color: '#f59e0b' },
+            { role: 'Scientist', emoji: '🧪', color: '#38bdf8' },
+            { role: 'Citizen', emoji: '😊', color: '#a855f7' },
+            { role: 'Merchant', emoji: '💰', color: '#fbbf24' },
+            { role: 'Guard', emoji: '🛡️', color: '#ef4444' }
+        ];
+        this.cityCitizens = Array.from({ length: 14 }, (_, i) => {
+            const prof = professions[i % professions.length];
+            const onHWay = i % 2 === 0;
+            return {
+                gx: onHWay ? 1 + (i % 8) : (i % 4 < 2 ? 4 : 5),
+                gy: onHWay ? (i % 4 < 2 ? 4 : 5) : 1 + (i % 8),
+                dir: i % 3 === 0 ? -1 : 1,
+                axis: onHWay ? 'x' : 'y',
+                speed: 0.012 + (i % 3) * 0.005,
+                bob: i * 0.9,
+                role: prof.role,
+                emoji: prof.emoji,
+                color: prof.color,
+                bubbleTimer: Math.random() * 200,
+                bubbleEmoji: prof.emoji
+            };
+        });
+
+        this.chimneySmoke = Array.from({ length: 24 }, (_, i) => ({
+            gx: 2, gy: 7,
+            offsetY: -(i * 2.5),
+            offsetX: 0,
+            r: 2 + Math.random() * 3.5,
+            alpha: Math.random() * 0.7,
+            vx: (Math.random() - 0.3) * 0.25,
+            vy: -0.45 - Math.random() * 0.3
+        }));
+    },
+
+    toIso(gx, gy) {
+        const tileW = 76;
+        const tileH = 38;
+        return {
+            x: (gx - gy) * (tileW / 2),
+            y: (gx + gy) * (tileH / 2)
+        };
+    },
+
+    fromIso(px, py) {
+        const w = this.canvas.clientWidth;
+        const h = this.canvas.clientHeight;
+        const cx = w / 2 + this.camera.x;
+        const cy = h / 2 + this.camera.y - 120;
+        const wx = (px - cx) / this.camera.zoom;
+        const wy = (py - cy) / this.camera.zoom;
+        const tileW = 76;
+        const tileH = 38;
+        const gx = Math.round((wx / (tileW / 2) + wy / (tileH / 2)) / 2);
+        const gy = Math.round((wy / (tileH / 2) - wx / (tileW / 2)) / 2);
+        return { gx, gy };
+    },
+
+    getDistrictForTile(gx, gy) {
+        if (gx < 0 || gx > 9 || gy < 0 || gy > 9) return null;
+        if (gx === 4 || gx === 5 || gy === 4 || gy === 5) return null; // Roads & Plaza
+        if (gx === 0 || gx === 9 || gy === 0 || gy === 9) return null; // Perimeter
+
+        if (gx >= 1 && gx <= 3 && gy >= 1 && gy <= 3) return 'civic-core';
+        if (gx >= 6 && gx <= 8 && gy >= 1 && gy <= 3) return 'river-ward';
+        if (gx >= 1 && gx <= 3 && gy >= 6 && gy <= 8) return 'old-grid';
+        if (gx >= 6 && gx <= 8 && gy >= 6 && gy <= 8) return 'sun-belt';
+        return null;
+    },
+
+    setPlacementBuilding(buildingId) {
+        this.placementBuilding = buildingId;
+        const status = el('dock-placement-status');
+        const nameEl = el('placement-building-name');
+        const dock = el('city-build-dock');
+
+        if (dock) {
+            dock.querySelectorAll('.dock-build-btn').forEach(btn => {
+                btn.classList.toggle('active-placement', btn.dataset.building === buildingId);
+            });
+        }
+
+        if (buildingId) {
+            if (status) status.classList.remove('hidden');
+            if (nameEl) nameEl.textContent = `Placing: ${prettyName(buildingId)}`;
+            this.canvas.style.cursor = 'crosshair';
+            this.audio?.playBlip?.(600, 0.08);
+        } else {
+            if (status) status.classList.add('hidden');
+            this.canvas.style.cursor = 'grab';
+        }
+    },
+
+    getRealmEntityAt(px, py) {
+        const w = this.canvas.clientWidth;
+        const h = this.canvas.clientHeight;
+        const cx = w / 2 + this.camera.x;
+        const cy = h / 2 + this.camera.y;
+        const wx = (px - cx) / this.camera.zoom;
+        const wy = (py - cy) / this.camera.zoom;
+
+        const realms = [
+            { id: 'sanctuary-haven', name: 'Sanctuary Haven', x: 0, y: 0, r: 52 },
+            { id: 'barony-oakhaven', name: 'Barony of Oakhaven', x: 0, y: -190, r: 44 },
+            { id: 'riverside-vassal', name: 'Riverside Protectorate', x: -260, y: -30, r: 44 },
+            { id: 'iron-mandate', name: 'Iron Mandate Hegemony', x: 260, y: -30, r: 44 },
+            { id: 'mercantile-league', name: 'Free Mercantile League', x: 120, y: 190, r: 44 },
+            { id: 'dust-canyon-raiders', name: 'Dust Canyon Raiders', x: -180, y: 170, r: 44 },
+        ];
+
+        for (const r of realms) {
+            if (Math.hypot(wx - r.x, wy - r.y) <= r.r) return r;
+        }
+        return null;
+    },
+
+    renderCityView(ctx, w, h, now) {
+        this.initCityLife();
+        const city = state.play?.data?.city;
+        const dIndex = city?.geopolitics?.droughtIndex || 0;
+        const isDrought = dIndex > 35;
+        const isFortified = city?.geopolitics?.defensePosture === 'fortified';
+        const raidThreat = city?.geopolitics?.borderThreat || 0;
+        const tileW = 76;
+        const tileH = 38;
+
+        ctx.save();
+        ctx.translate(0, -120);
+
+        const tiles = [];
+        for (let gx = 0; gx < 10; gx++) {
+            for (let gy = 0; gy < 10; gy++) {
+                tiles.push({ gx, gy, depth: (gx + gy) * 100 + (gx - gy) });
+            }
+        }
+        tiles.sort((a, b) => a.depth - b.depth);
+
+        tiles.forEach(({ gx, gy }) => {
+            const { x: ix, y: iy } = this.toIso(gx, gy);
+            const isRoad = (gx === 4 || gx === 5 || gy === 4 || gy === 5);
+            const isPlaza = (gx === 4 || gx === 5) && (gy === 4 || gy === 5);
+            const isPerimeter = (gx === 0 || gx === 9 || gy === 0 || gy === 9);
+            const district = this.getDistrictForTile(gx, gy);
+
+            // Draw isometric depth slab
+            ctx.fillStyle = '#0f172a';
+            ctx.beginPath();
+            ctx.moveTo(ix - tileW / 2, iy + tileH / 2);
+            ctx.lineTo(ix, iy + tileH);
+            ctx.lineTo(ix + tileW / 2, iy + tileH / 2);
+            ctx.lineTo(ix + tileW / 2, iy + tileH / 2 + 10);
+            ctx.lineTo(ix, iy + tileH + 10);
+            ctx.lineTo(ix - tileW / 2, iy + tileH / 2 + 10);
+            ctx.closePath();
+            ctx.fill();
+
+            // Tile top
+            ctx.beginPath();
+            ctx.moveTo(ix, iy);
+            ctx.lineTo(ix + tileW / 2, iy + tileH / 2);
+            ctx.lineTo(ix, iy + tileH);
+            ctx.lineTo(ix - tileW / 2, iy + tileH / 2);
+            ctx.closePath();
+
+            if (isPlaza) {
+                const grad = ctx.createLinearGradient(ix - tileW / 2, iy, ix + tileW / 2, iy + tileH);
+                grad.addColorStop(0, '#475569');
+                grad.addColorStop(1, '#334155');
+                ctx.fillStyle = grad;
+                ctx.fill();
+                ctx.strokeStyle = 'rgba(234, 179, 8, 0.4)';
+                ctx.lineWidth = 1;
+                ctx.stroke();
+            } else if (isRoad) {
+                ctx.fillStyle = '#1e293b';
+                ctx.fill();
+                ctx.strokeStyle = '#334155';
+                ctx.lineWidth = 1;
+                ctx.stroke();
+
+                ctx.save();
+                ctx.strokeStyle = 'rgba(253, 224, 71, 0.45)';
+                ctx.setLineDash([4, 4]);
+                ctx.beginPath();
+                if (gx === 4 || gx === 5) {
+                    ctx.moveTo(ix, iy + 6);
+                    ctx.lineTo(ix, iy + tileH - 6);
+                } else {
+                    ctx.moveTo(ix - 18, iy + tileH / 2);
+                    ctx.lineTo(ix + 18, iy + tileH / 2);
+                }
+                ctx.stroke();
+                ctx.restore();
+            } else if (isPerimeter) {
+                ctx.fillStyle = isDrought ? '#3d2b1f' : '#1e293b';
+                ctx.fill();
+                ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
+                ctx.stroke();
+            } else {
+                const grad = ctx.createLinearGradient(ix, iy, ix, iy + tileH);
+                if (isDrought) {
+                    grad.addColorStop(0, '#543d2b');
+                    grad.addColorStop(1, '#3f2c1d');
+                } else {
+                    grad.addColorStop(0, '#1c4524');
+                    grad.addColorStop(1, '#14331a');
+                }
+                ctx.fillStyle = grad;
+                ctx.fill();
+
+                ctx.strokeStyle = district === 'civic-core' ? 'rgba(66, 211, 234, 0.25)' :
+                                  district === 'river-ward' ? 'rgba(56, 189, 248, 0.25)' :
+                                  district === 'old-grid' ? 'rgba(245, 158, 11, 0.25)' :
+                                  'rgba(234, 179, 8, 0.25)';
+                ctx.lineWidth = 1;
+                ctx.stroke();
+            }
+
+            const isHovered = this.hoveredTile?.gx === gx && this.hoveredTile?.gy === gy;
+            if (isHovered) {
+                ctx.save();
+                ctx.beginPath();
+                ctx.moveTo(ix, iy);
+                ctx.lineTo(ix + tileW / 2, iy + tileH / 2);
+                ctx.lineTo(ix, iy + tileH);
+                ctx.lineTo(ix - tileW / 2, iy + tileH / 2);
+                ctx.closePath();
+
+                if (this.placementBuilding) {
+                    if (district) {
+                        ctx.fillStyle = 'rgba(16, 185, 129, 0.28)';
+                        ctx.strokeStyle = '#10b981';
+                        ctx.lineWidth = 2.5;
+                    } else {
+                        ctx.fillStyle = 'rgba(239, 68, 68, 0.28)';
+                        ctx.strokeStyle = '#ef4444';
+                        ctx.lineWidth = 2.5;
+                    }
+                } else {
+                    ctx.fillStyle = 'rgba(245, 158, 11, 0.18)';
+                    ctx.strokeStyle = '#f59e0b';
+                    ctx.lineWidth = 2;
+                }
+                ctx.fill();
+                ctx.stroke();
+                ctx.restore();
+            }
+
+            this.drawTileStructure(ctx, gx, gy, ix, iy, now, isHovered && this.placementBuilding);
+        });
+
+        this.drawChimneySmoke(ctx, now);
+        this.drawCitizens(ctx, now);
+
+        if (raidThreat > 25) {
+            this.drawRaiders(ctx, now, raidThreat);
+        }
+
+        if (isFortified) {
+            this.drawShieldDome(ctx, now);
+        }
+
+        ctx.restore();
+    },
+
+    drawTileStructure(ctx, gx, gy, ix, iy, now, isGhost) {
+        if (gx === 4 && gy === 4) {
+            ctx.save();
+            ctx.translate(ix + 38, iy + 19);
+            ctx.fillStyle = '#64748b';
+            ctx.beginPath();
+            ctx.ellipse(0, 0, 36, 18, 0, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.strokeStyle = '#94a3b8';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+
+            ctx.fillStyle = '#0ea5e9';
+            ctx.beginPath();
+            ctx.ellipse(0, -2, 30, 15, 0, 0, Math.PI * 2);
+            ctx.fill();
+
+            const rippleR = ((now * 0.015) % 25);
+            ctx.strokeStyle = 'rgba(255,255,255,0.45)';
+            ctx.lineWidth = 1.2;
+            ctx.beginPath();
+            ctx.ellipse(0, -2, rippleR, rippleR * 0.5, 0, 0, Math.PI * 2);
+            ctx.stroke();
+
+            ctx.fillStyle = '#cbd5e1';
+            ctx.fillRect(-5, -16, 10, 14);
+
+            ctx.fillStyle = '#38bdf8';
+            for (let i = 0; i < 6; i++) {
+                const angle = (i / 6) * Math.PI * 2 + now * 0.003;
+                const dropH = Math.abs(Math.sin(now * 0.006 + i)) * 14;
+                const dropX = Math.cos(angle) * (8 + dropH * 0.6);
+                const dropY = -16 - dropH + Math.sin(angle) * 4;
+                ctx.beginPath();
+                ctx.arc(dropX, dropY, 2, 0, Math.PI * 2);
+                ctx.fill();
+            }
+            ctx.restore();
+            return;
+        }
+
+        if ((gx === 0 && gy === 0) || (gx === 9 && gy === 0) || (gx === 0 && gy === 9) || (gx === 9 && gy === 9)) {
+            ctx.save();
+            ctx.translate(ix, iy);
+            ctx.fillStyle = '#334155';
+            ctx.beginPath();
+            ctx.moveTo(-12, 10);
+            ctx.lineTo(12, 10);
+            ctx.lineTo(8, -28);
+            ctx.lineTo(-8, -28);
+            ctx.closePath();
+            ctx.fill();
+            ctx.strokeStyle = '#475569';
+            ctx.stroke();
+
+            ctx.fillStyle = '#475569';
+            ctx.fillRect(-11, -34, 22, 6);
+
+            const flamePulse = Math.sin(now * 0.01 + gx) * 2;
+            ctx.fillStyle = '#f59e0b';
+            ctx.beginPath();
+            ctx.arc(0, -36 + flamePulse, 4, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.restore();
+            return;
+        }
+
+        let buildingType = null;
+        if (gx === 2 && gy === 2) buildingType = 'civic-lab';
+        else if ((gx === 1 && gy === 2) || (gx === 2 && gy === 1)) buildingType = 'courtyard-homes';
+        else if (gx === 7 && gy === 2) buildingType = 'vertical-farm';
+        else if (gx === 6 && gy === 2) buildingType = 'vertical-farm';
+        else if (gx === 8 && gy === 2 || (gx === 7 && gy === 1)) buildingType = 'water-garden';
+        else if (gx === 2 && gy === 7 || (gx === 2 && gy === 6)) buildingType = 'maker-cooperative';
+        else if (gx === 7 && gy === 7 || (gx === 6 && gy === 7)) buildingType = 'solar-canopy';
+
+        if (isGhost) {
+            buildingType = this.placementBuilding;
+        }
+
+        if (!buildingType) return;
+
+        ctx.save();
+        if (isGhost) {
+            ctx.globalAlpha = 0.72;
+        }
+
+        ctx.translate(ix, iy + 14);
+
+        if (buildingType === 'vertical-farm') {
+            ctx.fillStyle = 'rgba(0,0,0,0.3)';
+            ctx.beginPath();
+            ctx.ellipse(0, 0, 18, 9, 0, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.fillStyle = '#1e1b4b';
+            ctx.beginPath();
+            ctx.moveTo(-16, 0);
+            ctx.lineTo(0, 8);
+            ctx.lineTo(0, -48);
+            ctx.lineTo(-16, -56);
+            ctx.closePath();
+            ctx.fill();
+
+            ctx.fillStyle = '#312e81';
+            ctx.beginPath();
+            ctx.moveTo(0, 8);
+            ctx.lineTo(16, 0);
+            ctx.lineTo(16, -56);
+            ctx.lineTo(0, -48);
+            ctx.closePath();
+            ctx.fill();
+
+            for (let tier = 0; tier < 4; tier++) {
+                const ty = -10 - tier * 11;
+                ctx.fillStyle = '#a855f7';
+                ctx.fillRect(-13, ty - 6, 11, 7);
+                ctx.fillStyle = '#22c55e';
+                ctx.fillRect(-11, ty - 3, 7, 4);
+
+                ctx.fillStyle = '#c084fc';
+                ctx.fillRect(2, ty - 6, 11, 7);
+                ctx.fillStyle = '#4ade80';
+                ctx.fillRect(4, ty - 3, 7, 4);
+            }
+
+            ctx.fillStyle = '#e2e8f0';
+            ctx.fillRect(-2, -62, 4, 7);
+            const turbineAngle = now * 0.008;
+            ctx.save();
+            ctx.translate(0, -62);
+            ctx.rotate(turbineAngle);
+            ctx.strokeStyle = '#38bdf8';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(-9, 0); ctx.lineTo(9, 0);
+            ctx.moveTo(0, -9); ctx.lineTo(0, 9);
+            ctx.stroke();
+            ctx.restore();
+
+        } else if (buildingType === 'water-garden') {
+            ctx.fillStyle = 'rgba(0,0,0,0.25)';
+            ctx.beginPath();
+            ctx.ellipse(0, 0, 20, 10, 0, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.fillStyle = '#64748b';
+            ctx.beginPath(); ctx.ellipse(-9, -16, 7, 4, 0, 0, Math.PI * 2); ctx.fill();
+            ctx.fillRect(-16, -16, 14, 18);
+            ctx.fillStyle = '#94a3b8';
+            ctx.fillRect(-13, -16, 8, 18);
+
+            ctx.fillStyle = '#0284c7';
+            ctx.beginPath();
+            ctx.ellipse(6, -4, 12, 6, 0, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.fillStyle = '#10b981';
+            for (let r = 0; r < 4; r++) {
+                ctx.fillRect(1 + r * 3, -12 - (r % 2) * 3, 2, 7);
+            }
+
+        } else if (buildingType === 'solar-canopy') {
+            ctx.strokeStyle = '#64748b';
+            ctx.lineWidth = 2.5;
+            ctx.beginPath();
+            ctx.moveTo(-14, 2); ctx.lineTo(-14, -14);
+            ctx.moveTo(14, 2); ctx.lineTo(14, -14);
+            ctx.stroke();
+
+            ctx.fillStyle = '#1e40af';
+            ctx.beginPath();
+            ctx.moveTo(-18, -14);
+            ctx.lineTo(18, -22);
+            ctx.lineTo(14, -30);
+            ctx.lineTo(-22, -22);
+            ctx.closePath();
+            ctx.fill();
+            ctx.strokeStyle = '#60a5fa';
+            ctx.lineWidth = 1.2;
+            ctx.stroke();
+
+            const glareX = -18 + ((now * 0.03) % 36);
+            ctx.strokeStyle = 'rgba(255,255,255,0.6)';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(glareX, -16); ctx.lineTo(glareX - 4, -26);
+            ctx.stroke();
+
+        } else if (buildingType === 'courtyard-homes') {
+            ctx.fillStyle = 'rgba(0,0,0,0.25)';
+            ctx.beginPath();
+            ctx.ellipse(0, 0, 18, 9, 0, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.fillStyle = '#e2e8f0';
+            ctx.beginPath();
+            ctx.moveTo(-15, 0); ctx.lineTo(0, 7); ctx.lineTo(15, 0);
+            ctx.lineTo(15, -18); ctx.lineTo(0, -25); ctx.lineTo(-15, -18);
+            ctx.closePath();
+            ctx.fill();
+
+            ctx.fillStyle = '#ea580c';
+            ctx.beginPath();
+            ctx.moveTo(-16, -18); ctx.lineTo(0, -26); ctx.lineTo(16, -18);
+            ctx.lineTo(0, -34);
+            ctx.closePath();
+            ctx.fill();
+
+            ctx.fillStyle = '#fbbf24';
+            ctx.fillRect(-10, -12, 5, 5);
+            ctx.fillRect(4, -12, 5, 5);
+
+        } else if (buildingType === 'civic-lab') {
+            ctx.fillStyle = 'rgba(0,0,0,0.3)';
+            ctx.beginPath(); ctx.ellipse(0, 0, 22, 11, 0, 0, Math.PI * 2); ctx.fill();
+
+            ctx.fillStyle = '#94a3b8';
+            ctx.fillRect(-18, -6, 36, 8);
+
+            ctx.fillStyle = '#f8fafc';
+            for (let c = 0; c < 4; c++) {
+                ctx.fillRect(-14 + c * 8, -26, 4, 20);
+            }
+
+            ctx.fillStyle = '#cbd5e1';
+            ctx.beginPath();
+            ctx.moveTo(-18, -26); ctx.lineTo(0, -36); ctx.lineTo(18, -26);
+            ctx.closePath();
+            ctx.fill();
+
+            ctx.fillStyle = '#f59e0b';
+            ctx.beginPath();
+            ctx.arc(0, -36, 8, Math.PI, 0);
+            ctx.fill();
+
+            const bannerWave = Math.sin(now * 0.005) * 3;
+            ctx.strokeStyle = '#64748b';
+            ctx.lineWidth = 1.5;
+            ctx.beginPath(); ctx.moveTo(0, -44); ctx.lineTo(0, -56); ctx.stroke();
+            ctx.fillStyle = '#ef4444';
+            ctx.beginPath();
+            ctx.moveTo(0, -56); ctx.lineTo(10 + bannerWave, -52); ctx.lineTo(0, -48);
+            ctx.closePath(); ctx.fill();
+
+        } else if (buildingType === 'maker-cooperative') {
+            ctx.fillStyle = 'rgba(0,0,0,0.3)';
+            ctx.beginPath(); ctx.ellipse(0, 0, 18, 9, 0, 0, Math.PI * 2); ctx.fill();
+
+            ctx.fillStyle = '#991b1b';
+            ctx.beginPath();
+            ctx.moveTo(-16, 0); ctx.lineTo(0, 7); ctx.lineTo(16, 0);
+            ctx.lineTo(16, -20); ctx.lineTo(0, -28); ctx.lineTo(-16, -20);
+            ctx.closePath();
+            ctx.fill();
+
+            ctx.fillStyle = '#475569';
+            ctx.beginPath();
+            ctx.moveTo(-17, -20); ctx.lineTo(0, -29); ctx.lineTo(17, -20);
+            ctx.lineTo(0, -36);
+            ctx.closePath();
+            ctx.fill();
+
+            const furnacePulse = 0.8 + Math.sin(now * 0.01) * 0.2;
+            ctx.fillStyle = `rgba(249, 115, 22, ${furnacePulse})`;
+            ctx.fillRect(-4, -10, 8, 12);
+
+            ctx.fillStyle = '#7f1d1d';
+            ctx.fillRect(8, -42, 6, 24);
+        }
+
+        ctx.restore();
+    },
+
+    drawChimneySmoke(ctx, now) {
+        const { x: sx, y: sy } = this.toIso(2, 7);
+        ctx.save();
+        ctx.translate(sx + 11, sy - 28);
+        this.chimneySmoke.forEach(p => {
+            p.offsetY += p.vy;
+            p.offsetX += p.vx;
+            p.alpha -= 0.006;
+            if (p.alpha <= 0) {
+                p.offsetY = 0;
+                p.offsetX = (Math.random() - 0.5) * 2;
+                p.alpha = 0.65;
+            }
+            ctx.fillStyle = `rgba(226, 232, 240, ${Math.max(0, p.alpha)})`;
+            ctx.beginPath();
+            ctx.arc(p.offsetX, p.offsetY, p.r, 0, Math.PI * 2);
+            ctx.fill();
+        });
+        ctx.restore();
+    },
+
+    drawCitizens(ctx, now) {
+        this.cityCitizens.forEach(c => {
+            c.bob += 0.12;
+            if (c.axis === 'x') {
+                c.gx += c.speed * c.dir;
+                if (c.gx >= 8) { c.dir = -1; }
+                else if (c.gx <= 1) { c.dir = 1; }
+            } else {
+                c.gy += c.speed * c.dir;
+                if (c.gy >= 8) { c.dir = -1; }
+                else if (c.gy <= 1) { c.dir = 1; }
+            }
+
+            const { x: cx, y: cy } = this.toIso(c.gx, c.gy);
+            const bobY = Math.abs(Math.sin(c.bob)) * 3;
+
+            ctx.save();
+            ctx.translate(cx, cy + 12 - bobY);
+
+            ctx.fillStyle = 'rgba(0,0,0,0.3)';
+            ctx.beginPath();
+            ctx.ellipse(0, bobY, 4, 2, 0, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.strokeStyle = '#1e293b';
+            ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            ctx.moveTo(-1.5, 0); ctx.lineTo(-1.5, 5);
+            ctx.moveTo(1.5, 0); ctx.lineTo(1.5, 5);
+            ctx.stroke();
+
+            ctx.fillStyle = c.color;
+            ctx.fillRect(-2.5, -5, 5, 5);
+
+            ctx.fillStyle = '#fed7aa';
+            ctx.beginPath();
+            ctx.arc(0, -7.5, 2.5, 0, Math.PI * 2);
+            ctx.fill();
+
+            c.bubbleTimer += 0.5;
+            if (c.bubbleTimer > 250 && c.bubbleTimer < 320) {
+                ctx.fillStyle = 'rgba(15, 23, 42, 0.88)';
+                ctx.fillRect(-12, -26, 24, 15);
+                ctx.strokeStyle = '#38bdf8';
+                ctx.lineWidth = 1;
+                ctx.strokeRect(-12, -26, 24, 15);
+                ctx.font = '10px sans-serif';
+                ctx.textAlign = 'center';
+                ctx.fillText(c.emoji, 0, -15);
+            } else if (c.bubbleTimer >= 320) {
+                c.bubbleTimer = Math.random() * 100;
+            }
+
+            ctx.restore();
+        });
+    },
+
+    drawRaiders(ctx, now, threat) {
+        const raiders = [
+            { gx: -0.8, gy: 4.5, angle: 0.2 },
+            { gx: 9.8, gy: 5.2, angle: -0.4 }
+        ];
+
+        raiders.forEach((r) => {
+            const { x: rx, y: ry } = this.toIso(r.gx, r.gy);
+            ctx.save();
+            ctx.translate(rx, ry + 16);
+            ctx.rotate(r.angle);
+
+            ctx.fillStyle = '#78350f';
+            ctx.fillRect(-10, -6, 20, 12);
+            ctx.fillStyle = '#18181b';
+            ctx.fillRect(-12, -8, 5, 4);
+            ctx.fillRect(7, -8, 5, 4);
+            ctx.fillRect(-12, 4, 5, 4);
+            ctx.fillRect(7, 4, 5, 4);
+
+            ctx.strokeStyle = '#ef4444';
+            ctx.lineWidth = 1.5;
+            ctx.beginPath(); ctx.moveTo(0, -6); ctx.lineTo(0, -18); ctx.stroke();
+            ctx.fillStyle = '#b91c1c';
+            ctx.fillRect(0, -18, 8, 5);
+
+            ctx.fillStyle = 'rgba(239, 68, 68, 0.2)';
+            ctx.beginPath();
+            ctx.moveTo(10, 0); ctx.lineTo(40, -15); ctx.lineTo(40, 15);
+            ctx.closePath();
+            ctx.fill();
+
+            ctx.restore();
+        });
+    },
+
+    drawShieldDome(ctx, now) {
+        const { x: cx, y: cy } = this.toIso(4.5, 4.5);
+        ctx.save();
+        ctx.translate(cx, cy);
+
+        const radiusX = 280;
+        const radiusY = 175;
+
+        const domeGrad = ctx.createRadialGradient(0, -40, 20, 0, -20, radiusX);
+        domeGrad.addColorStop(0, 'rgba(56, 189, 248, 0.28)');
+        domeGrad.addColorStop(0.7, 'rgba(6, 182, 212, 0.12)');
+        domeGrad.addColorStop(1, 'rgba(14, 165, 233, 0.02)');
+        ctx.fillStyle = domeGrad;
+        ctx.beginPath();
+        ctx.ellipse(0, -40, radiusX, radiusY, 0, Math.PI, 0);
+        ctx.fill();
+
+        ctx.strokeStyle = '#38bdf8';
+        ctx.lineWidth = 2.5;
+        ctx.shadowColor = '#00f2fe';
+        ctx.shadowBlur = 16;
+        ctx.beginPath();
+        ctx.ellipse(0, -40, radiusX, radiusY, 0, Math.PI, 0);
+        ctx.stroke();
+        ctx.shadowBlur = 0;
+
+        ctx.strokeStyle = 'rgba(56, 189, 248, 0.35)';
+        ctx.lineWidth = 1.2;
+        for (let ring = 1; ring <= 4; ring++) {
+            const rx = radiusX * (ring / 5);
+            const ry = radiusY * (ring / 5);
+            ctx.beginPath();
+            ctx.ellipse(0, -40, rx, ry, 0, Math.PI, 0);
+            ctx.stroke();
+        }
+
+        const corners = [this.toIso(0, 0), this.toIso(9, 0), this.toIso(0, 9), this.toIso(9, 9)];
+        ctx.strokeStyle = 'rgba(56, 189, 248, 0.6)';
+        ctx.lineWidth = 1.8;
+        corners.forEach(cor => {
+            ctx.beginPath();
+            ctx.moveTo(cor.x - cx, cor.y - cy - 20);
+            ctx.lineTo(0, -40 - radiusY + 10);
+            ctx.stroke();
+        });
+
+        ctx.restore();
+    },
+
+    renderRealmView(ctx, w, h, now) {
+        const cx = 0;
+        const cy = 0;
+
+        ctx.save();
+        ctx.strokeStyle = 'rgba(241, 185, 107, 0.12)';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.arc(cx, cy, 260, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.setLineDash([6, 6]);
+        ctx.beginPath();
+        ctx.arc(cx, cy, 180, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.restore();
+
+        const realms = [
+            { id: 'sanctuary-haven', name: 'Sanctuary Haven', title: 'Your Sovereign City', power: 'Metropolis', stance: 'ally', x: 0, y: 0, crest: '🏰', color: '#f59e0b', r: 52 },
+            { id: 'barony-oakhaven', name: 'Barony of Oakhaven', title: 'Martial Fiefdom · Baron Kaelen', power: 'Power 125 · Feudal Levies', stance: 'neutral', x: 0, y: -190, crest: '🛡️', color: '#eab308', r: 44 },
+            { id: 'riverside-vassal', name: 'Riverside Protectorate', title: 'Agricultural Vassal · Gov. Chen', power: 'Tribute: +100 Food, +80 Water', stance: 'vassal', x: -260, y: -30, crest: '🌾', color: '#10b981', r: 44 },
+            { id: 'iron-mandate', name: 'Iron Mandate Hegemony', title: 'Imperial Hegemon · Arch-Imperator', power: 'Power 290 · Threat Aura', stance: 'hostile', x: 260, y: -30, crest: '🦅', color: '#ef4444', r: 44 },
+            { id: 'mercantile-league', name: 'Free Mercantile League', title: 'Trade Coalition · Chancellor Mirren', power: 'Coalition Pact · Credit Lines', stance: 'coalition', x: 120, y: 190, crest: '⚖️', color: '#38bdf8', r: 44 },
+            { id: 'dust-canyon-raiders', name: 'Dust Canyon Raiders', title: 'Desert Insurgency · Warlord Jax', power: 'Warlord Raids · High Incursion', stance: 'hostile', x: -180, y: 170, crest: '⚔️', color: '#f97316', r: 44 },
+        ];
+
+        realms.slice(1).forEach(r => {
+            ctx.save();
+            ctx.strokeStyle = r.color;
+            ctx.globalAlpha = 0.35;
+            ctx.lineWidth = 2;
+            ctx.setLineDash([5, 5]);
+            ctx.beginPath();
+            ctx.moveTo(0, 0);
+            ctx.lineTo(r.x, r.y);
+            ctx.stroke();
+
+            const packetT = ((now * 0.0006 + r.x * 0.01) % 1);
+            const px = r.x * packetT;
+            const py = r.y * packetT;
+            ctx.fillStyle = r.color;
+            ctx.globalAlpha = 0.9;
+            ctx.beginPath();
+            ctx.arc(px, py, 3.5, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.restore();
+        });
+
+        realms.forEach(r => {
+            const isHovered = this.hoveredRealmEntity?.id === r.id;
+            ctx.save();
+            ctx.translate(r.x, r.y);
+
+            if (isHovered) {
+                ctx.fillStyle = `${r.color}22`;
+                ctx.beginPath();
+                ctx.arc(0, 0, r.r + 12, 0, Math.PI * 2);
+                ctx.fill();
+            }
+
+            ctx.fillStyle = '#0f172a';
+            ctx.beginPath();
+            ctx.arc(0, 0, r.r, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.strokeStyle = isHovered ? '#ffffff' : r.color;
+            ctx.lineWidth = isHovered ? 3 : 2;
+            ctx.stroke();
+
+            ctx.font = '22px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(r.crest, 0, -4);
+
+            ctx.fillStyle = '#f8fafc';
+            ctx.font = 'bold 12px sans-serif';
+            ctx.fillText(r.name, 0, r.r + 16);
+
+            ctx.fillStyle = 'var(--text-muted, #94a3b8)';
+            ctx.font = '10px sans-serif';
+            ctx.fillText(r.title, 0, r.r + 30);
+
+            ctx.fillStyle = r.color;
+            ctx.font = 'bold 9px sans-serif';
+            ctx.fillText(r.power, 0, r.r + 43);
+
+            ctx.restore();
+        });
+    },
+
     render(now) {
         if (!this.canvas || !this.ctx) return;
         const ctx = this.ctx;
@@ -3868,25 +5034,31 @@ const WorldForgeCG = {
         if (this.perspectiveMode === 'first') ctx.rotate(-this.walker.heading);
         ctx.scale(this.camera.zoom, this.camera.zoom);
 
-        // 2. Draw conduits
-        this.drawConduits(ctx, now);
+        if (this.worldLens === 'city') {
+            this.renderCityView(ctx, w, h, now);
+        } else if (this.worldLens === 'realm') {
+            this.renderRealmView(ctx, w, h, now);
+        } else {
+            // 2. Draw conduits
+            this.drawConduits(ctx, now);
 
-        // 3. Draw resource packet particles
-        if (this.vfxEnabled) {
-            this.drawParticles(ctx, now);
-        }
+            // 3. Draw resource packet particles
+            if (this.vfxEnabled) {
+                this.drawParticles(ctx, now);
+            }
 
-        // 4. Draw shockwave ripple effects
-        if (this.vfxEnabled) {
-            this.drawShockwaves(ctx);
-        }
+            // 4. Draw shockwave ripple effects
+            if (this.vfxEnabled) {
+                this.drawShockwaves(ctx);
+            }
 
-        // 5. Draw entity nodes
-        this.drawNodes(ctx, now);
+            // 5. Draw entity nodes
+            this.drawNodes(ctx, now);
 
-        // 6. Draw floating combat-style text ("floaties")
-        if (this.vfxEnabled) {
-            this.drawFloaties(ctx);
+            // 6. Draw floating combat-style text ("floaties")
+            if (this.vfxEnabled) {
+                this.drawFloaties(ctx);
+            }
         }
 
         ctx.restore();

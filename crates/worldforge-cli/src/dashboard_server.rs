@@ -1274,8 +1274,8 @@ fn validate_save_game(save: &SaveGame, expected_id: &str) -> Result<(), WorldFor
                     .as_deref()
                     .is_some_and(valid_action_id)
                     && intervention.target.as_deref().is_some_and(valid_action_id)
-                    && intervention.agent.as_deref().map_or(true, valid_action_id)
-                    && intervention.option.as_deref().map_or(true, valid_action_id)
+                    && intervention.agent.as_deref().is_none_or(valid_action_id)
+                    && intervention.option.as_deref().is_none_or(valid_action_id)
             }
             _ => false,
         };
