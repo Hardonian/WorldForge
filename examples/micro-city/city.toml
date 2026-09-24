@@ -11,25 +11,25 @@ power = 0.10
 id = "civic-core"
 name = "Civic Core"
 description = "Dense institutions, culture, and knowledge infrastructure."
-slots = 10
+slots = 18
 
 [[districts]]
 id = "river-ward"
 name = "River Ward"
 description = "Water-rich productive land with ecological leverage."
-slots = 12
+slots = 20
 
 [[districts]]
 id = "sun-belt"
 name = "Sun Belt"
 description = "Open terrain tuned for food and distributed energy."
-slots = 14
+slots = 22
 
 [[districts]]
 id = "old-grid"
 name = "Old Grid"
 description = "Adaptable industrial fabric with powerful maker synergies."
-slots = 12
+slots = 20
 
 [[buildings]]
 id = "courtyard-homes"
@@ -209,53 +209,191 @@ power = 0.5
 [buildings.outputs]
 research = 1.5
 
-[[technologies]]
-id = "civic-science"
-name = "Civic Science"
-description = "Treat every district as a living laboratory shared by its residents."
-branch = "knowledge"
-[technologies.cost]
-research = 45.0
-[technologies.effects.resource_multipliers]
-research = 1.2
+[[buildings]]
+id = "fusion-reactor"
+name = "Tokamak Fusion Reactor"
+description = "Magnetic confinement fusion that solves the city's energy needs indefinitely."
+category = "energy"
+tags = ["energy", "science"]
+allowed_districts = ["sun-belt", "old-grid"]
+footprint = 3
+max_count = 3
+jobs = 40
+wellbeing = 4.0
+requires_technologies = ["fusion-core"]
+[buildings.cost]
+credits = 2400.0
+materials = 320.0
+[buildings.upkeep]
+clean_water = 2.5
+credits = 5.0
+[buildings.outputs]
+power = 45.0
 
-[[technologies]]
-id = "participatory-media"
-name = "Participatory Media"
-description = "Turn public storytelling into a source of coordination and discovery."
-branch = "knowledge"
-prerequisites = ["civic-science"]
-[technologies.cost]
-research = 80.0
-[technologies.effects]
-wellbeing_bonus = 6.0
+[[buildings]]
+id = "nanotech-foundry"
+name = "Nanotech Foundry"
+description = "Precision molecular assembly forging advanced building materials and high-value exports."
+category = "industry"
+tags = ["maker", "science"]
+allowed_districts = ["old-grid"]
+footprint = 2
+max_count = 4
+jobs = 45
+wellbeing = 2.0
+requires_technologies = ["nanomaterial-synthesis"]
+[buildings.cost]
+credits = 1900.0
+materials = 250.0
+[buildings.upkeep]
+power = 4.0
+[buildings.outputs]
+materials = 5.0
+credits = 18.0
 
-[[technologies]]
-id = "modular-habitat"
-name = "Modular Habitat"
-description = "Housing becomes an adaptable platform rather than a fixed product."
-branch = "habitat"
-prerequisites = ["civic-science"]
-[technologies.cost]
-research = 95.0
-[technologies.effects]
-housing_multiplier = 1.2
+[[buildings]]
+id = "grand-amphitheater"
+name = "Grand Amphitheater"
+description = "Monumental civic cultural center that anchors festivals and civic pride across the entire metropolis."
+category = "culture"
+tags = ["culture", "community"]
+allowed_districts = ["civic-core", "river-ward"]
+footprint = 3
+max_count = 2
+jobs = 40
+wellbeing = 24.0
+requires_technologies = ["cultural-renaissance"]
+[buildings.cost]
+credits = 2200.0
+materials = 180.0
+[buildings.upkeep]
+credits = 4.0
+power = 2.0
+[buildings.outputs]
+credits = 20.0
+
+[[buildings]]
+id = "hyperloop-exchange"
+name = "Hyperloop Logistics Exchange"
+description = "Pressurized sub-surface freight transit connecting districts to global economic markets."
+category = "industry"
+tags = ["maker", "community"]
+allowed_districts = ["old-grid", "civic-core"]
+footprint = 2
+max_count = 3
+jobs = 25
+wellbeing = 3.0
+requires_technologies = ["automated-logistics"]
+[buildings.cost]
+credits = 1750.0
+materials = 210.0
+[buildings.upkeep]
+power = 3.5
+[buildings.outputs]
+credits = 30.0
+
+[[buildings]]
+id = "quantum-observatory"
+name = "Quantum Telemetry Array"
+description = "Deep computational array predicting resource demands and guiding systemic evolution."
+category = "knowledge"
+tags = ["science", "civic"]
+allowed_districts = ["civic-core", "sun-belt"]
+footprint = 2
+max_count = 3
+jobs = 30
+wellbeing = 6.0
+requires_technologies = ["quantum-telemetry"]
+[buildings.cost]
+credits = 2100.0
+materials = 220.0
+[buildings.upkeep]
+power = 5.0
+credits = 3.0
+[buildings.outputs]
+research = 15.0
+
+# =========================================================================
+# DEVELOPMENT TREE: RESOURCES (Extraction, Water, Clean Fusion, Materials)
+# =========================================================================
 
 [[technologies]]
 id = "circular-water"
-name = "Circular Water"
-description = "Waste streams become designed inputs for living infrastructure."
-branch = "ecology"
+name = "Circular Water Systems"
+description = "Waste streams become designed inputs for living urban infrastructure."
+branch = "resources"
 [technologies.cost]
 research = 55.0
 [technologies.effects.resource_multipliers]
 clean_water = 1.3
 
 [[technologies]]
+id = "solar-weave"
+name = "Solar Weave Photovoltaics"
+description = "Distribute generation through roofs, streets, and public shade structures."
+branch = "resources"
+[technologies.cost]
+research = 50.0
+[technologies.effects.resource_multipliers]
+power = 1.25
+
+[[technologies]]
+id = "deep-geothermal"
+name = "Deep Geothermal Wellheads"
+description = "Tap planetary thermal gradients to secure constant base-load energy and mineral salts."
+branch = "resources"
+prerequisites = ["solar-weave"]
+[technologies.cost]
+research = 85.0
+[technologies.effects.resource_multipliers]
+power = 1.35
+materials = 1.15
+
+[[technologies]]
+id = "nanomaterial-synthesis"
+name = "Nanomaterial Synthesis"
+description = "Molecular-grade composites that slash building costs and bolster structural longevity."
+branch = "resources"
+prerequisites = ["deep-geothermal"]
+[technologies.cost]
+research = 140.0
+[technologies.effects.resource_multipliers]
+materials = 1.45
+[technologies.effects.building_multipliers]
+courtyard-homes = 1.2
+
+[[technologies]]
+id = "fusion-core"
+name = "Compact Fusion Core"
+description = "Harness magnetic deuterium confinement for practically boundless clean energy."
+branch = "resources"
+prerequisites = ["nanomaterial-synthesis"]
+[technologies.cost]
+research = 260.0
+[technologies.effects]
+jobs_multiplier = 1.1
+[technologies.effects.resource_multipliers]
+power = 1.8
+
+# =========================================================================
+# DEVELOPMENT TREE: TECHNOLOGY (Science, Biospheres, Computing, Cybernetics)
+# =========================================================================
+
+[[technologies]]
+id = "civic-science"
+name = "Civic Science Protocols"
+description = "Treat every district as a living laboratory shared and governed by its residents."
+branch = "technology"
+[technologies.cost]
+research = 45.0
+[technologies.effects.resource_multipliers]
+research = 1.2
+
+[[technologies]]
 id = "agroponics"
-name = "Agroponics"
-description = "Fuse food production, water cycling, and dense urban form."
-branch = "ecology"
+name = "Agroponic Biospheres"
+description = "Fuse high-yield food cultivation, water cycling, and dense urban form."
+branch = "technology"
 prerequisites = ["circular-water"]
 [technologies.cost]
 research = 75.0
@@ -263,20 +401,10 @@ research = 75.0
 food = 1.25
 
 [[technologies]]
-id = "solar-weave"
-name = "Solar Weave"
-description = "Distribute generation through roofs, streets, and public shade."
-branch = "energy"
-[technologies.cost]
-research = 50.0
-[technologies.effects.resource_multipliers]
-power = 1.25
-
-[[technologies]]
 id = "autonomous-grid"
-name = "Autonomous Grid"
-description = "Delegate energy allocation to adaptive machine coordination."
-branch = "energy"
+name = "Autonomous Grid AI"
+description = "Delegate energy allocation and routing to adaptive machine intelligence."
+branch = "technology"
 prerequisites = ["solar-weave"]
 excludes = ["human-scale-grid"]
 [technologies.cost]
@@ -288,9 +416,9 @@ power = 1.55
 
 [[technologies]]
 id = "human-scale-grid"
-name = "Human-scale Grid"
-description = "Make energy stewardship a neighborhood institution and source of work."
-branch = "energy"
+name = "Human-scale Grid Guilds"
+description = "Make energy stewardship a neighborhood democratic institution and source of meaningful work."
+branch = "technology"
 prerequisites = ["solar-weave"]
 excludes = ["autonomous-grid"]
 [technologies.cost]
@@ -300,9 +428,180 @@ jobs_multiplier = 1.25
 wellbeing_bonus = 5.0
 
 [[technologies]]
+id = "cybernetic-matrix"
+name = "Cybernetic Urban Matrix"
+description = "Interconnect sensors, predictive logistics, and municipal decision feedback loops."
+branch = "technology"
+prerequisites = ["civic-science", "autonomous-grid"]
+[technologies.cost]
+research = 160.0
+[technologies.effects]
+jobs_multiplier = 1.15
+[technologies.effects.resource_multipliers]
+research = 1.4
+
+[[technologies]]
+id = "quantum-telemetry"
+name = "Quantum Telemetry"
+description = "Ultra-dense quantum sensor networks enabling flawless state forecasting and zero-waste logistics."
+branch = "technology"
+prerequisites = ["cybernetic-matrix"]
+[technologies.cost]
+research = 240.0
+[technologies.effects.resource_multipliers]
+research = 1.6
+power = 1.2
+
+# =========================================================================
+# DEVELOPMENT TREE: CULTURE (Media, Humanism, Commons, Heritage, Renaissance)
+# =========================================================================
+
+[[technologies]]
+id = "participatory-media"
+name = "Participatory Media"
+description = "Turn public storytelling and citizen journals into a fountain of civic coordination."
+branch = "culture"
+prerequisites = ["civic-science"]
+[technologies.cost]
+research = 80.0
+[technologies.effects]
+wellbeing_bonus = 6.0
+
+[[technologies]]
+id = "civic-humanism"
+name = "Civic Humanism"
+description = "Prioritize human flourishing, neighborhood spaces, and citizen-led municipal charters."
+branch = "culture"
+prerequisites = ["participatory-media"]
+[technologies.cost]
+research = 95.0
+[technologies.effects]
+housing_multiplier = 1.1
+wellbeing_bonus = 9.0
+
+[[technologies]]
+id = "heritage-commons"
+name = "Heritage Commons"
+description = "Preserve historical districts and craft traditions while fostering shared neighborhood pride."
+branch = "culture"
+prerequisites = ["participatory-media"]
+[technologies.cost]
+research = 110.0
+[technologies.effects]
+wellbeing_bonus = 12.0
+[technologies.effects.building_multipliers]
+story-forum = 1.5
+
+[[technologies]]
+id = "festival-charter"
+name = "Grand Festival Charters"
+description = "Institutionalize seasonal civic celebrations that dissolve social friction and boost collective vitality."
+branch = "culture"
+prerequisites = ["civic-humanism"]
+[technologies.cost]
+research = 150.0
+[technologies.effects]
+wellbeing_bonus = 18.0
+
+[[technologies]]
+id = "cultural-renaissance"
+name = "Cultural Renaissance"
+description = "A golden age of arts, civic architecture, and philosophy celebrated across world networks."
+branch = "culture"
+prerequisites = ["festival-charter", "heritage-commons"]
+[technologies.cost]
+research = 250.0
+[technologies.effects]
+wellbeing_bonus = 28.0
+[technologies.effects.resource_multipliers]
+research = 1.3
+
+# =========================================================================
+# DEVELOPMENT TREE: ECONOMY (Cooperatives, Credit, Logistics, Post-Scarcity)
+# =========================================================================
+
+[[technologies]]
+id = "maker-cooperatives"
+name = "Maker Cooperative Networks"
+description = "Decentralized worker-owned manufacturing syndicates sharing blueprints and supply pools."
+branch = "economy"
+[technologies.cost]
+research = 60.0
+[technologies.effects.resource_multipliers]
+credits = 1.25
+materials = 1.1
+
+[[technologies]]
+id = "mercantile-credit"
+name = "Mercantile Credit Union"
+description = "A low-friction municipal credit ledger financing ambitious infrastructure and commerce."
+branch = "economy"
+prerequisites = ["maker-cooperatives"]
+[technologies.cost]
+research = 95.0
+[technologies.effects.resource_multipliers]
+credits = 1.35
+
+[[technologies]]
+id = "automated-logistics"
+name = "Automated High-Speed Freight"
+description = "Driverless sub-surface pod delivery systems eliminating inter-district bottlenecks."
+branch = "economy"
+prerequisites = ["mercantile-credit"]
+[technologies.cost]
+research = 155.0
+[technologies.effects]
+jobs_multiplier = 0.88
+[technologies.effects.resource_multipliers]
+credits = 1.45
+
+[[technologies]]
+id = "trade-syndicate"
+name = "Global Trade Syndicate"
+description = "Deregulate financial markets and expand competitive trade at the expense of local pace."
+branch = "economy"
+prerequisites = ["mercantile-credit"]
+excludes = ["post-scarcity-commons"]
+[technologies.cost]
+research = 155.0
+[technologies.effects]
+wellbeing_bonus = -2.0
+[technologies.effects.resource_multipliers]
+credits = 1.55
+
+[[technologies]]
+id = "post-scarcity-commons"
+name = "Post-Scarcity Dividend"
+description = "Universal basic output guaranteed by automated municipal production and socialized gains."
+branch = "economy"
+prerequisites = ["automated-logistics"]
+excludes = ["trade-syndicate"]
+[technologies.cost]
+research = 270.0
+[technologies.effects]
+wellbeing_bonus = 22.0
+[technologies.effects.resource_multipliers]
+credits = 1.6
+
+# =========================================================================
+# DEVELOPMENT TREE: SYNTHESIS (Modular Habitat, Regenerative City, Singularity)
+# =========================================================================
+
+[[technologies]]
+id = "modular-habitat"
+name = "Modular Habitat Construction"
+description = "Housing transforms into an adaptable architectural platform rather than a static asset."
+branch = "synthesis"
+prerequisites = ["civic-science"]
+[technologies.cost]
+research = 95.0
+[technologies.effects]
+housing_multiplier = 1.2
+
+[[technologies]]
 id = "regenerative-city"
-name = "Regenerative City"
-description = "A synthesis where civic knowledge, water, food, and energy reinforce one another."
+name = "Regenerative City Synthesis"
+description = "A holistic synthesis where civic knowledge, clean water, vertical food, and clean energy reinforce one another."
 branch = "synthesis"
 prerequisites = ["participatory-media", "agroponics", "solar-weave"]
 [technologies.cost]
@@ -317,28 +616,51 @@ food = 1.25
 clean_water = 1.25
 power = 1.25
 
+[[technologies]]
+id = "arcology-singularity"
+name = "Transcendence Arcology"
+description = "The pinnacle of civilization: harmonious synthesis of boundless fusion, quantum telemetry, cultural flourishing, and post-scarcity equity."
+branch = "synthesis"
+prerequisites = ["regenerative-city", "fusion-core", "quantum-telemetry", "cultural-renaissance", "post-scarcity-commons"]
+[technologies.cost]
+research = 450.0
+[technologies.effects]
+housing_multiplier = 1.5
+jobs_multiplier = 1.4
+wellbeing_bonus = 40.0
+[technologies.effects.resource_multipliers]
+credits = 1.5
+power = 1.5
+clean_water = 1.5
+food = 1.5
+research = 1.5
+
+# =========================================================================
+# CIVIC FACTIONS & DILEMMAS
+# =========================================================================
+
 [[factions]]
 id = "commons-assembly"
 name = "Commons Assembly"
-description = "Neighborhood delegates seeking shared prosperity and a humane pace of change."
+description = "Neighborhood delegates seeking shared prosperity, culture, and a humane pace of change."
 initial_support = 58.0
 
 [[factions]]
 id = "builders-guild"
 name = "Builders Guild"
-description = "Makers, operators, and investors who prize momentum and productive capacity."
+description = "Makers, engineers, and investors who prize industrial momentum and productive output."
 initial_support = 52.0
 
 [[factions]]
 id = "ecological-council"
 name = "Ecological Council"
-description = "Watershed stewards defending long-term resilience and living systems."
+description = "Watershed and biosphere stewards defending long-term resilience and living systems."
 initial_support = 55.0
 
 [[factions]]
 id = "systems-lab"
 name = "Systems Lab"
-description = "Researchers who want the city to learn from every experiment."
+description = "Cybernetic researchers who want the city to learn from every empirical experiment."
 initial_support = 50.0
 
 [[dilemmas]]
