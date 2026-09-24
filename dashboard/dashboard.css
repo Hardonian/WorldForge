@@ -945,6 +945,46 @@ button, input, select, a { -webkit-tap-highlight-color: transparent; }
 .decision-history b { font-size: .52rem; }
 .decision-history span { color: var(--green); font-size: .48rem; }
 .civic-empty { margin: 0; padding: 12px; border: 1px dashed var(--line); border-radius: 8px; color: var(--text-muted); font-size: .52rem; line-height: 1.45; }
+.power-games { padding: 14px; border-top: 1px solid var(--line); background: linear-gradient(110deg,rgba(255,111,124,.025),rgba(241,185,107,.035),rgba(66,211,234,.025)); }
+.power-games-grid { display: grid; grid-template-columns: minmax(260px,.9fr) minmax(360px,1.2fr) minmax(250px,.85fr); gap: 10px; }
+.power-games-grid > section { min-width: 0; padding: 10px; border: 1px solid var(--line); border-radius: 10px; background: rgba(5,8,14,.45); }
+.power-games-grid .hidden { display: none; }
+.strategic-stats { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 5px; margin-bottom: 8px; }
+.strategic-stats > span { display: grid; gap: 2px; padding: 6px; border: 1px solid rgba(163,184,214,.1); border-radius: 6px; }
+.strategic-stats small { color: var(--text-muted); font-size: .43rem; text-transform: uppercase; }
+.strategic-stats strong { color: var(--cyan); font: 700 .54rem "SFMono-Regular",Consolas,monospace; }
+.realm-ledger, .corporation-ledger, .agent-ledger, .crypto-ledger, .secret-ledger { display: grid; gap: 6px; max-height: 300px; overflow: auto; }
+.realm-card, .corporation-card, .agent-card, .market-card { padding: 8px; border: 1px solid var(--line); border-radius: 8px; background: rgba(255,255,255,.018); }
+.realm-card > div:first-child, .corporation-card > div:first-child, .agent-card > div:first-child, .market-card > div:first-child, .intrigue-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.realm-card strong, .corporation-card strong, .agent-card strong, .market-card strong { font-size: .56rem; }
+.realm-card > div:first-child span, .corporation-card > div:first-child span, .agent-card > div:first-child span { color: var(--amber); font-size: .44rem; font-weight: 800; text-transform: uppercase; }
+.realm-card p, .corporation-card p, .agent-card p, .market-card p { margin: 5px 0 7px; color: var(--text-muted); font-size: .47rem; line-height: 1.4; }
+.mini-actions { display: flex; flex-wrap: wrap; gap: 4px; }
+.mini-actions button, .agent-card > button { padding: 4px 6px; border: 1px solid var(--line); border-radius: 5px; background: rgba(103,169,255,.08); color: var(--text-soft); font-size: .45rem; cursor: pointer; }
+.mini-actions button:hover:not(:disabled), .agent-card > button:hover:not(:disabled) { border-color: var(--cyan); color: var(--text); }
+.mini-actions button:disabled, .agent-card > button:disabled { cursor: default; opacity: .42; }
+.mini-actions .tone-danger, .agent-card > .tone-danger { border-color: rgba(255,111,124,.3); background: rgba(255,111,124,.08); color: var(--red); }
+.mini-actions .tone-shadow { border-color: rgba(213,120,239,.3); background: rgba(213,120,239,.08); color: #d578ef; }
+.stance { padding: 2px 5px; border-radius: 99px; background: rgba(241,185,107,.09); }
+.stance-hostile, .stance-at-war { color: var(--red) !important; background: rgba(255,111,124,.1); }
+.stance-coalition, .stance-friendly, .stance-vassal { color: var(--green) !important; background: rgba(70,210,154,.1); }
+.intrigue-heading { margin-bottom: 8px; }
+.intrigue-heading > div:first-child { display: grid; gap: 2px; }
+.intrigue-heading strong { font-size: .67rem; }
+.heat-gauge { display: grid; grid-template-columns: auto auto; align-items: center; gap: 5px; }
+.heat-gauge span { color: var(--text-muted); font-size: .44rem; text-transform: uppercase; }
+.heat-gauge b { position: relative; min-width: 35px; padding: 4px 5px; border: 1px solid rgba(255,111,124,.25); border-radius: 5px; color: var(--red); font: 700 .54rem "SFMono-Regular",Consolas,monospace; text-align: center; overflow: hidden; }
+.heat-gauge b::before { content: ""; position: absolute; z-index: -1; inset: 0 auto 0 0; width: var(--heat); background: rgba(255,111,124,.12); }
+.agent-rogue { border-color: rgba(255,111,124,.38); box-shadow: inset 2px 0 var(--red); }
+.agent-compromised { border-color: rgba(241,185,107,.35); box-shadow: inset 2px 0 var(--amber); }
+.agent-ready { box-shadow: inset 2px 0 var(--green); }
+.market-card b { color: var(--cyan); font: 700 .55rem "SFMono-Regular",Consolas,monospace; }
+.market-card p.positive { color: var(--green); }
+.market-card p.negative { color: var(--red); }
+.secret-ledger article { display: grid; gap: 2px; padding: 7px; border-left: 2px solid var(--amber); background: rgba(241,185,107,.04); }
+.secret-ledger strong { font-size: .5rem; }
+.secret-ledger span { color: var(--amber); font-size: .44rem; }
+.section-gap { margin-top: 10px; }
 .resources-card, .live-feed-card { min-width: 0; }
 .resources-card { grid-column: 1 / -1; }
 .live-feed-card { grid-column: 1 / -1; }
@@ -1046,6 +1086,8 @@ button, input, select, a { -webkit-tap-highlight-color: transparent; }
     .city-build-panel { border-right: 0; border-bottom: 1px solid var(--line); }
     .civic-layout { grid-template-columns: 1fr 1.5fr; }
     .civic-layout > div:last-child { grid-column: 1 / -1; }
+    .power-games-grid { grid-template-columns: 1fr 1fr; }
+    .crypto-console { grid-column: 1 / -1; }
     .resources-card, .live-feed-card { grid-column: auto; }
     .play-toolbar { flex-wrap: wrap; }
     .tick-progress { order: 10; flex-basis: 100%; margin: 2px 0; }
@@ -1122,6 +1164,8 @@ button, input, select, a { -webkit-tap-highlight-color: transparent; }
     .technology-tree { grid-template-columns: 1fr; max-height: none; }
     .civic-layout, .dilemma-options { grid-template-columns: 1fr; }
     .civic-layout > div:last-child { grid-column: auto; }
+    .power-games-grid { grid-template-columns: 1fr; }
+    .crypto-console { grid-column: auto; }
     .play-grid { padding: 7px; }
     .play-stage { min-height: 370px; }
     .play-network-wrap { min-height: 310px; }
