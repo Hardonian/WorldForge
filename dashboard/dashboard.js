@@ -2568,6 +2568,10 @@ const WorldForgeCG = {
     rafId: null,
     lastTime: 0,
     radarAngle: 0,
+    perspectiveMode: 'strategic',
+    pressedKeys: new Set(),
+    walker: { x: 0, y: 0, heading: 0, bob: 0 },
+    immersionPulse: { color: '#42d3ea', alpha: 0, label: '' },
 
     data: null,
     nodes: new Map(),
@@ -2977,11 +2981,21 @@ const WorldForgeCG = {
 
     bindKeyboard() {
         window.addEventListener('keydown', (e) => {
-            if (this.viewMode !== 'cg' || !this.active) return;
+            if (this.viewMode === 'schematic' || !this.active) return;
             const tag = document.activeElement?.tagName?.toLowerCase();
             if (tag === 'input' || tag === 'textarea' || tag === 'select') return;
 
             const key = e.key.toLowerCase();
+            if (key === 'escape' && this.perspectiveMode !== 'strategic') {
+                e.preventDefault();
+                this.setViewMode('cg');
+                return;
+            }
+            if (this.perspectiveMode !== 'strategic' && ['w', 'a', 's', 'd', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright'].includes(key)) {
+                e.preventDefault();
+                this.pressedKeys.add(key);
+                return;
+            }
             if (key === 'w' || e.key === 'ArrowUp') {
                 e.preventDefault();
                 this.camera.targetY += 45;
@@ -3022,12 +3036,15 @@ const WorldForgeCG = {
                 }
             }
         });
+        window.addEventListener('keyup', e => this.pressedKeys.delete(e.key.toLowerCase()));
     },
 
     bindControls() {
         this.init();
         el('btn-view-cg')?.addEventListener('click', () => this.setViewMode('cg'));
         el('btn-view-schematic')?.addEventListener('click', () => this.setViewMode('schematic'));
+        el('btn-view-third')?.addEventListener('click', () => this.setViewMode('third'));
+        el('btn-view-first')?.addEventListener('click', () => this.setViewMode('first'));
         el('cg-btn-zoom-in')?.addEventListener('click', () => this.zoomBy(1.28));
         el('cg-btn-zoom-out')?.addEventListener('click', () => this.zoomBy(0.78));
         el('cg-btn-reset-cam')?.addEventListener('click', () => this.fitView(true));
@@ -3039,6 +3056,15 @@ const WorldForgeCG = {
             showToast('Tactical Audio', active ? 'Procedural sound FX active.' : 'Procedural sound FX muted.');
         });
         el('cg-btn-fullscreen')?.addEventListener('click', () => this.toggleFullscreen());
+        el('immersion-pause')?.addEventListener('click', () => togglePlay());
+        el('immersion-checkpoint')?.addEventListener('click', () => openSaveManager(true));
+        el('immersion-intervene')?.addEventListener('click', () => {
+            const target = el('decision-console') || el('play-entity-select');
+            target?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            el('capacity-slider')?.focus();
+            setPlayRunning(false);
+            showToast('Intervention window', 'Simulation paused. Adjust capacity, construction, research, governance, or covert operations.');
+        });
         this.syncAudioBtn(this.audio.enabled);
         this.bindKeyboard();
     },
@@ -3084,14 +3110,20 @@ const WorldForgeCG = {
             this.camera.dragStartY = e.clientY;
             this.camera.camStartX = this.camera.targetX;
             this.camera.camStartY = this.camera.targetY;
+            this.camera.headingStart = this.walker.heading;
         });
 
         window.addEventListener('pointermove', e => {
             if (this.camera.isDragging) {
                 const dx = e.clientX - this.camera.dragStartX;
                 const dy = e.clientY - this.camera.dragStartY;
-                this.camera.targetX = this.camera.camStartX + dx;
-                this.camera.targetY = this.camera.camStartY + dy;
+                if (this.perspectiveMode === 'first') {
+                    this.walker.heading = this.camera.headingStart + dx * 0.006;
+                    this.camera.targetZoom = Math.max(2.2, Math.min(4.2, this.camera.targetZoom - dy * 0.004));
+                } else {
+                    this.camera.targetX = this.camera.camStartX + dx;
+                    this.camera.targetY = this.camera.camStartY + dy;
+                }
                 this.camera.hasInteracted = true;
             } else if (this.active && this.viewMode === 'cg') {
                 const rect = c.getBoundingClientRect();
@@ -3145,30 +3177,58 @@ const WorldForgeCG = {
     },
 
     setViewMode(mode) {
-        this.viewMode = mode;
+        this.viewMode = mode === 'schematic' ? 'schematic' : 'cg';
+        this.perspectiveMode = mode === 'first' || mode === 'third' ? mode : 'strategic';
         const btnCg = el('btn-view-cg');
         const btnSchem = el('btn-view-schematic');
+        const btnFirst = el('btn-view-first');
+        const btnThird = el('btn-view-third');
         const canvas = el('play-cg-canvas');
         const svg = el('play-network');
         const toolbar = el('cg-toolbar');
         const hud = el('cg-hud-card');
 
-        if (mode === 'cg') {
-            btnCg?.classList.add('active');
+        if (mode !== 'schematic') {
+            btnCg?.classList.toggle('active', this.perspectiveMode === 'strategic');
             btnSchem?.classList.remove('active');
+            btnFirst?.classList.toggle('active', this.perspectiveMode === 'first');
+            btnThird?.classList.toggle('active', this.perspectiveMode === 'third');
             canvas?.classList.remove('hidden');
             svg?.classList.add('hidden');
             toolbar?.classList.remove('hidden');
+            el('immersion-hud')?.classList.toggle('hidden', this.perspectiveMode === 'strategic');
+            el('play-network-container')?.setAttribute('data-perspective', this.perspectiveMode);
+            if (this.perspectiveMode !== 'strategic') this.enterImmersiveMode();
             this.start();
         } else {
             btnCg?.classList.remove('active');
             btnSchem?.classList.add('active');
+            btnFirst?.classList.remove('active');
+            btnThird?.classList.remove('active');
             canvas?.classList.add('hidden');
             svg?.classList.remove('hidden');
             toolbar?.classList.add('hidden');
             hud?.classList.add('hidden');
+            el('immersion-hud')?.classList.add('hidden');
+            el('play-network-container')?.removeAttribute('data-perspective');
             this.stop();
         }
+    },
+
+    enterImmersiveMode() {
+        const focus = this.nodes.get(this.selectedNodeName) || this.nodes.values().next().value;
+        if (focus) {
+            this.walker.x = focus.x;
+            this.walker.y = focus.y + focus.radius * 2.2;
+            this.selectedNodeName = focus.name;
+        }
+        this.camera.hasInteracted = false;
+        this.camera.targetZoom = this.perspectiveMode === 'first' ? 3.05 : 1.65;
+        el('immersion-mode').textContent = this.perspectiveMode === 'first' ? 'FIRST-PERSON CITY LINK' : 'THIRD-PERSON FOLLOW';
+        el('immersion-help').textContent = this.perspectiveMode === 'first'
+            ? 'WASD move · drag look · wheel field of view · Esc tactical'
+            : 'WASD orbit · click entity to follow · wheel distance · Esc tactical';
+        this.updateImmersionLabels();
     },
 
     toggleVfx() {
@@ -3463,6 +3523,21 @@ const WorldForgeCG = {
     onEvents(events) {
         if (!events || !events.length) return;
 
+        events.forEach(event => {
+            const reactive = {
+                shortage: ['rgb(255,111,124)', .2],
+                governance: ['rgb(66,211,234)', .13],
+                geopolitics: ['rgb(255,111,124)', .16],
+                intrigue: ['rgb(241,185,107)', .15],
+                construction: ['rgb(70,210,154)', .12],
+                research: ['rgb(213,120,239)', .13],
+            }[event.type];
+            if (reactive) {
+                this.immersionPulse = { color: reactive[0], alpha: reactive[1], label: event.summary || '' };
+                if (el('immersion-signal')) el('immersion-signal').textContent = event.summary || `${prettyName(event.type)} event`;
+            }
+        });
+
         // Group events by entity to aggregate identical concurrent items
         const byEntity = new Map();
         events.forEach(ev => {
@@ -3578,6 +3653,46 @@ const WorldForgeCG = {
     setSelectedEntity(name) {
         this.selectedNodeName = name;
         this.updateAvatarHero(name);
+        this.updateImmersionLabels();
+    },
+
+    updateImmersionLabels() {
+        const focus = this.nodes.get(this.selectedNodeName);
+        const label = focus ? prettyName(focus.name) : 'Free camera';
+        if (el('immersion-focus')) el('immersion-focus').textContent = label;
+    },
+
+    updateImmersiveCamera(now) {
+        if (this.perspectiveMode === 'strategic') return;
+        const focus = this.nodes.get(this.selectedNodeName) || this.nodes.values().next().value;
+        const key = value => this.pressedKeys.has(value);
+        if (this.perspectiveMode === 'first') {
+            const forward = (key('w') || key('arrowup') ? 1 : 0) - (key('s') || key('arrowdown') ? 1 : 0);
+            const strafe = (key('d') ? 1 : 0) - (key('a') ? 1 : 0);
+            if (key('arrowleft')) this.walker.heading -= 0.025;
+            if (key('arrowright')) this.walker.heading += 0.025;
+            const speed = key('shift') ? 3.2 : 1.65;
+            this.walker.x += (Math.sin(this.walker.heading) * forward + Math.cos(this.walker.heading) * strafe) * speed;
+            this.walker.y += (-Math.cos(this.walker.heading) * forward + Math.sin(this.walker.heading) * strafe) * speed;
+            this.walker.bob += Math.abs(forward || strafe) * 0.13;
+            const bob = (forward || strafe) ? Math.sin(this.walker.bob) * 3 : 0;
+            this.camera.targetX = -this.walker.x * this.camera.targetZoom;
+            this.camera.targetY = -this.walker.y * this.camera.targetZoom + (this.canvas?.clientHeight || 420) * 0.17 + bob;
+        } else if (focus) {
+            if (key('a') || key('arrowleft')) this.walker.heading -= 0.022;
+            if (key('d') || key('arrowright')) this.walker.heading += 0.022;
+            const distanceShift = (key('s') || key('arrowdown') ? 1 : 0) - (key('w') || key('arrowup') ? 1 : 0);
+            this.camera.targetZoom = Math.max(0.9, Math.min(2.5, this.camera.targetZoom - distanceShift * 0.012));
+            const orbit = 48 / this.camera.targetZoom;
+            this.walker.x = focus.x + Math.sin(this.walker.heading) * orbit;
+            this.walker.y = focus.y + Math.cos(this.walker.heading) * orbit;
+            this.camera.targetX = -this.walker.x * this.camera.targetZoom;
+            this.camera.targetY = -this.walker.y * this.camera.targetZoom + (this.canvas?.clientHeight || 420) * 0.08;
+        }
+        if (el('immersion-signal')) {
+            const tick = state.play.data?.currentTick || 0;
+            el('immersion-signal').textContent = state.play.running ? `Live simulation · tick ${formatNumber(tick)}` : `Time frozen · tick ${formatNumber(tick)}`;
+        }
     },
 
     updateAvatarHero(name) {
@@ -3719,6 +3834,8 @@ const WorldForgeCG = {
         ctx.scale(dpr, dpr);
         ctx.clearRect(0, 0, w, h);
 
+        this.updateImmersiveCamera(now);
+
         // Smooth camera lerp
         this.camera.x += (this.camera.targetX - this.camera.x) * 0.16;
         this.camera.y += (this.camera.targetY - this.camera.y) * 0.16;
@@ -3738,6 +3855,7 @@ const WorldForgeCG = {
         // Transform into world space
         ctx.save();
         ctx.translate(w / 2 + this.camera.x, h / 2 + this.camera.y);
+        if (this.perspectiveMode === 'first') ctx.rotate(-this.walker.heading);
         ctx.scale(this.camera.zoom, this.camera.zoom);
 
         // 2. Draw conduits
@@ -3762,6 +3880,8 @@ const WorldForgeCG = {
         }
 
         ctx.restore();
+
+        if (this.perspectiveMode !== 'strategic') this.drawImmersiveOverlay(ctx, w, h, now);
         ctx.restore();
 
         // 7. Tactical Minimap Radar
@@ -3769,6 +3889,48 @@ const WorldForgeCG = {
 
         // 8. Entity Avatar Hero Command Module
         this.renderAvatar(now);
+    },
+
+    drawImmersiveOverlay(ctx, w, h, now) {
+        ctx.save();
+        const first = this.perspectiveMode === 'first';
+        const horizon = first ? h * 0.44 : h * 0.2;
+        const shade = ctx.createLinearGradient(0, 0, 0, h);
+        shade.addColorStop(0, 'rgba(3,7,14,.34)');
+        shade.addColorStop(horizon / h, 'rgba(3,7,14,0)');
+        shade.addColorStop(1, first ? 'rgba(3,7,14,.5)' : 'rgba(3,7,14,.22)');
+        ctx.fillStyle = shade;
+        ctx.fillRect(0, 0, w, h);
+        if (first) {
+            ctx.strokeStyle = 'rgba(66,211,234,.12)';
+            ctx.lineWidth = 1;
+            for (let i = 1; i <= 7; i++) {
+                const y = horizon + (h - horizon) * Math.pow(i / 7, 1.7);
+                ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke();
+            }
+            for (let i = -7; i <= 7; i++) {
+                ctx.beginPath(); ctx.moveTo(w / 2, horizon); ctx.lineTo(w / 2 + i * w * .13, h); ctx.stroke();
+            }
+        } else {
+            const focus = this.nodes.get(this.selectedNodeName);
+            if (focus) {
+                const x = w / 2 + focus.x * this.camera.zoom + this.camera.x;
+                const y = h / 2 + focus.y * this.camera.zoom + this.camera.y;
+                ctx.strokeStyle = 'rgba(241,185,107,.72)';
+                ctx.lineWidth = 1.5;
+                ctx.setLineDash([5, 5]);
+                ctx.beginPath(); ctx.arc(x, y, 38 + Math.sin(now * .004) * 4, 0, Math.PI * 2); ctx.stroke();
+                ctx.setLineDash([]);
+            }
+        }
+        if (this.immersionPulse.alpha > 0) {
+            ctx.globalAlpha = this.immersionPulse.alpha;
+            ctx.fillStyle = this.immersionPulse.color;
+            ctx.fillRect(0, 0, w, h);
+            ctx.globalAlpha = 1;
+            this.immersionPulse.alpha = Math.max(0, this.immersionPulse.alpha - 0.012);
+        }
+        ctx.restore();
     },
 
     drawBackground(w, h, now) {
