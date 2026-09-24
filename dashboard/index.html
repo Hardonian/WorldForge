@@ -74,6 +74,20 @@
                             <span class="nav-copy"><strong>Risk Lab</strong><small>Monte Carlo &amp; bottlenecks</small></span>
                             <span class="nav-arrow" aria-hidden="true">→</span>
                         </button>
+                        <button class="nav-item nav-trees" id="nav-trees" type="button">
+                            <span class="nav-icon" aria-hidden="true">
+                                <svg viewBox="0 0 24 24"><circle cx="12" cy="5" r="3"/><circle cx="5" cy="19" r="3"/><circle cx="19" cy="19" r="3"/><path d="m10.5 7.5-4 8.5M13.5 7.5l4 8.5M8 19h8"/></svg>
+                            </span>
+                            <span class="nav-copy"><strong>Evolution Trees</strong><small>Tech, culture &amp; economy</small></span>
+                            <span class="nav-arrow" aria-hidden="true">→</span>
+                        </button>
+                        <button class="nav-item nav-trophies" id="nav-trophies" type="button">
+                            <span class="nav-icon" aria-hidden="true">
+                                <svg viewBox="0 0 24 24"><path d="M6 3h12v3H6V3Zm-2 5h16v4a8 8 0 0 1-16 0V8Zm3 14h10v-2H7v2ZM9 16h6v4H9v-4Z"/></svg>
+                            </span>
+                            <span class="nav-copy"><strong>Trophies</strong><small>Achievements &amp; badges</small></span>
+                            <span class="nav-arrow" aria-hidden="true">→</span>
+                        </button>
                         <button class="nav-item" id="nav-benchmark" type="button">
                             <span class="nav-icon" aria-hidden="true">
                                 <svg viewBox="0 0 24 24"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l3 2M9 2h6"/></svg>
@@ -341,6 +355,13 @@
                         <strong id="vitality-status">Optimal</strong>
                     </div>
                 </div>
+                <div class="civ-era-widget" id="civ-era-widget" title="Civilization Era &amp; Progression Level">
+                    <div class="era-badge" id="era-badge">ERA I</div>
+                    <div class="era-info">
+                        <div class="era-name-row"><strong id="era-name">Frontier Outpost</strong><span id="era-level-tag">LVL 1</span></div>
+                        <div class="era-xp-track"><span id="era-xp-bar" style="width: 25%"></span></div>
+                    </div>
+                </div>
                 <div class="tick-progress" aria-label="Simulation progress">
                     <div class="tick-progress-copy"><span>Timeline</span><strong id="play-tick-label">Tick 0 / 0</strong></div>
                     <div class="progress-track"><span id="play-progress-bar"></span></div>
@@ -370,6 +391,42 @@
                 </div>
 
                 <div class="play-grid" id="play-grid" aria-hidden="true">
+                    <div class="commander-powers-dock" id="commander-powers-dock" aria-label="God Overseer Tactical Powers">
+                        <div class="powers-label-group">
+                            <span class="powers-title"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M11 2 4 11h5l-2 7 9-10h-5l3-6Z"/></svg> Overseer Powers</span>
+                            <small class="powers-hint">Instant Tactical Actions</small>
+                        </div>
+                        <div class="powers-buttons">
+                            <button class="power-btn" id="pwr-overdrive" type="button" title="Overdrive Grid: Boost all producer capacities to 150% (+50% output surge)">
+                                <span class="power-icon">⚡</span>
+                                <span class="power-meta"><strong>Overdrive</strong><small>Surge Grid</small></span>
+                            </button>
+                            <button class="power-btn" id="pwr-festival" type="button" title="Grand Festival: Celebrate civic unity, grants +10 Wellbeing and launches fireworks">
+                                <span class="power-icon">🎉</span>
+                                <span class="power-meta"><strong>Festival</strong><small>+10 Wellbeing</small></span>
+                            </button>
+                            <button class="power-btn" id="pwr-eureka" type="button" title="Eureka Surge: Direct surplus energy into an instant research breakthrough (+40 Research)">
+                                <span class="power-icon">🧪</span>
+                                <span class="power-meta"><strong>Eureka</strong><small>+40 Research</small></span>
+                            </button>
+                            <button class="power-btn" id="pwr-relief" type="button" title="Emergency Relief Drop: Air-drop vital water and rations (+100 Food, +100 Water) to prevent shortages">
+                                <span class="power-icon">📦</span>
+                                <span class="power-meta"><strong>Relief Drop</strong><small>Airdrop rations</small></span>
+                            </button>
+                            <button class="power-btn power-btn-danger" id="pwr-crisis" type="button" title="Chaos Surge: Challenge the city with a high-stakes stochastic event (EMP / Market Panic)">
+                                <span class="power-icon">🌪️</span>
+                                <span class="power-meta"><strong>Chaos Surge</strong><small>High Stakes</small></span>
+                            </button>
+                        </div>
+                        <div class="powers-dock-actions">
+                            <button class="button button-quiet" id="btn-achievements-dock" type="button" title="View Trophies &amp; Achievements">
+                                <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M6 3h8v2H6V3Zm-2 4h12v4a6 6 0 0 1-12 0V7Zm2 0v4a4 4 0 0 0 8 0V7H6Zm-4 1h2v3H2V8Zm14 0h2v3h-2V8ZM7 15h6v2H7v-2Z"/></svg>
+                                <span>Trophies</span>
+                                <span class="achieve-count-badge" id="achieve-unlocked-count">0/6</span>
+                            </button>
+                        </div>
+                    </div>
+
                     <section class="play-stage" aria-labelledby="play-network-title">
                         <div class="play-panel-heading">
                             <div>
@@ -499,7 +556,27 @@
                                 <div class="district-ledger" id="city-districts"></div>
                             </section>
                             <section class="city-research-panel" aria-labelledby="city-research-title">
-                                <div class="city-subheading"><span>Evolve</span><h4 id="city-research-title">Research constellation</h4></div>
+                                <div class="research-header-row">
+                                    <div class="city-subheading"><span>Civilization Evolution</span><h4 id="city-research-title">Development Trees</h4></div>
+                                    <div class="tree-branch-tabs" id="tree-branch-tabs" role="tablist" aria-label="Development Tree Branches">
+                                        <button type="button" class="tree-tab active" data-branch="all">All <span class="tab-count" id="count-all">24</span></button>
+                                        <button type="button" class="tree-tab tab-resources" data-branch="resources">⛏️ Resources <span class="tab-count" id="count-resources">5</span></button>
+                                        <button type="button" class="tree-tab tab-tech" data-branch="technology">🔬 Tech <span class="tab-count" id="count-tech">6</span></button>
+                                        <button type="button" class="tree-tab tab-culture" data-branch="culture">🎭 Culture <span class="tab-count" id="count-culture">5</span></button>
+                                        <button type="button" class="tree-tab tab-economy" data-branch="economy">📈 Economy <span class="tab-count" id="count-economy">5</span></button>
+                                        <button type="button" class="tree-tab tab-synthesis" data-branch="synthesis">🌟 Synthesis <span class="tab-count" id="count-synthesis">3</span></button>
+                                    </div>
+                                    <button type="button" class="button button-quiet" id="btn-fullscreen-trees" title="Expand Full Evolution Constellation">
+                                        <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 3h5v2H5v3H3V3Zm14 0h-5v2h3v3h2V3ZM3 17h5v-2H5v-3H3v5Zm14 0h-5v-2h3v-3h2v5Z"/></svg>
+                                        <span>Full Matrix</span>
+                                    </button>
+                                </div>
+                                <div class="tree-legend">
+                                    <span class="legend-chip state-researched"><i class="dot"></i> Researched</span>
+                                    <span class="legend-chip state-available"><i class="dot"></i> Available</span>
+                                    <span class="legend-chip state-locked"><i class="dot"></i> Locked</span>
+                                    <span class="legend-chip state-excluded"><i class="dot"></i> Mutual Exclusion</span>
+                                </div>
                                 <div class="technology-tree" id="city-technologies"></div>
                             </section>
                         </div>
@@ -642,6 +719,62 @@
             </div>
         </form>
     </dialog>
+
+    <dialog class="tool-dialog tree-modal-dialog" id="tree-modal" aria-labelledby="tree-modal-title">
+        <div class="dialog-shell tree-modal-shell">
+            <header class="dialog-header">
+                <div>
+                    <div class="panel-kicker">Civilization Progression</div>
+                    <h2 id="tree-modal-title">Grand Evolution Constellation</h2>
+                    <p>Explore the full multi-tier development paths across Resources, Technology, Culture, and Economy.</p>
+                </div>
+                <div class="tree-modal-actions">
+                    <div class="tree-branch-tabs modal-branch-tabs" id="modal-branch-tabs" role="tablist">
+                        <button type="button" class="tree-tab active" data-branch="all">All</button>
+                        <button type="button" class="tree-tab tab-resources" data-branch="resources">⛏️ Resources</button>
+                        <button type="button" class="tree-tab tab-tech" data-branch="technology">🔬 Tech</button>
+                        <button type="button" class="tree-tab tab-culture" data-branch="culture">🎭 Culture</button>
+                        <button type="button" class="tree-tab tab-economy" data-branch="economy">📈 Economy</button>
+                        <button type="button" class="tree-tab tab-synthesis" data-branch="synthesis">🌟 Synthesis</button>
+                    </div>
+                    <button class="icon-button dialog-close" id="tree-modal-close" type="button" aria-label="Close Evolution Tree"><svg viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></svg></button>
+                </div>
+            </header>
+            <div class="dialog-body tree-modal-body">
+                <div class="tree-modal-canvas-wrap">
+                    <div class="tree-modal-grid" id="modal-tree-grid"></div>
+                </div>
+            </div>
+        </div>
+    </dialog>
+
+    <dialog class="tool-dialog trophies-dialog" id="trophies-dialog" aria-labelledby="trophies-title">
+        <div class="dialog-shell">
+            <header class="dialog-header">
+                <div>
+                    <div class="panel-kicker">Hall of Triumphs</div>
+                    <h2 id="trophies-title">Civilization Trophies &amp; Milestones</h2>
+                    <p>Earn prestige badges by expanding production, achieving cultural renaissance, and surviving systemic chaos.</p>
+                </div>
+                <button class="icon-button dialog-close" id="trophies-close" type="button" aria-label="Close Trophies"><svg viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></svg></button>
+            </header>
+            <div class="dialog-body trophies-body">
+                <div class="trophies-grid" id="trophies-grid"></div>
+            </div>
+        </div>
+    </dialog>
+
+    <div class="level-up-banner hidden" id="level-up-banner" aria-live="assertive">
+        <div class="level-up-card">
+            <div class="level-up-stars">✦ ✦ ✦</div>
+            <span class="level-up-kicker">ERA ADVANCEMENT</span>
+            <h2 id="level-up-title">Cybernetic Metropolis</h2>
+            <p id="level-up-copy">Your civilization has unlocked Tier IV capabilities, expanding systemic throughput and wellbeing!</p>
+            <button class="button button-primary" id="level-up-dismiss" type="button">Embrace Future</button>
+        </div>
+    </div>
+
+    <div class="floating-fx-layer" id="floating-fx-layer" aria-hidden="true"></div>
 
     <div class="loading-overlay hidden" id="loading-overlay" role="status" aria-live="polite">
         <div class="loading-card"><div class="forge-loader" aria-hidden="true"><span></span><span></span><span></span></div><strong id="loading-title">Forging simulation</strong><p id="loading-copy">Advancing deterministic ticks…</p></div>

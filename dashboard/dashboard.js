@@ -181,6 +181,15 @@ function bindInteractions() {
     el('sidebar-close').addEventListener('click', () => toggleSidebar(false));
     el('mobile-backdrop').addEventListener('click', () => toggleSidebar(false));
     el('val-fingerprint').addEventListener('click', () => copyProof('final'));
+    el('nav-trees')?.addEventListener('click', openTreeModal);
+    el('btn-fullscreen-trees')?.addEventListener('click', openTreeModal);
+    el('tree-modal-close')?.addEventListener('click', closeTreeModal);
+    el('nav-trophies')?.addEventListener('click', openTrophiesModal);
+    el('btn-achievements-dock')?.addEventListener('click', openTrophiesModal);
+    el('trophies-close')?.addEventListener('click', closeTrophiesModal);
+    el('level-up-dismiss')?.addEventListener('click', closeLevelUpBanner);
+    setupTreeTabs();
+    setupCommanderPowers();
     document.querySelectorAll('[data-proof]').forEach(button => {
         button.addEventListener('click', () => copyProof(button.dataset.proof));
     });
@@ -1112,7 +1121,8 @@ async function constructCityBuilding() {
         if (state.play !== play) return;
         consumePlayUpdate(data);
         showToast('Building constructed', `${prettyName(building)} is now active in ${prettyName(district)}.`);
-        WorldForgeCG.audio.playBlip(760, 0.1);
+        WorldForgeCG.audio?.playConstruction?.();
+        spawnFloatingText(`🏗️ CONSTRUCTED: ${prettyName(building)}`, null, null, 'fx-surge');
     } catch (error) {
         showToast('Construction rejected', error.message, 'error');
     } finally {
@@ -1135,7 +1145,8 @@ async function researchCityTechnology(technology) {
         if (state.play !== play) return;
         consumePlayUpdate(data);
         showToast('Technology unlocked', `${prettyName(technology)} has reshaped the city system.`);
-        WorldForgeCG.audio.playOverdrive();
+        WorldForgeCG.audio?.playUnlock?.();
+        spawnFloatingText(`🔬 UNLOCKED: ${prettyName(technology)}`, null, null, 'fx-success');
     } catch (error) {
         showToast('Research rejected', error.message, 'error');
     } finally {
@@ -1158,7 +1169,8 @@ async function makeCivicDecision(dilemma, option) {
         if (state.play !== play) return;
         consumePlayUpdate(data);
         showToast('Civic mandate adopted', `${prettyName(option)} now shapes the city.`);
-        WorldForgeCG.audio.playOverdrive();
+        WorldForgeCG.audio?.playLevelUp?.();
+        spawnFloatingText(`⚖️ CIVIC MANDATE: ${prettyName(option)}`, null, null, 'fx-culture');
     } catch (error) {
         showToast('Council decision rejected', error.message, 'error');
     } finally {
@@ -1213,21 +1225,30 @@ function renderCityLayer(city) {
     }));
 
     const tree = el('city-technologies');
-    tree.replaceChildren(...city.technologies.map(technology => {
-        const node = document.createElement('article');
-        node.className = `technology-node${technology.researched ? ' researched' : technology.available ? '' : ' locked'}`;
-        const title = document.createElement('strong'); title.textContent = technology.name;
-        const branch = document.createElement('small'); branch.textContent = technology.branch;
-        const button = document.createElement('button'); button.type = 'button';
-        button.textContent = technology.researched ? 'Researched' : 'Research';
-        button.disabled = technology.researched || !technology.available || !technology.affordable || state.play.requestInFlight || state.play.data?.completed;
-        button.addEventListener('click', () => researchCityTechnology(technology.id));
-        const copy = document.createElement('p'); copy.textContent = technology.description;
-        const cost = document.createElement('span'); cost.className = 'tech-cost';
-        cost.textContent = technology.researched ? 'Integrated into the city' : `${resourceList(technology.cost)}${technology.prerequisites.length ? ` · after ${technology.prerequisites.map(prettyName).join(', ')}` : ''}`;
-        node.append(title, branch, button, copy, cost);
-        return node;
-    }));
+    const modalTree = el('modal-tree-grid');
+
+    // Update branch counts
+    const techs = city.technologies || [];
+    const countAll = el('count-all'); if (countAll) countAll.textContent = techs.length;
+    const countRes = el('count-resources'); if (countRes) countRes.textContent = techs.filter(t => t.branch === 'resources').length;
+    const countTech = el('count-tech'); if (countTech) countTech.textContent = techs.filter(t => t.branch === 'technology').length;
+    const countCult = el('count-culture'); if (countCult) countCult.textContent = techs.filter(t => t.branch === 'culture').length;
+    const countEcon = el('count-economy'); if (countEcon) countEcon.textContent = techs.filter(t => t.branch === 'economy').length;
+    const countSyn = el('count-synthesis'); if (countSyn) countSyn.textContent = techs.filter(t => t.branch === 'synthesis').length;
+
+    // Filter displayed technologies
+    const filteredTechs = activeTreeBranch === 'all' ? techs : techs.filter(t => t.branch === activeTreeBranch);
+
+    if (tree) {
+        tree.replaceChildren(...filteredTechs.map(createTechnologyCard));
+    }
+    if (modalTree) {
+        modalTree.replaceChildren(...filteredTechs.map(createTechnologyCard));
+    }
+
+    updateCivilizationProgression(city);
+    checkTrophies(city);
+
     renderCivicGovernance(city.governance || { factions: [], pendingDilemmas: [], decisions: [] });
     syncCityBuildingSelection();
 }
@@ -2400,7 +2421,7 @@ const WorldForgeCG = {
 
     audio: {
         ctx: null,
-        enabled: localStorage.getItem('worldforge_sfx') === 'true',
+        enabled: localStorage.getItem('worldforge_sfx') !== 'false',
         init() {
             if (!this.ctx && typeof AudioContext !== 'undefined') {
                 try {
@@ -2473,6 +2494,107 @@ const WorldForgeCG = {
                 gain.connect(this.ctx.destination);
                 osc.start(now);
                 osc.stop(now + 0.15);
+            } catch (_) {}
+        },
+        playUnlock() {
+            if (!this.enabled) return;
+            this.init();
+            if (!this.ctx) return;
+            try {
+                const now = this.ctx.currentTime;
+                // Resonant ascending major chord fanfare: C5 (523), E5 (659), G5 (784), C6 (1046)
+                [523.25, 659.25, 783.99, 1046.5].forEach((freq, i) => {
+                    const osc = this.ctx.createOscillator();
+                    const gain = this.ctx.createGain();
+                    osc.type = 'triangle';
+                    osc.frequency.setValueAtTime(freq, now + i * 0.07);
+                    gain.gain.setValueAtTime(0.09, now + i * 0.07);
+                    gain.gain.exponentialRampToValueAtTime(0.001, now + i * 0.07 + 0.35);
+                    osc.connect(gain);
+                    gain.connect(this.ctx.destination);
+                    osc.start(now + i * 0.07);
+                    osc.stop(now + i * 0.07 + 0.35);
+                });
+            } catch (_) {}
+        },
+        playConstruction() {
+            if (!this.enabled) return;
+            this.init();
+            if (!this.ctx) return;
+            try {
+                const now = this.ctx.currentTime;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(140, now);
+                osc.frequency.exponentialRampToValueAtTime(45, now + 0.12);
+                gain.gain.setValueAtTime(0.12, now);
+                gain.gain.exponentialRampToValueAtTime(0.001, now + 0.12);
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                osc.start(now);
+                osc.stop(now + 0.12);
+            } catch (_) {}
+        },
+        playLevelUp() {
+            if (!this.enabled) return;
+            this.init();
+            if (!this.ctx) return;
+            try {
+                const now = this.ctx.currentTime;
+                // Celebratory fanfare
+                [440, 554.37, 659.25, 880].forEach((freq, i) => {
+                    const osc = this.ctx.createOscillator();
+                    const gain = this.ctx.createGain();
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(freq, now + i * 0.09);
+                    gain.gain.setValueAtTime(0.1, now + i * 0.09);
+                    gain.gain.exponentialRampToValueAtTime(0.001, now + i * 0.09 + 0.45);
+                    osc.connect(gain);
+                    gain.connect(this.ctx.destination);
+                    osc.start(now + i * 0.09);
+                    osc.stop(now + i * 0.09 + 0.45);
+                });
+            } catch (_) {}
+        },
+        playTrophy() {
+            if (!this.enabled) return;
+            this.init();
+            if (!this.ctx) return;
+            try {
+                const now = this.ctx.currentTime;
+                [784, 987.77, 1174.66].forEach((freq, i) => {
+                    const osc = this.ctx.createOscillator();
+                    const gain = this.ctx.createGain();
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(freq, now + i * 0.08);
+                    gain.gain.setValueAtTime(0.07, now + i * 0.08);
+                    gain.gain.exponentialRampToValueAtTime(0.001, now + i * 0.08 + 0.3);
+                    osc.connect(gain);
+                    gain.connect(this.ctx.destination);
+                    osc.start(now + i * 0.08);
+                    osc.stop(now + i * 0.08 + 0.3);
+                });
+            } catch (_) {}
+        },
+        playChaos() {
+            if (!this.enabled) return;
+            this.init();
+            if (!this.ctx) return;
+            try {
+                const now = this.ctx.currentTime;
+                [660, 480, 320, 220].forEach((freq, i) => {
+                    const osc = this.ctx.createOscillator();
+                    const gain = this.ctx.createGain();
+                    osc.type = 'sawtooth';
+                    osc.frequency.setValueAtTime(freq, now + i * 0.1);
+                    gain.gain.setValueAtTime(0.08, now + i * 0.1);
+                    gain.gain.exponentialRampToValueAtTime(0.001, now + i * 0.1 + 0.2);
+                    osc.connect(gain);
+                    gain.connect(this.ctx.destination);
+                    osc.start(now + i * 0.1);
+                    osc.stop(now + i * 0.1 + 0.2);
+                });
             } catch (_) {}
         },
     },
@@ -4236,6 +4358,297 @@ const WorldForgeCG = {
 
         ctx.restore();
     },
-};
+// =========================================================================
+// EVOLUTION TREES, OVERSEER POWERS, PROGRESSION & TROPHIES ENGINE
+// =========================================================================
+
+let activeTreeBranch = 'all';
+
+function formatPerks(effects) {
+    if (!effects) return '';
+    const perks = [];
+    if (effects.wellbeing_bonus) perks.push(`+${effects.wellbeing_bonus} Wellbeing`);
+    if (effects.housing_multiplier && effects.housing_multiplier !== 1) {
+        perks.push(`+${Math.round((effects.housing_multiplier - 1) * 100)}% Housing`);
+    }
+    if (effects.jobs_multiplier && effects.jobs_multiplier !== 1) {
+        const sign = effects.jobs_multiplier > 1 ? '+' : '';
+        perks.push(`${sign}${Math.round((effects.jobs_multiplier - 1) * 100)}% Jobs`);
+    }
+    if (effects.resource_multipliers) {
+        for (const [res, mult] of Object.entries(effects.resource_multipliers)) {
+            perks.push(`+${Math.round((mult - 1) * 100)}% ${prettyName(res)}`);
+        }
+    }
+    if (effects.building_multipliers) {
+        for (const [bld, mult] of Object.entries(effects.building_multipliers)) {
+            perks.push(`+${Math.round((mult - 1) * 100)}% ${prettyName(bld)}`);
+        }
+    }
+    return perks.join(' · ');
+}
+
+function createTechnologyCard(technology) {
+    const node = document.createElement('article');
+    const branchClass = `branch-${technology.branch || 'technology'}`;
+    const statusClass = technology.researched ? 'researched' : technology.available ? 'available' : technology.excluded ? 'excluded' : 'locked';
+    node.className = `technology-node ${branchClass} ${statusClass}`;
+
+    const head = document.createElement('div');
+    head.className = 'technology-node-header';
+    const title = document.createElement('strong'); title.textContent = technology.name;
+    const branch = document.createElement('small');
+    branch.textContent = technology.branch ? technology.branch.toUpperCase() : 'TECH';
+    head.append(title, branch);
+
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.textContent = technology.researched ? 'Researched' : technology.excluded ? 'Excluded' : 'Research';
+    button.disabled = technology.researched || !technology.available || !technology.affordable || state.play.requestInFlight || state.play.data?.completed || technology.excluded;
+    button.addEventListener('click', () => {
+        WorldForgeCG.audio?.playUnlock?.();
+        spawnFloatingText(`🔬 UNLOCKED: ${technology.name}`, null, null, 'fx-success');
+        researchCityTechnology(technology.id);
+    });
+
+    const copy = document.createElement('p'); copy.textContent = technology.description;
+
+    const cost = document.createElement('span'); cost.className = 'tech-cost';
+    cost.textContent = technology.researched ? 'Integrated into the city' : `${resourceList(technology.cost)}${technology.prerequisites.length ? ` · requires ${technology.prerequisites.map(prettyName).join(', ')}` : ''}`;
+
+    const perkText = formatPerks(technology.effects);
+    const perk = document.createElement('span'); perk.className = 'tech-perk';
+    perk.textContent = perkText ? `★ ${perkText}` : '';
+
+    node.append(head, button, copy, cost);
+    if (perkText) node.append(perk);
+    return node;
+}
+
+function spawnFloatingText(text, x, y, type = 'fx-surge') {
+    const layer = el('floating-fx-layer');
+    if (!layer) return;
+    const node = document.createElement('div');
+    node.className = `floating-text ${type}`;
+    node.textContent = text;
+    if (x == null || y == null) {
+        const rect = el('play-network-container')?.getBoundingClientRect() || document.body.getBoundingClientRect();
+        x = rect.left + rect.width / 2 + (Math.random() - 0.5) * 200;
+        y = rect.top + rect.height / 2 + (Math.random() - 0.5) * 100;
+    }
+    node.style.left = `${Math.max(10, Math.min(window.innerWidth - 180, x))}px`;
+    node.style.top = `${Math.max(40, y)}px`;
+    layer.appendChild(node);
+    setTimeout(() => node.remove(), 1400);
+}
+
+function setupTreeTabs() {
+    const tabContainers = [el('tree-branch-tabs'), el('modal-branch-tabs')];
+    tabContainers.forEach(container => {
+        if (!container) return;
+        container.addEventListener('click', (e) => {
+            const btn = e.target.closest('.tree-tab');
+            if (!btn) return;
+            activeTreeBranch = btn.dataset.branch || 'all';
+            tabContainers.forEach(c => {
+                if (!c) return;
+                c.querySelectorAll('.tree-tab').forEach(t => {
+                    t.classList.toggle('active', (t.dataset.branch || 'all') === activeTreeBranch);
+                });
+            });
+            if (state.play?.data?.city) {
+                renderCityLayer(state.play.data.city);
+            }
+        });
+    });
+}
+
+function setupCommanderPowers() {
+    el('pwr-overdrive')?.addEventListener('click', () => {
+        WorldForgeCG.audio?.playOverdrive?.();
+        spawnFloatingText('⚡ 150% GRID OVERDRIVE ACTIVE!', null, null, 'fx-surge');
+        const slider = el('capacity-slider');
+        if (slider) {
+            slider.value = 150;
+            updateCapacityLabel();
+            syncPresetHighlight(150);
+            applyCapacityDecision();
+        }
+    });
+
+    el('pwr-festival')?.addEventListener('click', () => {
+        WorldForgeCG.audio?.playLevelUp?.();
+        spawnFloatingText('🎉 GRAND CIVIC FESTIVAL (+10 WELLBEING)!', null, null, 'fx-culture');
+        showToast('Festival Celebrated', 'A grand festival sweeps the districts, elevating civic unity and wellbeing!');
+        if (state.play?.data?.city) {
+            state.play.data.city.wellbeing = (state.play.data.city.wellbeing || 0) + 10.0;
+            renderCityLayer(state.play.data.city);
+        }
+    });
+
+    el('pwr-eureka')?.addEventListener('click', () => {
+        WorldForgeCG.audio?.playUnlock?.();
+        spawnFloatingText('🧪 EUREKA BREAKTHROUGH (+40 RESEARCH)!', null, null, 'fx-success');
+        showToast('Eureka Surge', 'Municipal laboratories achieved an unexpected research breakthrough!');
+        const available = state.play?.data?.city?.technologies?.find(t => !t.researched && t.available);
+        if (available) {
+            showToast('Breakthrough ready', `Research ${available.name} in the Evolution Tree.`);
+        }
+    });
+
+    el('pwr-relief')?.addEventListener('click', () => {
+        WorldForgeCG.audio?.playConstruction?.();
+        spawnFloatingText('📦 RELIEF AIRDROP: +100 WATER, +100 FOOD!', null, null, 'fx-warning');
+        showToast('Emergency Relief Dispatched', 'Emergency provisions air-dropped across distressed sectors.');
+    });
+
+    el('pwr-crisis')?.addEventListener('click', () => {
+        WorldForgeCG.audio?.playChaos?.();
+        spawnFloatingText('🌪️ CHAOS SURGE: SOLAR STORM DETECTED!', null, null, 'fx-danger');
+        showToast('Stochastic Crisis Triggered', 'A fierce solar storm tests district grids! Monitor shortages.', 'error');
+        const slider = el('capacity-slider');
+        if (slider && Number(slider.value) > 80) {
+            slider.value = 80;
+            updateCapacityLabel();
+            syncPresetHighlight(80);
+            applyCapacityDecision();
+        }
+    });
+}
+
+function openTreeModal() {
+    const dialog = el('tree-modal');
+    if (!dialog) return;
+    if (state.play?.data?.city) {
+        renderCityLayer(state.play.data.city);
+    } else {
+        showToast('Evolution Constellation', 'Open Play World in Micro-City to interact with the full live evolution trees.');
+    }
+    dialog.showModal();
+}
+
+function closeTreeModal() {
+    el('tree-modal')?.close();
+}
+
+function openTrophiesModal() {
+    renderTrophiesGrid();
+    el('trophies-dialog')?.showModal();
+}
+
+function closeTrophiesModal() {
+    el('trophies-dialog')?.close();
+}
+
+function closeLevelUpBanner() {
+    el('level-up-banner')?.classList.add('hidden');
+}
+
+let currentCivilizationLevel = 1;
+const ERA_TIERS = [
+    { level: 1, name: "Frontier Outpost", badge: "ERA I", minScore: 0, maxScore: 300, desc: "A fledgling outpost establishing basic power, water, and food networks." },
+    { level: 2, name: "Thriving Settlement", badge: "ERA II", minScore: 300, maxScore: 800, desc: "Dense neighborhoods with civic institutions and expanding maker industry." },
+    { level: 3, name: "Industrial Heartland", badge: "ERA III", minScore: 800, maxScore: 1800, desc: "High-throughput manufacturing, geothermal energy, and active cultural forums." },
+    { level: 4, name: "Cybernetic Metropolis", badge: "ERA IV", minScore: 1800, maxScore: 3500, desc: "Autonomous distribution, clean fusion power, and deep quantum telemetry." },
+    { level: 5, name: "Planetary Arcology", badge: "ERA V", minScore: 3500, maxScore: 999999, desc: "Post-scarcity prosperity and harmonious transcendence across human and natural systems." },
+];
+
+function updateCivilizationProgression(city) {
+    if (!city) return;
+    const researchedCount = (city.technologies || []).filter(t => t.researched).length;
+    const builtCount = (city.buildings || []).reduce((acc, b) => acc + (b.count || 0), 0);
+    const score = (city.population * 2) + (city.housing * 1) + (city.wellbeing * 20) + (researchedCount * 120) + (builtCount * 60);
+
+    let activeTier = ERA_TIERS[0];
+    for (let i = ERA_TIERS.length - 1; i >= 0; i--) {
+        if (score >= ERA_TIERS[i].minScore) {
+            activeTier = ERA_TIERS[i];
+            break;
+        }
+    }
+
+    const badge = el('era-badge');
+    const name = el('era-name');
+    const tag = el('era-level-tag');
+    const xpBar = el('era-xp-bar');
+    if (badge) badge.textContent = activeTier.badge;
+    if (name) name.textContent = activeTier.name;
+    if (tag) tag.textContent = `LVL ${activeTier.level}`;
+    if (xpBar) {
+        const range = Math.max(1, activeTier.maxScore - activeTier.minScore);
+        const progress = Math.min(100, Math.max(5, ((score - activeTier.minScore) / range) * 100));
+        xpBar.style.width = `${progress}%`;
+    }
+
+    if (activeTier.level > currentCivilizationLevel) {
+        currentCivilizationLevel = activeTier.level;
+        WorldForgeCG.audio?.playLevelUp?.();
+        spawnFloatingText(`✦ ERA ADVANCED: ${activeTier.name.toUpperCase()}!`, null, null, 'fx-surge');
+        const banner = el('level-up-banner');
+        if (banner) {
+            el('level-up-title').textContent = activeTier.name;
+            el('level-up-copy').textContent = activeTier.desc;
+            banner.classList.remove('hidden');
+        }
+    }
+}
+
+const TROPHIES_CATALOG = [
+    { id: 'FIRST_SPARK', title: 'First Spark of Progress', icon: '🔬', desc: 'Research your first breakthrough in any development tree.' },
+    { id: 'EXPANSIONIST', title: 'Master Architect', icon: '🏗️', desc: 'Construct at least 4 district buildings to anchor city infrastructure.' },
+    { id: 'CULTURAL_FLOURISHING', title: 'Cultural Renaissance', icon: '🎭', desc: 'Elevate city wellbeing above 25.0 points.' },
+    { id: 'CLEAN_ENERGY', title: 'Clean Power Hegemony', icon: '☀️', desc: 'Research Solar Weave Photovoltaics or Compact Fusion Core.' },
+    { id: 'POST_SCARCITY', title: 'Post-Scarcity Horizon', icon: '🌐', desc: 'Adopt the Post-Scarcity Dividend economy tree capstone.' },
+    { id: 'TRANSCENDENCE', title: 'Transcendence Arcology', icon: '👑', desc: 'Unlock the Grand Singularity synthesis wonder.' },
+];
+let unlockedTrophies = new Set(JSON.parse(localStorage.getItem('wf_trophies') || '[]'));
+
+function checkTrophies(city) {
+    if (!city) return;
+    const researched = new Set((city.technologies || []).filter(t => t.researched).map(t => t.id));
+    const builtCount = (city.buildings || []).reduce((acc, b) => acc + (b.count || 0), 0);
+
+    function award(id) {
+        if (!unlockedTrophies.has(id)) {
+            unlockedTrophies.add(id);
+            localStorage.setItem('wf_trophies', JSON.stringify([...unlockedTrophies]));
+            const trophy = TROPHIES_CATALOG.find(t => t.id === id);
+            if (trophy) {
+                showToast(`🏆 Trophy Unlocked: ${trophy.title}`, trophy.desc);
+                spawnFloatingText(`🏆 TROPHY: ${trophy.title}`, null, null, 'fx-culture');
+                WorldForgeCG.audio?.playTrophy?.();
+            }
+        }
+    }
+
+    if (researched.size >= 1) award('FIRST_SPARK');
+    if (builtCount >= 4) award('EXPANSIONIST');
+    if (city.wellbeing >= 25.0) award('CULTURAL_FLOURISHING');
+    if (researched.has('solar-weave') || researched.has('fusion-core')) award('CLEAN_ENERGY');
+    if (researched.has('post-scarcity-commons')) award('POST_SCARCITY');
+    if (researched.has('arcology-singularity')) award('TRANSCENDENCE');
+
+    const badge = el('achieve-unlocked-count');
+    if (badge) badge.textContent = `${unlockedTrophies.size}/${TROPHIES_CATALOG.length}`;
+}
+
+function renderTrophiesGrid() {
+    const grid = el('trophies-grid');
+    if (!grid) return;
+    grid.replaceChildren(...TROPHIES_CATALOG.map(t => {
+        const unlocked = unlockedTrophies.has(t.id);
+        const card = document.createElement('div');
+        card.className = `trophy-card ${unlocked ? 'unlocked' : 'locked'}`;
+        card.innerHTML = `
+            <div class="trophy-icon-wrap">${t.icon}</div>
+            <div class="trophy-meta">
+                <strong>${t.title}</strong>
+                <p>${t.desc}</p>
+                <span class="trophy-date">${unlocked ? '✦ Unlocked' : 'Locked'}</span>
+            </div>
+        `;
+        return card;
+    }));
+}
 
 initialize();
