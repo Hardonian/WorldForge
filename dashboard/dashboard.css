@@ -682,9 +682,29 @@ button, input, select, a { -webkit-tap-highlight-color: transparent; }
 .play-network-wrap.fullscreen-active { position: fixed; inset: 0; width: 100vw; height: 100vh; min-height: 100vh; z-index: 99999; border-radius: 0; }
 .play-network-wrap::before { content: ""; position: absolute; inset: 0; background: radial-gradient(circle at 1px 1px, rgba(103,169,255,.06) 1px, transparent 0); background-size: 24px 24px; pointer-events: none; }
 .play-network-wrap::after { content: ""; position: absolute; inset: 0; background: radial-gradient(circle at center, transparent 40%, rgba(7,10,16,.85)); pointer-events: none; }
+.play-network-wrap[data-perspective="first"]::after { background: radial-gradient(ellipse at center,transparent 44%,rgba(2,5,10,.64) 100%); }
+.play-network-wrap[data-perspective="third"]::after { background: radial-gradient(circle at center,transparent 55%,rgba(5,8,14,.48)); }
 #play-cg-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; z-index: 1; cursor: grab; }
 #play-cg-canvas:active { cursor: grabbing; }
 #play-network { position: relative; z-index: 2; display: block; width: 100%; height: 100%; overflow: visible; }
+.immersion-hud { position: absolute; z-index: 12; inset: 0; pointer-events: none; }
+.immersion-hud.hidden { display: none; }
+.immersion-status { position: absolute; top: 14px; left: 14px; display: grid; gap: 2px; max-width: 290px; padding: 9px 11px; border-left: 2px solid var(--cyan); background: linear-gradient(90deg,rgba(4,11,20,.84),rgba(4,11,20,.12)); text-shadow: 0 1px 3px #000; }
+.immersion-status small { color: var(--cyan); font: 800 .47rem "SFMono-Regular",Consolas,monospace; letter-spacing: .12em; }
+.immersion-status strong { font-size: .72rem; }
+.immersion-status span { color: var(--text-muted); font-size: .5rem; }
+.immersion-reticle { position: absolute; top: 50%; left: 50%; width: 30px; height: 30px; transform: translate(-50%,-50%); opacity: .72; }
+.immersion-reticle::before, .immersion-reticle::after, .immersion-reticle i::before, .immersion-reticle i::after { content: ""; position: absolute; background: var(--cyan); box-shadow: 0 0 5px rgba(66,211,234,.65); }
+.immersion-reticle::before { top: 0; left: 14px; width: 1px; height: 8px; }
+.immersion-reticle::after { bottom: 0; left: 14px; width: 1px; height: 8px; }
+.immersion-reticle i:first-child::before { top: 14px; left: 0; width: 8px; height: 1px; }
+.immersion-reticle i:first-child::after { top: 14px; right: 0; width: 8px; height: 1px; }
+.immersion-controls { position: absolute; right: 12px; bottom: 12px; left: 12px; display: flex; align-items: center; justify-content: flex-end; gap: 5px; }
+.immersion-controls > span { margin-right: auto; padding: 6px 8px; border: 1px solid rgba(66,211,234,.16); border-radius: 6px; background: rgba(4,8,15,.72); color: var(--text-muted); font: 600 .47rem "SFMono-Regular",Consolas,monospace; }
+.immersion-controls button { min-height: 29px; padding: 5px 8px; border: 1px solid rgba(66,211,234,.25); border-radius: 6px; background: rgba(4,10,18,.82); color: var(--text-soft); font-size: .5rem; cursor: pointer; pointer-events: auto; }
+.immersion-controls button:hover { border-color: var(--cyan); color: var(--text); }
+.play-network-wrap[data-perspective="first"] .city-hardship-hud, .play-network-wrap[data-perspective="third"] .city-hardship-hud { opacity: .36; transition: opacity .2s; }
+.play-network-wrap[data-perspective="first"] .city-hardship-hud:hover, .play-network-wrap[data-perspective="third"] .city-hardship-hud:hover { opacity: 1; }
 .network-link { fill: none; stroke: rgba(103,169,255,.2); stroke-width: 1.4; stroke-dasharray: 4 7; animation: flow-dash 2.8s linear infinite; }
 .network-link-hot { stroke: rgba(66,211,234,.55); filter: drop-shadow(0 0 4px rgba(66,211,234,.45)); }
 #play-network[data-density="dense"] .network-link { animation: none; filter: none; stroke-opacity: .55; }
