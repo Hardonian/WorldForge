@@ -4358,6 +4358,8 @@ const WorldForgeCG = {
 
         ctx.restore();
     },
+};
+
 // =========================================================================
 // EVOLUTION TREES, OVERSEER POWERS, PROGRESSION & TROPHIES ENGINE
 // =========================================================================
