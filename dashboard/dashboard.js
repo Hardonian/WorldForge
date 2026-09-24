@@ -10,6 +10,8 @@ const TYPE_COLORS = {
     construction: '#f1b96b',
     research: '#d578ef',
     governance: '#42d3ea',
+    geopolitics: '#ff6f7c',
+    intrigue: '#f1b96b',
 };
 const WORLD_SYMBOLS = {
     'supply-chain': 'SC', ecosystem: 'EC', 'micro-city': 'MC',
@@ -1180,6 +1182,53 @@ async function makeCivicDecision(dilemma, option) {
     }
 }
 
+async function executeGeopoliticalAction(action, entity, option = null) {
+    const play = state.play;
+    if (!play.sessionId || play.requestInFlight || play.data?.completed) return;
+    play.requestInFlight = true;
+    renderCityLayer(play.data.city);
+    try {
+        const data = await api(`/api/play/sessions/${play.sessionId}/geopolitics`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action, entity, option }),
+        });
+        if (state.play !== play) return;
+        consumePlayUpdate(data);
+        showToast('Strategic order executed', `${prettyName(action)} changed the balance of power.`);
+        WorldForgeCG.audio.playOverdrive();
+    } catch (error) {
+        showToast('Strategic order rejected', error.message, 'error');
+    } finally {
+        if (state.play !== play) return;
+        play.requestInFlight = false;
+        renderCityLayer(play.data?.city);
+    }
+}
+
+async function executeIntrigueAction(action, target, agent = null, option = null) {
+    const play = state.play;
+    if (!play.sessionId || play.requestInFlight || play.data?.completed) return;
+    play.requestInFlight = true;
+    renderCityLayer(play.data.city);
+    try {
+        const data = await api(`/api/play/sessions/${play.sessionId}/intrigue`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action, target, agent, option }),
+        });
+        if (state.play !== play) return;
+        consumePlayUpdate(data);
+        const result = data.recentEvents?.find(event => event.type === 'intrigue' && event.resource !== action);
+        showToast('Shadow operation resolved', result?.summary || `${prettyName(action)} executed against ${prettyName(target)}.`);
+        WorldForgeCG.audio.playOverdrive();
+    } catch (error) {
+        showToast('Operation rejected', error.message, 'error');
+    } finally {
+        if (state.play !== play) return;
+        play.requestInFlight = false;
+        renderCityLayer(play.data?.city);
+    }
+}
+
 function renderCityLayer(city) {
     const panel = el('city-layer');
     if (!panel) return;
@@ -1250,6 +1299,8 @@ function renderCityLayer(city) {
     checkTrophies(city);
 
     renderCivicGovernance(city.governance || { factions: [], pendingDilemmas: [], decisions: [] });
+    renderGeopolitics(city.geopolitics);
+    renderIntrigue(city.intrigue);
     syncCityBuildingSelection();
 }
 
@@ -1307,6 +1358,115 @@ function renderCivicGovernance(governance) {
 function emptyCivicState(message) {
     const node = document.createElement('p'); node.className = 'civic-empty'; node.textContent = message;
     return node;
+}
+
+function renderGeopolitics(geopolitics) {
+    const consoleNode = el('geopolitics-console');
+    if (!consoleNode) return;
+    consoleNode.classList.toggle('hidden', !geopolitics);
+    if (!geopolitics) return;
+    const stats = el('geopolitics-stats');
+    stats.replaceChildren(
+        strategyStat('Defense', geopolitics.defensePosture),
+        strategyStat('Power', formatDecimal(geopolitics.militaryPower, 0)),
+        strategyStat('Border threat', `${formatDecimal(geopolitics.borderThreat, 0)}%`),
+        strategyStat('Famine risk', `${formatDecimal(geopolitics.famineRisk * 100, 0)}%`),
+    );
+    const realms = el('geopolitics-entities');
+    realms.replaceChildren(...geopolitics.entities.map(realm => {
+        const card = document.createElement('article'); card.className = 'realm-card';
+        const head = document.createElement('div');
+        const title = document.createElement('strong'); title.textContent = realm.name;
+        const stance = document.createElement('span'); stance.className = `stance stance-${realm.stance}`; stance.textContent = realm.stance;
+        head.append(title, stance);
+        const copy = document.createElement('p'); copy.textContent = `${realm.rulerTitle} · ${prettyName(realm.powerStructure)} · loyalty ${formatDecimal(realm.loyalty, 0)} · power ${formatDecimal(realm.militaryPower, 0)}`;
+        const actions = document.createElement('div'); actions.className = 'mini-actions';
+        if (Object.keys(realm.tribute || {}).length) actions.append(strategyButton('Tribute', () => executeGeopoliticalAction('tribute', realm.id), !realm.tributeAvailable));
+        actions.append(strategyButton('Emissary', () => executeGeopoliticalAction('emissary', realm.id)));
+        if (realm.stance !== 'coalition') actions.append(strategyButton('Coalition', () => executeGeopoliticalAction('coalition', realm.id)));
+        if (realm.raidThreat > 0) actions.append(strategyButton('Strike', () => executeGeopoliticalAction('strike', realm.id), false, 'danger'));
+        card.append(head, copy, actions);
+        return card;
+    }));
+}
+
+function renderIntrigue(intrigue) {
+    const consoleNode = el('intrigue-console');
+    const marketNode = el('crypto-console');
+    if (!consoleNode || !marketNode) return;
+    consoleNode.classList.toggle('hidden', !intrigue);
+    marketNode.classList.toggle('hidden', !intrigue);
+    if (!intrigue) return;
+    el('intrigue-heat').textContent = formatDecimal(intrigue.heat, 0);
+    el('intrigue-heat').style.setProperty('--heat', `${Math.max(0, Math.min(100, intrigue.heat))}%`);
+    const readyAgent = intrigue.agents.find(agent => agent.status === 'ready');
+
+    el('intrigue-corporations').replaceChildren(...intrigue.corporations.map(corporation => {
+        const card = document.createElement('article'); card.className = 'corporation-card';
+        const head = document.createElement('div');
+        const title = document.createElement('strong'); title.textContent = corporation.name;
+        const sector = document.createElement('span'); sector.textContent = corporation.sector;
+        head.append(title, sector);
+        const metrics = document.createElement('p'); metrics.textContent = `Security ${formatDecimal(corporation.security, 0)} · influence ${formatDecimal(corporation.influence, 0)} · exposure ${formatDecimal(corporation.exposure, 0)} · ${corporation.remainingSecrets} secrets`;
+        const actions = document.createElement('div'); actions.className = 'mini-actions';
+        actions.append(strategyButton('Infiltrate', () => executeIntrigueAction('infiltrate', corporation.id, readyAgent?.id), !readyAgent || corporation.remainingSecrets === 0));
+        actions.append(strategyButton('Counterintel', () => executeIntrigueAction('counterintel', corporation.id)));
+        card.append(head, metrics, actions);
+        return card;
+    }));
+
+    el('intrigue-agents').replaceChildren(...intrigue.agents.map(agent => {
+        const card = document.createElement('article'); card.className = `agent-card agent-${agent.status}`;
+        const head = document.createElement('div');
+        const title = document.createElement('strong'); title.textContent = agent.name;
+        const status = document.createElement('span'); status.textContent = agent.status;
+        head.append(title, status);
+        const metrics = document.createElement('p'); metrics.textContent = `Skill ${formatDecimal(agent.skill, 0)} · stealth ${formatDecimal(agent.stealth, 0)} · loyalty ${formatDecimal(agent.loyalty, 0)} · containment ${formatDecimal(agent.containment, 0)}`;
+        card.append(head, metrics);
+        if (agent.status === 'contained' || agent.status === 'compromised') card.append(strategyButton('Audit & deploy', () => executeIntrigueAction('deploy', agent.id)));
+        if (agent.status === 'rogue' || agent.status === 'compromised') card.append(strategyButton('Contain', () => executeIntrigueAction('contain', agent.id), false, 'danger'));
+        return card;
+    }));
+
+    el('intrigue-markets').replaceChildren(...intrigue.markets.map(market => {
+        const card = document.createElement('article'); card.className = 'market-card';
+        const head = document.createElement('div');
+        const name = document.createElement('strong'); name.textContent = market.symbol;
+        const price = document.createElement('b'); price.textContent = `${formatDecimal(market.price, 2)} cr`;
+        head.append(name, price);
+        const change = document.createElement('p'); change.className = market.changePercent >= 0 ? 'positive' : 'negative'; change.textContent = `${market.changePercent >= 0 ? '+' : ''}${formatDecimal(market.changePercent, 1)}% · position ${formatDecimal(market.positionValue, 1)} cr`;
+        const actions = document.createElement('div'); actions.className = 'mini-actions';
+        actions.append(strategyButton('Buy', () => executeIntrigueAction('trade', market.id, null, 'buy')));
+        actions.append(strategyButton('Sell', () => executeIntrigueAction('trade', market.id, null, 'sell'), market.holdings <= 0));
+        actions.append(strategyButton('Pump', () => executeIntrigueAction('manipulate', market.id, readyAgent?.id, 'pump'), false, 'shadow'));
+        actions.append(strategyButton('Dump', () => executeIntrigueAction('manipulate', market.id, readyAgent?.id, 'dump'), false, 'shadow'));
+        card.append(head, change, actions);
+        return card;
+    }));
+
+    const secrets = intrigue.stolenSecrets || [];
+    el('intrigue-secrets').replaceChildren(...(secrets.length ? secrets.map(secret => {
+        const node = document.createElement('article');
+        const name = document.createElement('strong'); name.textContent = secret.name;
+        const source = document.createElement('span'); source.textContent = `${prettyName(secret.corporation)} · +${formatDecimal(secret.researchValue, 0)} research`;
+        node.append(name, source);
+        return node;
+    }) : [emptyCivicState('No trade secrets acquired.') ]));
+}
+
+function strategyStat(label, value) {
+    const node = document.createElement('span');
+    const small = document.createElement('small'); small.textContent = label;
+    const strong = document.createElement('strong'); strong.textContent = value;
+    node.append(small, strong); return node;
+}
+
+function strategyButton(label, handler, disabled = false, tone = '') {
+    const button = document.createElement('button'); button.type = 'button'; button.textContent = label;
+    button.className = tone ? `tone-${tone}` : '';
+    button.disabled = disabled || state.play.requestInFlight || state.play.data?.completed;
+    button.addEventListener('click', handler);
+    return button;
 }
 
 function syncCityBuildingSelection() {
