@@ -2174,6 +2174,7 @@ dependencies = [
  "serde_json",
  "toml",
  "tracing",
+ "worldforge-agent",
  "worldforge-core",
  "worldforge-economy",
  "worldforge-ecs",

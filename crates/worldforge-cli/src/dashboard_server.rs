@@ -1759,6 +1759,17 @@ fn event_document(event: &SimulationEvent) -> Value {
             resource,
             damage,
         } => ("intrigue", agent.clone(), resource.clone(), *damage),
+        EventType::AutonomousActorDecision {
+            actor,
+            action,
+            target,
+            ..
+        } => (
+            "agent",
+            actor.clone(),
+            target.clone().unwrap_or_else(|| action.clone()),
+            1.0,
+        ),
         EventType::CryptoMarketMoved {
             asset, new_price, ..
         } => (

@@ -9,6 +9,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Component as PathComponent, Path};
 
+use worldforge_agent::{AgentAction, AgentContext, AgentPolicy, UtilityAgent, UtilityOption};
 use worldforge_core::error::{ErrorCode, WorldForgeError};
 use worldforge_core::hash::Fingerprint;
 use worldforge_core::{DeterministicRng, EntityId, Fixed64, Tick};
@@ -109,6 +110,7 @@ impl RunEventCounts {
             | EventType::TradeSecretAcquired { .. }
             | EventType::CyberAgentStatusChanged { .. }
             | EventType::RogueAgentIncident { .. }
+            | EventType::AutonomousActorDecision { .. }
             | EventType::CryptoMarketMoved { .. }
             | EventType::CryptoTradeExecuted { .. } => self.intrigue += 1,
             EventType::ModEventEmitted { .. } => self.mods += 1,
@@ -210,6 +212,7 @@ pub struct CityProgress {
     pub technologies: Vec<CityTechnologyProgress>,
     pub governance: CityGovernanceProgress,
     pub trajectory: CityTrajectoryProgress,
+    pub systems_debrief: SystemsDebriefProgress,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub geopolitics: Option<CityGeopoliticsProgress>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -400,6 +403,25 @@ pub struct TrajectoryTurningPointProgress {
 
 #[derive(Debug, Clone, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct SystemsDebriefProgress {
+    pub headline: String,
+    pub active_feedback_loops: Vec<FeedbackLoopProgress>,
+    pub warnings: Vec<String>,
+    pub leverage_points: Vec<String>,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FeedbackLoopProgress {
+    pub axis: String,
+    pub score: f64,
+    pub momentum: f64,
+    pub direction: String,
+    pub consequence: String,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct CivicFactionProgress {
     pub id: String,
     pub name: String,
@@ -438,6 +460,17 @@ pub struct CivicDecisionProgress {
     pub title: String,
     pub option: String,
     pub label: String,
+    pub trajectory: BTreeMap<String, f64>,
+    pub snowballing_axes: Vec<String>,
+    pub counterfactuals: Vec<DecisionCounterfactualProgress>,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DecisionCounterfactualProgress {
+    pub option: String,
+    pub label: String,
+    pub trajectory: BTreeMap<String, f64>,
 }
 
 #[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
@@ -1051,6 +1084,7 @@ impl SimulationRuntime {
             tick_events.extend(self.run_city_geopolitics(tick)?);
             tick_events.extend(self.run_city_ecology(tick)?);
             tick_events.extend(self.run_city_intrigue(tick)?);
+            tick_events.extend(self.run_autonomous_actors(tick)?);
             run_transfers(
                 &mut self.world,
                 &self.supply_links,
@@ -2998,6 +3032,32 @@ impl SimulationRuntime {
                         title: dilemma.title.clone(),
                         option: option.id.clone(),
                         label: option.label.clone(),
+                        trajectory: option.trajectory.clone(),
+                        snowballing_axes: option
+                            .trajectory
+                            .iter()
+                            .filter_map(|(axis, delta)| {
+                                let momentum = state
+                                    .trajectory_momentum
+                                    .get(axis)
+                                    .copied()
+                                    .unwrap_or(Fixed64::ZERO)
+                                    .to_f64_lossy();
+                                ((*delta > 0.0 && momentum > 0.0)
+                                    || (*delta < 0.0 && momentum < 0.0))
+                                    .then(|| axis.clone())
+                            })
+                            .collect(),
+                        counterfactuals: dilemma
+                            .options
+                            .iter()
+                            .filter(|alternative| alternative.id != option.id)
+                            .map(|alternative| DecisionCounterfactualProgress {
+                                option: alternative.id.clone(),
+                                label: alternative.label.clone(),
+                                trajectory: alternative.trajectory.clone(),
+                            })
+                            .collect(),
                     })
                 })
                 .collect(),
@@ -3337,6 +3397,12 @@ impl SimulationRuntime {
                 turning_points,
             }
         };
+        let systems_debrief = build_systems_debrief(
+            state,
+            &trajectory,
+            wellbeing,
+            employment_rate,
+        );
         Some(CityProgress {
             treasury: city.treasury.clone(),
             population,
@@ -3349,6 +3415,7 @@ impl SimulationRuntime {
             technologies,
             governance,
             trajectory,
+            systems_debrief,
             geopolitics,
             ecology,
             intrigue,
@@ -3915,6 +3982,218 @@ impl SimulationRuntime {
         Ok(events)
     }
 
+    /// Let corporations and cyber agents pursue their own deterministic
+    /// incentives. Their choices are abstract strategy-game actions: every
+    /// outcome is stateful, replayable, and included in the proof chain.
+    fn run_autonomous_actors(
+        &mut self,
+        tick: Tick,
+    ) -> Result<Vec<SimulationEvent>, WorldForgeError> {
+        let (Some(city), Some(treasury_id)) = (self.city_config.clone(), self.city_treasury_id)
+        else {
+            return Ok(Vec::new());
+        };
+        if tick.value() == 0 || !tick.value().is_multiple_of(20) {
+            return Ok(Vec::new());
+        }
+
+        let mut state = self
+            .world
+            .get_component::<CityRuntimeState>(&treasury_id)
+            .cloned()
+            .ok_or_else(|| action_error("autonomous actor state is unavailable"))?;
+        let mut events = Vec::new();
+        let mut trajectory_impacts: Vec<(String, Vec<(&'static str, i32)>)> = Vec::new();
+
+        for corporation in &city.corporations {
+            let mut observations = BTreeMap::new();
+            observations.insert(
+                "security".to_string(),
+                state
+                    .corporation_security
+                    .get(&corporation.id)
+                    .copied()
+                    .unwrap_or_else(|| Fixed64::from_f64_lossy(corporation.security)),
+            );
+            observations.insert(
+                "exposure".to_string(),
+                state
+                    .corporation_exposure
+                    .get(&corporation.id)
+                    .copied()
+                    .unwrap_or(Fixed64::ZERO),
+            );
+            observations.insert("heat".to_string(), state.intrigue_heat);
+            observations.insert(
+                "influence".to_string(),
+                Fixed64::from_f64_lossy(corporation.influence),
+            );
+            let context = AgentContext {
+                tick: tick.value(),
+                observations,
+            };
+            let mut policy = UtilityAgent::new(&format!("corporation/{}", corporation.id));
+            policy.add_option(UtilityOption {
+                action: autonomous_action("harden-network", Some("security")),
+                score_fn: corporate_hardening_utility,
+            });
+            policy.add_option(UtilityOption {
+                action: autonomous_action("cover-tracks", Some("exposure")),
+                score_fn: corporate_cover_utility,
+            });
+            policy.add_option(UtilityOption {
+                action: autonomous_action("lobby-council", Some("governance")),
+                score_fn: corporate_lobby_utility,
+            });
+            let mut rng = DeterministicRng::new(
+                self.scenario.seed,
+                &format!("autonomous/corporation/{}/{}", corporation.id, tick.value()),
+            );
+            if let Some(decision) = policy.decide(&context, &mut rng).into_iter().next() {
+                let rationale = match decision.action_type.as_str() {
+                    "harden-network" => {
+                        let security = state
+                            .corporation_security
+                            .entry(corporation.id.clone())
+                            .or_insert_with(|| Fixed64::from_f64_lossy(corporation.security));
+                        *security = (*security + Fixed64::from_int(4)).min(Fixed64::from_int(100));
+                        trajectory_impacts.push((
+                            format!("autonomous/{}/hardening", corporation.id),
+                            vec![("innovation", 1), ("risk", -1)],
+                        ));
+                        "security deficit outweighed political opportunity"
+                    }
+                    "cover-tracks" => {
+                        let exposure = state
+                            .corporation_exposure
+                            .entry(corporation.id.clone())
+                            .or_insert(Fixed64::ZERO);
+                        *exposure = (*exposure - Fixed64::from_int(6)).max(Fixed64::ZERO);
+                        state.intrigue_heat =
+                            (state.intrigue_heat - Fixed64::ONE).max(Fixed64::ZERO);
+                        trajectory_impacts.push((
+                            format!("autonomous/{}/cover", corporation.id),
+                            vec![("risk", -2), ("cohesion", -1)],
+                        ));
+                        "public exposure threatened the corporation's freedom to act"
+                    }
+                    _ => {
+                        trajectory_impacts.push((
+                            format!("autonomous/{}/lobby", corporation.id),
+                            vec![("prosperity", 2), ("cohesion", -1), ("risk", 1)],
+                        ));
+                        "influence offered the highest expected strategic return"
+                    }
+                };
+                events.push(SimulationEvent::new(
+                    tick,
+                    EventType::AutonomousActorDecision {
+                        actor: corporation.id.clone(),
+                        action: decision.action_type,
+                        target: decision.target,
+                        rationale: rationale.to_string(),
+                    },
+                ));
+            }
+        }
+
+        for agent in &city.cyber_agents {
+            let status = state
+                .agent_status
+                .get(&agent.id)
+                .map(String::as_str)
+                .unwrap_or(agent.initial_status.as_str());
+            let loyalty = state
+                .agent_loyalty
+                .get(&agent.id)
+                .copied()
+                .unwrap_or_else(|| Fixed64::from_f64_lossy(agent.loyalty));
+            let mut observations = BTreeMap::new();
+            observations.insert("skill".to_string(), Fixed64::from_f64_lossy(agent.skill));
+            observations.insert("loyalty".to_string(), loyalty);
+            observations.insert(
+                "containment".to_string(),
+                Fixed64::from_f64_lossy(agent.containment),
+            );
+            observations.insert("heat".to_string(), state.intrigue_heat);
+            observations.insert(
+                "rogue".to_string(),
+                if status == "rogue" {
+                    Fixed64::from_int(100)
+                } else {
+                    Fixed64::ZERO
+                },
+            );
+            let context = AgentContext {
+                tick: tick.value(),
+                observations,
+            };
+            let mut policy = UtilityAgent::new(&format!("cyber-agent/{}", agent.id));
+            policy.add_option(UtilityOption {
+                action: autonomous_action("stabilize", Some("civic-network")),
+                score_fn: agent_stability_utility,
+            });
+            policy.add_option(UtilityOption {
+                action: autonomous_action("test-boundaries", Some("sandbox")),
+                score_fn: agent_autonomy_utility,
+            });
+            let mut rng = DeterministicRng::new(
+                self.scenario.seed,
+                &format!("autonomous/agent/{}/{}", agent.id, tick.value()),
+            );
+            if let Some(decision) = policy.decide(&context, &mut rng).into_iter().next() {
+                let rationale = if decision.action_type == "test-boundaries" {
+                    let updated_loyalty = (loyalty - Fixed64::from_int(2)).max(Fixed64::ZERO);
+                    state
+                        .agent_loyalty
+                        .insert(agent.id.clone(), updated_loyalty);
+                    state.intrigue_heat =
+                        (state.intrigue_heat + Fixed64::from_int(3)).min(Fixed64::from_int(100));
+                    trajectory_impacts.push((
+                        format!("autonomous/{}/boundary-test", agent.id),
+                        vec![("innovation", 2), ("risk", 4), ("cohesion", -1)],
+                    ));
+                    "capability and autonomy pressure exceeded loyalty and containment"
+                } else {
+                    state.agent_loyalty.insert(
+                        agent.id.clone(),
+                        (loyalty + Fixed64::ONE).min(Fixed64::from_int(100)),
+                    );
+                    state.intrigue_heat =
+                        (state.intrigue_heat - Fixed64::from_ratio(1, 2)).max(Fixed64::ZERO);
+                    trajectory_impacts.push((
+                        format!("autonomous/{}/stabilize", agent.id),
+                        vec![("cohesion", 1), ("risk", -1)],
+                    ));
+                    "loyalty and containment favored cooperative maintenance"
+                };
+                events.push(SimulationEvent::new(
+                    tick,
+                    EventType::AutonomousActorDecision {
+                        actor: agent.id.clone(),
+                        action: decision.action_type,
+                        target: decision.target,
+                        rationale: rationale.to_string(),
+                    },
+                ));
+            }
+        }
+
+        *self
+            .world
+            .get_component_mut::<CityRuntimeState>(&treasury_id)
+            .expect("validated city state") = state;
+        for (cause, impacts) in trajectory_impacts {
+            events.extend(self.apply_system_trajectory_impacts(
+                treasury_id,
+                &impacts,
+                &cause,
+                tick,
+            )?);
+        }
+        Ok(events)
+    }
+
     /// Events retained by the configured capture policy after completion.
     pub fn retained_events(&self) -> &[SimulationEvent] {
         self.replay
@@ -4089,6 +4368,49 @@ impl SimulationRuntime {
     pub fn state(&self) -> &RunState {
         &self.state
     }
+}
+
+fn autonomous_action(action_type: &str, target: Option<&str>) -> AgentAction {
+    AgentAction {
+        action_type: action_type.to_string(),
+        target: target.map(str::to_string),
+        params: BTreeMap::new(),
+    }
+}
+
+fn agent_observation(context: &AgentContext, key: &str) -> Fixed64 {
+    context
+        .observations
+        .get(key)
+        .copied()
+        .unwrap_or(Fixed64::ZERO)
+}
+
+fn corporate_hardening_utility(context: &AgentContext) -> Fixed64 {
+    Fixed64::from_int(100) - agent_observation(context, "security")
+        + agent_observation(context, "exposure") / Fixed64::from_int(4)
+}
+
+fn corporate_cover_utility(context: &AgentContext) -> Fixed64 {
+    agent_observation(context, "exposure")
+        + agent_observation(context, "heat") / Fixed64::from_int(3)
+}
+
+fn corporate_lobby_utility(context: &AgentContext) -> Fixed64 {
+    agent_observation(context, "influence")
+        - agent_observation(context, "exposure") / Fixed64::from_int(4)
+}
+
+fn agent_stability_utility(context: &AgentContext) -> Fixed64 {
+    agent_observation(context, "loyalty") + agent_observation(context, "containment")
+        - agent_observation(context, "heat")
+}
+
+fn agent_autonomy_utility(context: &AgentContext) -> Fixed64 {
+    agent_observation(context, "skill")
+        + (Fixed64::from_int(100) - agent_observation(context, "loyalty"))
+        + agent_observation(context, "heat") / Fixed64::from_int(2)
+        + agent_observation(context, "rogue")
 }
 
 fn placement_key(district: &str, building: &str) -> String {
@@ -4754,20 +5076,144 @@ goods = 2.0
         assert!(market_trajectory.scores["prosperity"] > 0.0);
 
         let initial_commons_cohesion = commons_trajectory.scores["cohesion"];
-        let commons_later = commons.step(30).unwrap();
-        let market_later = market.step(30).unwrap();
+        // Momentum compounds before any later civic dilemma can add legitimate
+        // counter-pressure to the same axis.
+        let commons_compounded = commons.step(6).unwrap();
         assert!(
-            commons_later.city.as_ref().unwrap().trajectory.scores["cohesion"]
+            commons_compounded.city.as_ref().unwrap().trajectory.scores["cohesion"]
                 > initial_commons_cohesion
         );
+        assert!(commons_compounded
+            .recent_events
+            .iter()
+            .any(|event| matches!(event.event_type, EventType::TrajectoryShifted { .. })));
+
+        // Later events may bend either path, but the histories remain causally
+        // distinct and therefore produce different deterministic states.
+        let commons_later = commons.step(24).unwrap();
+        let market_later = market.step(30).unwrap();
         assert_ne!(
             commons_later.state_fingerprint,
             market_later.state_fingerprint
         );
-        assert!(commons_later
-            .recent_events
-            .iter()
-            .any(|event| matches!(event.event_type, EventType::TrajectoryShifted { .. })));
+    }
+
+    #[test]
+    fn manifest_mods_execute_inside_the_deterministic_event_chain() {
+        let directory =
+            std::env::temp_dir().join(format!("worldforge-runtime-mod-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&directory);
+        std::fs::create_dir_all(&directory).unwrap();
+        std::fs::write(
+            directory.join("world.toml"),
+            "name = \"mod-test\"\nversion = \"0.1.0\"\nmods = [\"pulse.wat\"]\n",
+        )
+        .unwrap();
+        std::fs::write(
+            directory.join("scenario.toml"),
+            "world = \"mod-test\"\nduration_ticks = 2\n",
+        )
+        .unwrap();
+        std::fs::write(
+            directory.join("entities.toml"),
+            "[[entities]]\nname = \"observer\"\nentity_type = \"system\"\nregion = \"test\"\n",
+        )
+        .unwrap();
+        std::fs::write(
+            directory.join("pulse.mod.toml"),
+            "capabilities = [\"world.event.emit\"]\n",
+        )
+        .unwrap();
+        std::fs::write(
+            directory.join("pulse.wat"),
+            r#"(module
+                (import "worldforge" "emit_event" (func $emit (param i64)))
+                (func (export "init"))
+                (func (export "on_event") (param i64))
+                (func (export "on_tick") (param $tick i64)
+                    local.get $tick
+                    i64.const 77
+                    i64.add
+                    call $emit))"#,
+        )
+        .unwrap();
+
+        let play = || {
+            let mut runtime = SimulationRuntime::load(&directory, 41, None).unwrap();
+            runtime.run().unwrap()
+        };
+        let first = play();
+        let second = play();
+        assert_eq!(first.event_type_counts.mods, 2);
+        assert_eq!(first.proof.event_chain_root, second.proof.event_chain_root);
+        assert_eq!(
+            first.final_state_fingerprint,
+            second.final_state_fingerprint
+        );
+
+        std::fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[test]
+    fn manifest_mods_cannot_escape_the_world_directory() {
+        let directory = std::env::temp_dir().join(format!(
+            "worldforge-runtime-mod-escape-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&directory);
+        std::fs::create_dir_all(&directory).unwrap();
+        std::fs::write(
+            directory.join("world.toml"),
+            "name = \"mod-escape-test\"\nversion = \"0.1.0\"\nmods = [\"../escape.wasm\"]\n",
+        )
+        .unwrap();
+        std::fs::write(
+            directory.join("scenario.toml"),
+            "world = \"mod-escape-test\"\nduration_ticks = 1\n",
+        )
+        .unwrap();
+        std::fs::write(directory.join("entities.toml"), "entities = []\n").unwrap();
+
+        let error = match SimulationRuntime::load(&directory, 1, None) {
+            Ok(_) => panic!("path-traversing mod reference must be rejected"),
+            Err(error) => error,
+        };
+        assert!(matches!(
+            error.code,
+            ErrorCode::WorldSchemaViolation | ErrorCode::ModLoadFailed
+        ));
+
+        std::fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[test]
+    fn autonomous_actors_make_replayable_stateful_decisions() {
+        let play = || {
+            let mut runtime =
+                SimulationRuntime::load(&example("micro-city"), 2026, Some(21)).unwrap();
+            let result = runtime.run().unwrap();
+            let decisions = runtime
+                .retained_events()
+                .iter()
+                .filter(|event| {
+                    matches!(event.event_type, EventType::AutonomousActorDecision { .. })
+                })
+                .count();
+            (result, decisions)
+        };
+        let first = play();
+        let second = play();
+        assert_eq!(
+            first.0.final_state_fingerprint,
+            second.0.final_state_fingerprint
+        );
+        assert_eq!(
+            first.0.proof.event_chain_root,
+            second.0.proof.event_chain_root
+        );
+        assert!(first.0.event_type_counts.intrigue >= 6);
+        assert_eq!(first.1, 6);
+        assert_eq!(first.1, second.1);
     }
 
     #[test]

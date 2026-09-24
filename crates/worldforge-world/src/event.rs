@@ -125,6 +125,12 @@ pub enum EventType {
         resource: String,
         damage: f64,
     },
+    AutonomousActorDecision {
+        actor: String,
+        action: String,
+        target: Option<String>,
+        rationale: String,
+    },
     CryptoMarketMoved {
         asset: String,
         old_price: Fixed64,
@@ -335,6 +341,17 @@ impl SimulationEvent {
                 resource,
                 damage,
             } => format!("rogue agent {agent} siphoned {damage} {resource}"),
+            EventType::AutonomousActorDecision {
+                actor,
+                action,
+                target,
+                rationale,
+            } => format!(
+                "autonomous actor {actor}: {action}{} ({rationale})",
+                target
+                    .as_ref()
+                    .map_or_else(String::new, |target| format!(" → {target}"))
+            ),
             EventType::CryptoMarketMoved {
                 asset,
                 old_price,
