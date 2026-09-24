@@ -1270,7 +1270,7 @@ function renderCivicGovernance(governance) {
         }));
         card.append(head, copy, options);
         return card;
-    }) : [emptyCivicState('No motion is before the council. Advance time or pursue research to reveal new dilemmas.')]);
+    }) : [emptyCivicState('No motion is before the council. Advance time or pursue research to reveal new dilemmas.')]));
 
     const history = el('civic-history');
     const decisions = governance.decisions || [];
@@ -1280,7 +1280,7 @@ function renderCivicGovernance(governance) {
         const choice = document.createElement('span'); choice.textContent = decision.label;
         item.append(title, choice);
         return item;
-    }) : [emptyCivicState('No constitutional precedents yet.')]);
+    }) : [emptyCivicState('No constitutional precedents yet.')]));
 }
 
 function emptyCivicState(message) {
