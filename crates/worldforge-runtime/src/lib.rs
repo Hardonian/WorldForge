@@ -3467,7 +3467,7 @@ impl SimulationRuntime {
         let Some(treasury_id) = self.city_treasury_id else {
             return Ok(Vec::new());
         };
-        if tick.value() == 0 || tick.value() % 10 != 0 {
+        if tick.value() == 0 || !tick.value().is_multiple_of(10) {
             return Ok(Vec::new());
         }
         let state = self
