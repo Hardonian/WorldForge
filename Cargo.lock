@@ -2177,6 +2177,8 @@ dependencies = [
  "worldforge-core",
  "worldforge-economy",
  "worldforge-ecs",
+ "worldforge-mod-api",
+ "worldforge-mod-runtime",
  "worldforge-package",
  "worldforge-proof",
  "worldforge-replay",

@@ -7,13 +7,15 @@
 //! proof generation, and result reporting.
 
 use std::collections::{BTreeMap, BTreeSet};
-use std::path::Path;
+use std::path::{Component as PathComponent, Path};
 
 use worldforge_core::error::{ErrorCode, WorldForgeError};
 use worldforge_core::hash::Fingerprint;
 use worldforge_core::{DeterministicRng, EntityId, Fixed64, Tick};
 use worldforge_economy::{run_production, run_transfers, update_prices};
 use worldforge_ecs::SimulationWorld;
+use worldforge_mod_api::{Capability, CapabilityPolicy};
+use worldforge_mod_runtime::{load_wasm_mod, ModRuntimeConfig, WasmModInstance};
 use worldforge_proof::RunProof;
 use worldforge_replay::{ReplayArtifact, ReplayWriter};
 use worldforge_world::*;
@@ -77,6 +79,7 @@ pub struct RunEventCounts {
     pub governance: usize,
     pub geopolitics: usize,
     pub intrigue: usize,
+    pub mods: usize,
 }
 
 impl RunEventCounts {
@@ -107,6 +110,7 @@ impl RunEventCounts {
             | EventType::RogueAgentIncident { .. }
             | EventType::CryptoMarketMoved { .. }
             | EventType::CryptoTradeExecuted { .. } => self.intrigue += 1,
+            EventType::ModEventEmitted { .. } => self.mods += 1,
         }
     }
 }
@@ -435,6 +439,101 @@ impl worldforge_ecs::Component for CityRuntimeState {
     }
 }
 
+struct LoadedWorldMod {
+    id: String,
+    instance: WasmModInstance,
+}
+
+#[derive(serde::Deserialize)]
+struct ModGrantManifest {
+    #[serde(default)]
+    capabilities: Vec<Capability>,
+}
+
+fn load_manifest_mods(
+    world_root: &Path,
+    references: &[String],
+) -> Result<Vec<LoadedWorldMod>, WorldForgeError> {
+    if references.is_empty() {
+        return Ok(Vec::new());
+    }
+    let canonical_root = std::fs::canonicalize(world_root).map_err(|error| {
+        WorldForgeError::new(
+            ErrorCode::ModLoadFailed,
+            format!(
+                "cannot resolve world root {}: {error}",
+                world_root.display()
+            ),
+        )
+    })?;
+    let mut loaded = Vec::with_capacity(references.len());
+    let mut ids = BTreeSet::new();
+    for reference in references {
+        let relative = Path::new(reference);
+        if relative.is_absolute()
+            || relative.components().any(|component| {
+                matches!(
+                    component,
+                    PathComponent::ParentDir | PathComponent::RootDir | PathComponent::Prefix(_)
+                )
+            })
+        {
+            return Err(WorldForgeError::new(
+                ErrorCode::ModLoadFailed,
+                format!("mod reference '{reference}' must stay inside its world"),
+            ));
+        }
+        if !ids.insert(reference.clone()) {
+            return Err(WorldForgeError::new(
+                ErrorCode::ModLoadFailed,
+                format!("mod reference '{reference}' is duplicated"),
+            ));
+        }
+        let path = std::fs::canonicalize(canonical_root.join(relative)).map_err(|error| {
+            WorldForgeError::new(
+                ErrorCode::ModLoadFailed,
+                format!("cannot load mod '{reference}': {error}"),
+            )
+        })?;
+        if !path.starts_with(&canonical_root)
+            || !matches!(
+                path.extension().and_then(|ext| ext.to_str()),
+                Some("wasm" | "wat")
+            )
+        {
+            return Err(WorldForgeError::new(
+                ErrorCode::ModLoadFailed,
+                format!("mod '{reference}' must be a .wasm or .wat file inside the world"),
+            ));
+        }
+        let grant_path = path.with_extension("mod.toml");
+        let policy = if grant_path.is_file() {
+            let content = std::fs::read_to_string(&grant_path).map_err(|error| {
+                WorldForgeError::new(
+                    ErrorCode::ModLoadFailed,
+                    format!("cannot read {}: {error}", grant_path.display()),
+                )
+            })?;
+            let manifest: ModGrantManifest = toml::from_str(&content).map_err(|error| {
+                WorldForgeError::new(
+                    ErrorCode::ModLoadFailed,
+                    format!("invalid {}: {error}", grant_path.display()),
+                )
+            })?;
+            CapabilityPolicy::with_capabilities(manifest.capabilities)
+        } else {
+            CapabilityPolicy::deny_all()
+        };
+        let mut instance = load_wasm_mod(&path, policy, ModRuntimeConfig::default())?;
+        instance.init()?;
+        loaded.push(LoadedWorldMod {
+            id: reference.clone(),
+            instance,
+        });
+    }
+    Ok(loaded)
+}
+
 /// Result of an objective evaluation.
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct ObjectiveResult {
@@ -482,6 +581,7 @@ pub struct SimulationRuntime {
     production_totals: BTreeMap<String, Fixed64>,
     objectives: Vec<Objective>,
     snapshots: Vec<ResourceSnapshot>,
+    mods: Vec<LoadedWorldMod>,
 }
 
 impl SimulationRuntime {
@@ -513,14 +613,8 @@ impl SimulationRuntime {
     ) -> Result<Self, WorldForgeError> {
         // Resolve the complete local inheritance graph before initializing ECS.
         let resolved = worldforge_package::resolve_world(world_path)?;
-        if !resolved.effective_mods.is_empty() {
-            return Err(WorldForgeError::new(
-                ErrorCode::ModLoadFailed,
-                "manifest-driven mod resolution is not available; load local modules through worldforge-mod-runtime",
-            ));
-        }
-
         let resolved_world_path = resolved.path.clone();
+        let mods = load_manifest_mods(&resolved_world_path, &resolved.effective_mods)?;
         let scenario_path = resolved_world_path.join("scenario.toml");
         let mut scenario = resolved.scenario;
         let entities_config = resolved.entities;
@@ -837,6 +931,7 @@ impl SimulationRuntime {
             production_totals: BTreeMap::new(),
             objectives,
             snapshots: Vec::new(),
+            mods,
         })
     }
 
@@ -909,6 +1004,8 @@ impl SimulationRuntime {
                 tick,
                 &mut tick_events,
             );
+            let mod_events = self.run_world_mods(tick, &tick_events)?;
+            tick_events.extend(mod_events);
             self.refresh_resource_totals(tick_num + 1);
 
             for event in &tick_events {
@@ -980,6 +1077,54 @@ impl SimulationRuntime {
         }
 
         Ok(self.progress_with_events(recent_events))
+    }
+
+    fn run_world_mods(
+        &mut self,
+        tick: Tick,
+        source_events: &[SimulationEvent],
+    ) -> Result<Vec<SimulationEvent>, WorldForgeError> {
+        if self.mods.is_empty() {
+            return Ok(Vec::new());
+        }
+        let aggregate_resources = self.resource_totals.values().fold(0_i64, |total, value| {
+            total.saturating_add(i64::from(value.to_int()))
+        });
+        let event_codes = source_events
+            .iter()
+            .map(|event| {
+                let fingerprint = Fingerprint::hash_cbor(event);
+                i64::from_le_bytes(
+                    fingerprint.as_bytes()[..8]
+                        .try_into()
+                        .expect("fingerprint prefix has a fixed size"),
+                )
+            })
+            .collect::<Vec<_>>();
+        let mut events = Vec::new();
+        for loaded in &mut self.mods {
+            loaded.instance.set_resource_amount(aggregate_resources);
+            for event_code in &event_codes {
+                loaded.instance.on_event(*event_code)?;
+            }
+            loaded.instance.on_tick(tick.value())?;
+            events.extend(
+                loaded
+                    .instance
+                    .take_emitted_events()
+                    .into_iter()
+                    .map(|value| {
+                        SimulationEvent::new(
+                            tick,
+                            EventType::ModEventEmitted {
+                                module: loaded.id.clone(),
+                                value,
+                            },
+                        )
+                    }),
+            );
+        }
+        Ok(events)
     }
 
     /// Change a producer's capacity during an interactive run.
@@ -2834,7 +2979,7 @@ impl SimulationRuntime {
             .cloned()
             .ok_or_else(|| action_error("city state is unavailable"))?;
 
-        if tick_val > 0 && tick_val.is_multiple_of(25) {
+        if tick_val > 0 && tick_val % 25 == 0 {
             let has_hostiles = city.political_entities.iter().any(|e| {
                 let stance = state
                     .entity_stances
@@ -2942,7 +3087,7 @@ impl SimulationRuntime {
 
         state.intrigue_heat = (state.intrigue_heat - Fixed64::from_ratio(1, 2)).max(Fixed64::ZERO);
 
-        if tick_value > 0 && tick_value.is_multiple_of(5) {
+        if tick_value > 0 && tick_value % 5 == 0 {
             for asset in &city.crypto_assets {
                 let price = state
                     .crypto_prices
@@ -2968,7 +3113,7 @@ impl SimulationRuntime {
             }
         }
 
-        if tick_value > 0 && tick_value.is_multiple_of(10) {
+        if tick_value > 0 && tick_value % 10 == 0 {
             let rogue_agents = city
                 .cyber_agents
                 .iter()
@@ -2983,7 +3128,7 @@ impl SimulationRuntime {
                 .cloned()
                 .collect::<Vec<_>>();
             for agent in rogue_agents {
-                let resource = if tick_value.is_multiple_of(20) {
+                let resource = if tick_value % 20 == 0 {
                     "research"
                 } else {
                     "credits"

@@ -614,6 +614,7 @@ fn simulation_export_with_event_limit(
         ("governance", result.event_type_counts.governance),
         ("geopolitics", result.event_type_counts.geopolitics),
         ("intrigue", result.event_type_counts.intrigue),
+        ("mods", result.event_type_counts.mods),
     ]);
     let retained_events = runtime.retained_events();
     let event_start = result.event_count.saturating_sub(retained_events.len());
@@ -794,6 +795,9 @@ fn simulation_export_with_event_limit(
                     side.clone(),
                     units.to_f64_lossy(),
                 ),
+                EventType::ModEventEmitted { module, value } => {
+                    ("mod", module.clone(), "event".to_string(), *value as f64)
+                }
             };
             serde_json::json!({
                 "tick": event.tick.value(),

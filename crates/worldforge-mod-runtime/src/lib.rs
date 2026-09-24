@@ -223,6 +223,17 @@ impl WasmModInstance {
         &self.store.data().emitted_events
     }
 
+    /// Drain numeric events emitted since the previous host synchronization.
+    pub fn take_emitted_events(&mut self) -> Vec<i64> {
+        std::mem::take(&mut self.store.data_mut().emitted_events)
+    }
+
+    /// Refresh the deterministic aggregate value exposed by the v0
+    /// `read_resource` host function before invoking a callback.
+    pub fn set_resource_amount(&mut self, amount: i64) {
+        self.store.data_mut().resource_amount = amount;
+    }
+
     fn map_call_result(&self, result: wasmtime::Result<()>) -> Result<(), WorldForgeError> {
         result.map_err(|error| {
             if self.store.data().capability_denied {

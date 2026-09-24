@@ -129,6 +129,10 @@ pub enum EventType {
         units: Fixed64,
         price: Fixed64,
     },
+    ModEventEmitted {
+        module: String,
+        value: i64,
+    },
 }
 
 /// A simulation event with its tick and type.
@@ -303,6 +307,9 @@ impl SimulationEvent {
                 units,
                 price,
             } => format!("crypto {side}: {units} {asset} at {price}"),
+            EventType::ModEventEmitted { module, value } => {
+                format!("mod '{module}' emitted event {value}")
+            }
         }
     }
 }

@@ -9,6 +9,7 @@ on:
 env:
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: 1
+  RUST_VERSION: "1.88.0"
 
 jobs:
   check:
@@ -16,9 +17,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@1.88.0
       - uses: Swatinem/rust-cache@v2
-      - run: cargo check --workspace
+      - run: cargo check --workspace --all-targets
 
   test:
     name: Test
@@ -28,16 +29,16 @@ jobs:
         os: [ubuntu-latest, windows-latest, macos-latest]
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@1.88.0
       - uses: Swatinem/rust-cache@v2
-      - run: cargo test --workspace
+      - run: cargo test --workspace --all-targets
 
   fmt:
     name: Format
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@1.88.0
         with:
           components: rustfmt
       - run: cargo fmt --all -- --check
@@ -47,11 +48,20 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@1.88.0
         with:
           components: clippy
       - uses: Swatinem/rust-cache@v2
-      - run: cargo clippy --workspace -- -D warnings
+      - run: cargo clippy --workspace --all-targets -- -D warnings
+
+  security:
+    name: Dependency audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: rustsec/audit-check@v2.0.0
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
 
   determinism:
     name: Determinism Verification
@@ -59,7 +69,7 @@ jobs:
     needs: [check]
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@1.88.0
       - uses: Swatinem/rust-cache@v2
       - run: cargo build -p worldforge-cli --release
       - name: Run supply-chain determinism test
@@ -68,10 +78,16 @@ jobs:
       - name: Run minimal-world determinism test
         run: |
           target/release/worldforge test-world examples/minimal-world --runs 5 --ticks 10
+      - name: Run city campaign determinism test
+        run: |
+          target/release/worldforge test-world examples/micro-city --runs 20 --ticks 1500
       - name: Validate example worlds
         run: |
-          target/release/worldforge validate examples/supply-chain
-          target/release/worldforge validate examples/minimal-world
+          for world in examples/*; do
+            if [ -f "$world/world.toml" ]; then
+              target/release/worldforge validate "$world"
+            fi
+          done
       - name: Build and inspect package
         run: |
           target/release/worldforge package build examples/supply-chain

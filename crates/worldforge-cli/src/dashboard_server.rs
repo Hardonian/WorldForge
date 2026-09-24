@@ -1274,8 +1274,8 @@ fn validate_save_game(save: &SaveGame, expected_id: &str) -> Result<(), WorldFor
                     .as_deref()
                     .is_some_and(valid_action_id)
                     && intervention.target.as_deref().is_some_and(valid_action_id)
-                    && intervention.agent.as_deref().is_none_or(valid_action_id)
-                    && intervention.option.as_deref().is_none_or(valid_action_id)
+                    && intervention.agent.as_deref().map_or(true, valid_action_id)
+                    && intervention.option.as_deref().map_or(true, valid_action_id)
             }
             _ => false,
         };
@@ -1634,6 +1634,9 @@ fn event_document(event: &SimulationEvent) -> Value {
             side.clone(),
             units.to_f64_lossy(),
         ),
+        EventType::ModEventEmitted { module, value } => {
+            ("mod", module.clone(), "event".to_string(), *value as f64)
+        }
     };
     json!({
         "tick": event.tick.value(),
