@@ -133,6 +133,23 @@ pub enum EventType {
         module: String,
         value: i64,
     },
+    SeasonChanged {
+        season: String,
+        cycle: u64,
+    },
+    WeatherChanged {
+        weather: String,
+        temperature: f64,
+    },
+    EcologicalDisaster {
+        disaster: String,
+        severity: f64,
+    },
+    TradeCaravanArrived {
+        source: String,
+        resource: String,
+        amount: f64,
+    },
 }
 
 /// A simulation event with its tick and type.
@@ -309,6 +326,18 @@ impl SimulationEvent {
             } => format!("crypto {side}: {units} {asset} at {price}"),
             EventType::ModEventEmitted { module, value } => {
                 format!("mod '{module}' emitted event {value}")
+            }
+            EventType::SeasonChanged { season, cycle } => {
+                format!("season changed to {season} (year {cycle})")
+            }
+            EventType::WeatherChanged { weather, temperature } => {
+                format!("weather: {weather} ({temperature:.1}°C)")
+            }
+            EventType::EcologicalDisaster { disaster, severity } => {
+                format!("ecological disaster: {disaster} (severity {severity:.1})")
+            }
+            EventType::TradeCaravanArrived { source, resource, amount } => {
+                format!("trade caravan from {source} delivered {amount:.1} {resource}")
             }
         }
     }

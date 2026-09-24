@@ -1637,6 +1637,18 @@ fn event_document(event: &SimulationEvent) -> Value {
         EventType::ModEventEmitted { module, value } => {
             ("mod", module.clone(), "event".to_string(), *value as f64)
         }
+        EventType::SeasonChanged { season, cycle } => {
+            ("ecology", "climate".to_string(), season.clone(), *cycle as f64)
+        }
+        EventType::WeatherChanged { weather, temperature } => {
+            ("ecology", "atmosphere".to_string(), weather.clone(), *temperature)
+        }
+        EventType::EcologicalDisaster { disaster, severity } => {
+            ("ecology", "hazard".to_string(), disaster.clone(), *severity)
+        }
+        EventType::TradeCaravanArrived { source, resource, amount } => {
+            ("logistics", source.clone(), resource.clone(), *amount)
+        }
     };
     json!({
         "tick": event.tick.value(),

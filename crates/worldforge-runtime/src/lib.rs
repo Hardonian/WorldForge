@@ -111,6 +111,10 @@ impl RunEventCounts {
             | EventType::CryptoMarketMoved { .. }
             | EventType::CryptoTradeExecuted { .. } => self.intrigue += 1,
             EventType::ModEventEmitted { .. } => self.mods += 1,
+            EventType::SeasonChanged { .. }
+            | EventType::WeatherChanged { .. }
+            | EventType::EcologicalDisaster { .. }
+            | EventType::TradeCaravanArrived { .. } => self.system += 1,
         }
     }
 }
@@ -206,6 +210,8 @@ pub struct CityProgress {
     pub governance: CityGovernanceProgress,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub geopolitics: Option<CityGeopoliticsProgress>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ecology: Option<CityEcologyProgress>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub intrigue: Option<CityIntrigueProgress>,
 }
@@ -310,6 +316,23 @@ pub struct CityDistrictProgress {
 
 #[derive(Debug, Clone, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct CityEcologyProgress {
+    pub season: String,
+    pub season_progress: f64,
+    pub year: u64,
+    pub weather: String,
+    pub temperature_c: f64,
+    pub biosphere_health: f64,
+    pub air_quality: f64,
+    pub water_purity: f64,
+    pub soil_fertility: f64,
+    pub disaster_risk: f64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub active_disaster: Option<String>,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct CityBuildingProgress {
     pub id: String,
     pub name: String,
@@ -320,6 +343,7 @@ pub struct CityBuildingProgress {
     pub footprint: u32,
     pub count: u32,
     pub max_count: u32,
+    pub level: u32,
     pub cost: BTreeMap<String, f64>,
     pub upkeep: BTreeMap<String, f64>,
     pub outputs: BTreeMap<String, f64>,
@@ -431,6 +455,8 @@ struct CityRuntimeState {
     crypto_holdings: BTreeMap<String, Fixed64>,
     #[serde(default)]
     intrigue_nonce: u64,
+    #[serde(default)]
+    building_levels: BTreeMap<String, u32>,
 }
 
 impl worldforge_ecs::Component for CityRuntimeState {
@@ -987,6 +1013,7 @@ impl SimulationRuntime {
             run_production(&mut self.world, &self.entity_ids, tick, &mut tick_events);
             tick_events.extend(self.run_city_economy(tick)?);
             tick_events.extend(self.run_city_geopolitics(tick)?);
+            tick_events.extend(self.run_city_ecology(tick)?);
             tick_events.extend(self.run_city_intrigue(tick)?);
             run_transfers(
                 &mut self.world,
@@ -2490,6 +2517,7 @@ impl SimulationRuntime {
                     footprint: building.footprint,
                     count: city_building_count(state, &building.id),
                     max_count: building.max_count,
+                    level: state.building_levels.get(&building.id).copied().unwrap_or(1),
                     cost: building.cost.clone(),
                     upkeep: building.upkeep.clone(),
                     outputs: building.outputs.clone(),
@@ -2804,6 +2832,93 @@ impl SimulationRuntime {
                 stolen_secrets,
             })
         };
+        let ecology = {
+            let current_tick = self.world.current_tick().value();
+            let cycle = (current_tick / 240) + 1;
+            let season_idx = (current_tick % 240) / 60;
+            let season_progress = ((current_tick % 60) as f64) / 60.0;
+            let (season, base_temp) = match season_idx {
+                0 => ("Spring", 16.0),
+                1 => ("Summer", 32.0),
+                2 => ("Autumn", 17.0),
+                _ => ("Winter", 1.0),
+            };
+
+            let weather_seed = self.scenario.seed.wrapping_add(current_tick / 30);
+            let weather = match season_idx {
+                0 => match weather_seed % 3 {
+                    0 => "Gentle Rain",
+                    1 => "Clear Skies",
+                    _ => "Spring Showers",
+                },
+                1 => match weather_seed % 3 {
+                    0 => "Scorching Sun",
+                    1 => "Heatwave",
+                    _ => "Clear Skies",
+                },
+                2 => match weather_seed % 3 {
+                    0 => "Crisp Autumn Wind",
+                    1 => "Overcast Skies",
+                    _ => "Harvest Sun",
+                },
+                _ => match weather_seed % 3 {
+                    0 => "Light Snow",
+                    1 => "Freezing Frost",
+                    _ => "Cold Clear",
+                },
+            };
+
+            let mut green_count = 0.0;
+            let mut industry_count = 0.0;
+            for (key, count) in &state.placements {
+                if let Some((_, b_id)) = key.split_once('/') {
+                    if let Some(b) = city.buildings.iter().find(|b| b.id == b_id) {
+                        if b.tags.contains(&"green".to_string()) || b.tags.contains(&"water".to_string()) {
+                            green_count += *count as f64;
+                        }
+                        if b.tags.contains(&"maker".to_string()) || b.category == "industry" {
+                            industry_count += *count as f64;
+                        }
+                    }
+                }
+            }
+
+            let biosphere_health = (80.0 + (green_count * 5.0) - (industry_count * 6.0)).clamp(10.0, 100.0);
+            let air_quality = (85.0 + (green_count * 4.0) - (industry_count * 8.0)).clamp(15.0, 100.0);
+            let water_purity = (80.0 + (green_count * 6.0) - (industry_count * 4.0)).clamp(20.0, 100.0);
+            let drought_index = (((self.scenario.seed.wrapping_add(current_tick / 40)) % 100) as f64) / 100.0;
+            let soil_fertility = (88.0 - (drought_index * 35.0) + (green_count * 2.0)).clamp(20.0, 100.0);
+            let disaster_risk = if season_idx == 1 && drought_index > 0.6 {
+                drought_index * 100.0
+            } else if season_idx == 3 && base_temp < 0.0 {
+                45.0
+            } else {
+                15.0
+            };
+            let active_disaster = if season_idx == 1 && drought_index > 0.65 {
+                Some("Severe Drought".to_string())
+            } else if season_idx == 3 && base_temp < 0.0 {
+                Some("Frost Snap".to_string())
+            } else if biosphere_health < 30.0 {
+                Some("Industrial Smog".to_string())
+            } else {
+                None
+            };
+
+            Some(CityEcologyProgress {
+                season: season.to_string(),
+                season_progress,
+                year: cycle,
+                weather: weather.to_string(),
+                temperature_c: base_temp,
+                biosphere_health,
+                air_quality,
+                water_purity,
+                soil_fertility,
+                disaster_risk,
+                active_disaster,
+            })
+        };
         Some(CityProgress {
             treasury: city.treasury.clone(),
             population,
@@ -2816,6 +2931,7 @@ impl SimulationRuntime {
             technologies,
             governance,
             geopolitics,
+            ecology,
             intrigue,
         })
     }
