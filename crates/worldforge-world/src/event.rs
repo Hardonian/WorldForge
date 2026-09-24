@@ -64,6 +64,14 @@ pub enum EventType {
         dilemma: String,
         option: String,
     },
+    TrajectoryShifted {
+        axis: String,
+        old_score: Fixed64,
+        new_score: Fixed64,
+        momentum: Fixed64,
+        cause: String,
+        turning_point: bool,
+    },
     ObjectiveUpdated {
         objective: String,
         status: String,
@@ -241,6 +249,17 @@ impl SimulationEvent {
             EventType::CivicDecisionResolved { dilemma, option } => {
                 format!("civic deadline resolved: {dilemma} → {option}")
             }
+            EventType::TrajectoryShifted {
+                axis,
+                old_score,
+                new_score,
+                cause,
+                turning_point,
+                ..
+            } => format!(
+                "trajectory {axis}: {old_score} → {new_score} from {cause}{}",
+                if *turning_point { " (turning point)" } else { "" }
+            ),
             EventType::ObjectiveUpdated { objective, status } => {
                 format!("objective '{}': {}", objective, status)
             }
