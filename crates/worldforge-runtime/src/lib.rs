@@ -1257,10 +1257,9 @@ impl SimulationRuntime {
             WorldForgeError::new(ErrorCode::RuntimeInitFailed, "city treasury is unavailable")
         })?;
 
-        let event;
         let tick = self.world.current_tick();
 
-        match action {
+        let event = match action {
             "tribute" => {
                 let entity = city
                     .political_entities
@@ -1303,13 +1302,13 @@ impl SimulationRuntime {
                     inventory.add(res, Fixed64::from_f64_lossy(*amt));
                 }
 
-                event = SimulationEvent::new(
+                SimulationEvent::new(
                     tick,
                     EventType::TributeCollected {
                         entity: entity_id.to_string(),
                         resources: entity.tribute.clone(),
                     },
-                );
+                )
             }
             "emissary" => {
                 let entity = city
@@ -1344,14 +1343,14 @@ impl SimulationRuntime {
                     *current_stance = "friendly".to_string();
                 }
 
-                event = SimulationEvent::new(
+                SimulationEvent::new(
                     tick,
                     EventType::GeopoliticalStanceChanged {
                         entity: entity_id.to_string(),
                         from: old_stance,
                         to: current_stance.clone(),
                     },
-                );
+                )
             }
             "posture" => {
                 let new_posture = option.unwrap_or("fortified").to_string();
@@ -1366,14 +1365,14 @@ impl SimulationRuntime {
                 };
                 state.defense_posture = new_posture.clone();
 
-                event = SimulationEvent::new(
+                SimulationEvent::new(
                     tick,
                     EventType::GeopoliticalStanceChanged {
                         entity: "defense-garrison".to_string(),
                         from: old_posture,
                         to: new_posture,
                     },
-                );
+                )
             }
             "coalition" => {
                 let entity = city
@@ -1398,14 +1397,14 @@ impl SimulationRuntime {
                 let old = current_stance.clone();
                 *current_stance = "coalition".to_string();
 
-                event = SimulationEvent::new(
+                SimulationEvent::new(
                     tick,
                     EventType::GeopoliticalStanceChanged {
                         entity: entity_id.to_string(),
                         from: old,
                         to: "coalition".to_string(),
                     },
-                );
+                )
             }
             "strike" => {
                 let cost = BTreeMap::from([
@@ -1420,21 +1419,21 @@ impl SimulationRuntime {
                     .expect("validated city state");
                 state.raid_threat_counter = Fixed64::ZERO;
 
-                event = SimulationEvent::new(
+                SimulationEvent::new(
                     tick,
                     EventType::WarlordIncursion {
                         entity: entity_id.to_string(),
                         damage: 0.0,
                         repelled: true,
                     },
-                );
+                )
             }
             _ => {
                 return Err(action_error(format!(
                     "unknown geopolitical action '{action}'"
                 )));
             }
-        }
+        };
 
         self.record_player_event(event.clone());
         self.refresh_resource_totals(self.world.current_tick().value());
@@ -2636,17 +2635,20 @@ impl SimulationRuntime {
                 .corporations
                 .iter()
                 .flat_map(|corporation| {
-                    corporation.secrets.iter().filter_map(|secret| {
-                        state
-                            .stolen_secrets
-                            .contains(&format!("{}/{}", corporation.id, secret.id))
-                            .then(|| StolenSecretProgress {
-                                corporation: corporation.id.clone(),
-                                secret: secret.id.clone(),
-                                name: secret.name.clone(),
-                                research_value: secret.research_value,
-                            })
-                    })
+                    corporation
+                        .secrets
+                        .iter()
+                        .filter(|secret| {
+                            state
+                                .stolen_secrets
+                                .contains(&format!("{}/{}", corporation.id, secret.id))
+                        })
+                        .map(|secret| StolenSecretProgress {
+                            corporation: corporation.id.clone(),
+                            secret: secret.id.clone(),
+                            name: secret.name.clone(),
+                            research_value: secret.research_value,
+                        })
                 })
                 .collect();
             Some(CityIntrigueProgress {
@@ -2832,7 +2834,7 @@ impl SimulationRuntime {
             .cloned()
             .ok_or_else(|| action_error("city state is unavailable"))?;
 
-        if tick_val > 0 && tick_val % 25 == 0 {
+        if tick_val > 0 && tick_val.is_multiple_of(25) {
             let has_hostiles = city.political_entities.iter().any(|e| {
                 let stance = state
                     .entity_stances
@@ -2940,7 +2942,7 @@ impl SimulationRuntime {
 
         state.intrigue_heat = (state.intrigue_heat - Fixed64::from_ratio(1, 2)).max(Fixed64::ZERO);
 
-        if tick_value > 0 && tick_value % 5 == 0 {
+        if tick_value > 0 && tick_value.is_multiple_of(5) {
             for asset in &city.crypto_assets {
                 let price = state
                     .crypto_prices
@@ -2966,7 +2968,7 @@ impl SimulationRuntime {
             }
         }
 
-        if tick_value > 0 && tick_value % 10 == 0 {
+        if tick_value > 0 && tick_value.is_multiple_of(10) {
             let rogue_agents = city
                 .cyber_agents
                 .iter()
@@ -2981,7 +2983,7 @@ impl SimulationRuntime {
                 .cloned()
                 .collect::<Vec<_>>();
             for agent in rogue_agents {
-                let resource = if tick_value % 20 == 0 {
+                let resource = if tick_value.is_multiple_of(20) {
                     "research"
                 } else {
                     "credits"
