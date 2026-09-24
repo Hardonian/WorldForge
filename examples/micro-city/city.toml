@@ -856,7 +856,7 @@ id = "refugee-crisis"
 title = "Refugee Exodus at Frontier Gates"
 description = "Warfare between the Iron Mandate and border villages has displaced hundreds of starving civilians pleading for sanctuary. Do we admit them?"
 deadline_ticks = 15
-default_option = "admit-refugees"
+default_option = "seal-borders"
 [dilemmas.trigger]
 tick = 18
 
@@ -880,8 +880,6 @@ population_growth_multiplier = 1.1
 id = "seal-borders"
 label = "Seal Gates & Turn Away"
 description = "Preserve municipal granary reserves and prioritize local residents over foreign refugees."
-[dilemmas.options.cost]
-credits = 30.0
 [dilemmas.options.faction_support]
 builders-guild = 6.0
 commons-assembly = -12.0
@@ -893,7 +891,7 @@ id = "vassal-famine-emergency"
 title = "Riverside Vassal Famine Petition"
 description = "Prolonged drought has devastated the Riverside Protectorate. Governor Chen petitions our council for emergency grain relief and tithe suspension."
 deadline_ticks = 18
-default_option = "send-relief"
+default_option = "enforce-quotas"
 [dilemmas.trigger]
 tick = 26
 
