@@ -98,7 +98,8 @@ impl RunEventCounts {
             EventType::TechnologyUnlocked { .. } => self.research += 1,
             EventType::CivicDilemmaOpened { .. }
             | EventType::PlayerCivicDecision { .. }
-            | EventType::CivicDecisionResolved { .. } => self.governance += 1,
+            | EventType::CivicDecisionResolved { .. }
+            | EventType::TrajectoryShifted { .. } => self.governance += 1,
             EventType::GeopoliticalStanceChanged { .. }
             | EventType::TributeCollected { .. }
             | EventType::WarlordIncursion { .. }
@@ -208,6 +209,7 @@ pub struct CityProgress {
     pub buildings: Vec<CityBuildingProgress>,
     pub technologies: Vec<CityTechnologyProgress>,
     pub governance: CityGovernanceProgress,
+    pub trajectory: CityTrajectoryProgress,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub geopolitics: Option<CityGeopoliticsProgress>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -380,6 +382,24 @@ pub struct CityGovernanceProgress {
 
 #[derive(Debug, Clone, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct CityTrajectoryProgress {
+    pub dominant_axis: Option<String>,
+    pub scores: BTreeMap<String, f64>,
+    pub momentum: BTreeMap<String, f64>,
+    pub turning_points: Vec<TrajectoryTurningPointProgress>,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TrajectoryTurningPointProgress {
+    pub tick: u64,
+    pub axis: String,
+    pub score: f64,
+    pub cause: String,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct CivicFactionProgress {
     pub id: String,
     pub name: String,
@@ -457,6 +477,20 @@ struct CityRuntimeState {
     intrigue_nonce: u64,
     #[serde(default)]
     building_levels: BTreeMap<String, u32>,
+    #[serde(default)]
+    trajectory_scores: BTreeMap<String, Fixed64>,
+    #[serde(default)]
+    trajectory_momentum: BTreeMap<String, Fixed64>,
+    #[serde(default)]
+    trajectory_turning_points: Vec<TrajectoryTurningPointState>,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+struct TrajectoryTurningPointState {
+    tick: u64,
+    axis: String,
+    score: Fixed64,
+    cause: String,
 }
 
 impl worldforge_ecs::Component for CityRuntimeState {
@@ -3068,6 +3102,38 @@ impl SimulationRuntime {
                 active_disaster,
             })
         };
+        let trajectory = {
+            let scores: BTreeMap<String, f64> = state
+                .trajectory_scores
+                .iter()
+                .map(|(k, v)| (k.clone(), v.to_f64_lossy()))
+                .collect();
+            let momentum: BTreeMap<String, f64> = state
+                .trajectory_momentum
+                .iter()
+                .map(|(k, v)| (k.clone(), v.to_f64_lossy()))
+                .collect();
+            let dominant_axis = scores
+                .iter()
+                .max_by(|a, b| a.1.abs().partial_cmp(&b.1.abs()).unwrap_or(std::cmp::Ordering::Equal))
+                .map(|(k, _)| k.clone());
+            let turning_points = state
+                .trajectory_turning_points
+                .iter()
+                .map(|tp| TrajectoryTurningPointProgress {
+                    tick: tp.tick,
+                    axis: tp.axis.clone(),
+                    score: tp.score.to_f64_lossy(),
+                    cause: tp.cause.clone(),
+                })
+                .collect();
+            CityTrajectoryProgress {
+                dominant_axis,
+                scores,
+                momentum,
+                turning_points,
+            }
+        };
         Some(CityProgress {
             treasury: city.treasury.clone(),
             population,
@@ -3079,6 +3145,7 @@ impl SimulationRuntime {
             buildings,
             technologies,
             governance,
+            trajectory,
             geopolitics,
             ecology,
             intrigue,

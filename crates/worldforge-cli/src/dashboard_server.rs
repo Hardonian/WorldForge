@@ -1688,6 +1688,9 @@ fn event_document(event: &SimulationEvent) -> Value {
         | EventType::CivicDecisionResolved { dilemma, option } => {
             ("governance", dilemma.clone(), option.clone(), 1.0)
         }
+        EventType::TrajectoryShifted { axis, new_score, .. } => {
+            ("governance", format!("trajectory:{axis}"), format!("{new_score}"), new_score.to_f64_lossy())
+        }
         EventType::ObjectiveUpdated { objective, .. } => {
             ("system", "objective".to_string(), objective.clone(), 0.0)
         }

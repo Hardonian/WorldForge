@@ -26,6 +26,9 @@ const THEME_LABELS = {
     'cryo-vector': 'Cryo Vector',
 };
 
+const FONT_SANS = "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
+const FONT_MONO = "'JetBrains Mono', ui-monospace, 'SFMono-Regular', Consolas, monospace";
+
 function getWorldFlagSvg(worldId, size = 20) {
     const s = size;
     const flags = {
@@ -4951,7 +4954,7 @@ const WorldForgeCG = {
                 ctx.strokeRect(-16, -24, 32, 11);
                 ctx.fillRect(-16, -24, 32, 11);
                 ctx.fillStyle = '#f8fafc';
-                ctx.font = 'bold 8px sans-serif';
+                ctx.font = 'bold 8px ' + FONT_SANS;
                 ctx.textAlign = 'center';
                 ctx.fillText(car.cargo, 0, -16);
             }
@@ -5485,7 +5488,7 @@ const WorldForgeCG = {
         // Structural Level Badges (★☆☆, ★★☆, ★★★)
         if (!isGhost && buildingLevel >= 2) {
             ctx.fillStyle = '#facc15';
-            ctx.font = 'bold 9px sans-serif';
+            ctx.font = 'bold 9px ' + FONT_SANS;
             ctx.textAlign = 'center';
             const starText = buildingLevel === 2 ? '★★' : '★★★';
             ctx.fillText(starText, 0, -48);
@@ -5925,10 +5928,10 @@ const WorldForgeCG = {
         ctx.fillRect(-160, 190, 320, 34);
 
         ctx.fillStyle = '#f8fafc';
-        ctx.font = 'bold 11px sans-serif';
+        ctx.font = 'bold 11px ' + FONT_SANS;
         ctx.textAlign = 'center';
         ctx.fillText('🌿 LIVING WILDERNESS ECOSYSTEM · PREDATOR-PREY WEB', 0, 205);
-        ctx.font = '10px sans-serif';
+        ctx.font = '10px ' + FONT_SANS;
         ctx.fillStyle = '#86efac';
         ctx.fillText('🦌 8-12 Herbivore Deer  ·  🐺 4-6 Wolf Pack Hunters  ·  🌾 Savanna Biomass', 0, 218);
 
@@ -6210,10 +6213,10 @@ const WorldForgeCG = {
         ctx.fillRect(-190, 195, 380, 36);
 
         ctx.fillStyle = '#f8fafc';
-        ctx.font = 'bold 11px sans-serif';
+        ctx.font = 'bold 11px ' + FONT_SANS;
         ctx.textAlign = 'center';
         ctx.fillText('🌊 COASTAL RESILIENCE MATRIX · SEASCAPE & INFRASTRUCTURE', 0, 210);
-        ctx.font = '10px sans-serif';
+        ctx.font = '10px ' + FONT_SANS;
         ctx.fillStyle = '#7dd3fc';
         ctx.fillText('⚡ 4 Offshore Turbines  ·  💧 Desal Plant Active  ·  🛡️ Surge Barrier Ready  ·  🚢 Harbor Cargo', 0, 224);
 
