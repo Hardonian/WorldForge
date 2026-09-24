@@ -1052,6 +1052,17 @@ mod tests {
         runtime
             .make_civic_decision("growth-charter", "civic-land-trust")
             .unwrap();
+        runtime
+            .execute_intrigue_action("trade", "forgecoin", None, Some("buy"))
+            .unwrap();
+        runtime
+            .execute_intrigue_action(
+                "infiltrate",
+                "helix-meridian",
+                Some("cipher-nine"),
+                Some("mycelial-compute"),
+            )
+            .unwrap();
         runtime.step(5).unwrap();
         let replay = runtime.take_replay().unwrap();
         let path = std::env::temp_dir().join(format!(

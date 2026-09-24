@@ -3775,4 +3775,62 @@ goods = 2.0
 
         assert_eq!(play(), play());
     }
+
+    #[test]
+    fn intrigue_agents_secrets_and_markets_are_deterministic() {
+        let play = || {
+            let mut runtime =
+                SimulationRuntime::load(&example("micro-city"), 404, Some(24)).unwrap();
+            let initial = runtime.current_progress();
+            let intrigue = initial.city.as_ref().unwrap().intrigue.as_ref().unwrap();
+            assert_eq!(intrigue.corporations.len(), 3);
+            assert!(intrigue
+                .agents
+                .iter()
+                .any(|agent| agent.id == "nyx-seven" && agent.status == "rogue"));
+
+            runtime
+                .execute_intrigue_action("deploy", "glass-orchid", None, None)
+                .unwrap();
+            runtime
+                .execute_intrigue_action(
+                    "infiltrate",
+                    "helix-meridian",
+                    Some("cipher-nine"),
+                    Some("mycelial-compute"),
+                )
+                .unwrap();
+            runtime
+                .execute_intrigue_action("trade", "forgecoin", None, Some("buy"))
+                .unwrap();
+            runtime
+                .execute_intrigue_action(
+                    "manipulate",
+                    "forgecoin",
+                    Some("glass-orchid"),
+                    Some("pump"),
+                )
+                .unwrap();
+            runtime.step(11).unwrap();
+            runtime
+                .execute_intrigue_action("contain", "nyx-seven", None, None)
+                .unwrap();
+            runtime
+                .execute_intrigue_action("trade", "forgecoin", None, Some("sell"))
+                .unwrap();
+            runtime.step(100).unwrap();
+
+            let result = runtime.completed_result().unwrap();
+            assert!(result.event_type_counts.intrigue >= 10);
+            assert!(runtime.retained_events().iter().any(|event| matches!(
+                event.event_type,
+                EventType::RogueAgentIncident { .. }
+            )));
+            (
+                result.final_state_fingerprint,
+                result.proof.event_chain_root,
+            )
+        };
+        assert_eq!(play(), play());
+    }
 }
