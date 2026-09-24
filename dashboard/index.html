@@ -455,6 +455,14 @@
                                         <svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="5" cy="5" r="3"/><circle cx="15" cy="15" r="3"/><path d="m7 7 6 6"/></svg>
                                         <span>Schematic</span>
                                     </button>
+                                    <button type="button" class="view-toggle-btn" id="btn-view-third" title="Third-person follow camera">
+                                        <svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="6" r="2.5"/><path d="M6 17v-3.5A4 4 0 0 1 10 9.5a4 4 0 0 1 4 4V17M3 10l3-2M17 10l-3-2"/></svg>
+                                        <span>Third Person</span>
+                                    </button>
+                                    <button type="button" class="view-toggle-btn" id="btn-view-first" title="First-person immersive camera">
+                                        <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M2 6V3h3M18 6V3h-3M2 14v3h3M18 14v3h-3"/><circle cx="10" cy="10" r="2"/></svg>
+                                        <span>First Person</span>
+                                    </button>
                                 </div>
                                 <div class="cg-toolbar" id="cg-toolbar">
                                     <button type="button" class="icon-button cg-tool-btn" id="cg-btn-zoom-in" title="Zoom in (+)" aria-label="Zoom in">
@@ -524,6 +532,11 @@
 
                             <canvas id="play-cg-canvas" role="img" aria-label="Tactical CG simulation game view with real-time animations"></canvas>
                             <svg id="play-network" class="hidden" viewBox="0 0 800 420" role="img" aria-label="Live entity and resource network"></svg>
+                            <div class="immersion-hud hidden" id="immersion-hud">
+                                <div class="immersion-status"><small id="immersion-mode">THIRD-PERSON FOLLOW</small><strong id="immersion-focus">Free camera</strong><span id="immersion-signal">World telemetry linked</span></div>
+                                <div class="immersion-reticle" aria-hidden="true"><i></i><i></i></div>
+                                <div class="immersion-controls"><span id="immersion-help">WASD move · drag look · wheel zoom · Esc tactical</span><button type="button" id="immersion-pause">Pause</button><button type="button" id="immersion-checkpoint">Checkpoint</button><button type="button" id="immersion-intervene">Intervene</button></div>
+                            </div>
                             
                             <!-- SimCity / Age of Empires RTS Quick-Build Dock -->
                             <div class="city-build-dock" id="city-build-dock" aria-label="Quick Construction Toolbar">
