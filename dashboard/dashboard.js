@@ -1813,6 +1813,9 @@ function renderCityLayer(city) {
         city.systemsDebrief,
     );
     renderGeopolitics(city.geopolitics);
+    if (WorldForgeCG.worldLens === 'realm') {
+        WorldForgeCG.updateRealmStrategyDock();
+    }
     renderEcologyHud(city.ecology, state.play?.data?.tick);
     renderIntrigue(city.intrigue);
     syncCityBuildingSelection();
@@ -3653,6 +3656,69 @@ const WorldForgeCG = {
                 });
             } catch (_) {}
         },
+        playReconScan() {
+            if (!this.enabled) return;
+            this.init();
+            if (!this.ctx) return;
+            try {
+                const now = this.ctx.currentTime;
+                // High-tech sonar sweep / radar ping (StarCraft / radar sound)
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(1480, now);
+                osc.frequency.exponentialRampToValueAtTime(2400, now + 0.04);
+                osc.frequency.exponentialRampToValueAtTime(880, now + 0.22);
+                gain.gain.setValueAtTime(0.12, now);
+                gain.gain.exponentialRampToValueAtTime(0.001, now + 0.22);
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                osc.start(now);
+                osc.stop(now + 0.22);
+            } catch (_) {}
+        },
+        playUnitOrder() {
+            if (!this.enabled) return;
+            this.init();
+            if (!this.ctx) return;
+            try {
+                const now = this.ctx.currentTime;
+                // Military radio blip / RTS tactical order acknowledgment
+                [880, 1174.66].forEach((freq, i) => {
+                    const osc = this.ctx.createOscillator();
+                    const gain = this.ctx.createGain();
+                    osc.type = 'triangle';
+                    osc.frequency.setValueAtTime(freq, now + i * 0.04);
+                    gain.gain.setValueAtTime(0.09, now + i * 0.04);
+                    gain.gain.exponentialRampToValueAtTime(0.001, now + i * 0.04 + 0.08);
+                    osc.connect(gain);
+                    gain.connect(this.ctx.destination);
+                    osc.start(now + i * 0.04);
+                    osc.stop(now + i * 0.04 + 0.08);
+                });
+            } catch (_) {}
+        },
+        playDiscoveryFanfare() {
+            if (!this.enabled) return;
+            this.init();
+            if (!this.ctx) return;
+            try {
+                const now = this.ctx.currentTime;
+                // Celestial / Wonder discovery chord: E5, G#5, B5, E6
+                [659.25, 830.61, 987.77, 1318.51].forEach((freq, i) => {
+                    const osc = this.ctx.createOscillator();
+                    const gain = this.ctx.createGain();
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(freq, now + i * 0.08);
+                    gain.gain.setValueAtTime(0.1, now + i * 0.08);
+                    gain.gain.exponentialRampToValueAtTime(0.001, now + i * 0.08 + 0.6);
+                    osc.connect(gain);
+                    gain.connect(this.ctx.destination);
+                    osc.start(now + i * 0.08);
+                    osc.stop(now + i * 0.08 + 0.6);
+                });
+            } catch (_) {}
+        },
     },
 
     camera: {
@@ -4157,6 +4223,42 @@ const WorldForgeCG = {
                     }
                 }
             }
+
+            // RTS / Realm Strategy Hotkeys
+            if (this.worldLens === 'realm') {
+                if (key === 'l') {
+                    e.preventDefault();
+                    this.deployLegion();
+                    return;
+                }
+                if (key === 'r') {
+                    e.preventDefault();
+                    this.launchReconDrone();
+                    return;
+                }
+                if (key === 'e') {
+                    e.preventDefault();
+                    const targetId = this.selectedRealmEntity ? this.selectedRealmEntity.id : 'barony-oakhaven';
+                    executeGeopoliticalAction('emissary', targetId);
+                    return;
+                }
+                if (key === 't') {
+                    e.preventDefault();
+                    const targetId = this.selectedRealmEntity ? this.selectedRealmEntity.id : 'riverside-vassal';
+                    executeGeopoliticalAction('tribute', targetId);
+                    return;
+                }
+                if (key === 'g' || key === 'p') {
+                    e.preventDefault();
+                    toggleDefensePosture();
+                    return;
+                }
+            }
+            if (key === 'c' && (this.worldLens === 'realm' || this.worldLens === 'city')) {
+                e.preventDefault();
+                this.setViewMode(this.worldLens === 'city' ? 'realm' : 'city');
+                return;
+            }
         });
         window.addEventListener('keyup', e => this.pressedKeys.delete(e.key.toLowerCase()));
     },
@@ -4196,6 +4298,21 @@ const WorldForgeCG = {
                 this.audio?.playBlip?.(open ? 740 : 540, 0.04);
             }
         });
+
+        // Civilization & AoE Realm Strategy Dock Ribbon Commands
+        el('cmd-deploy-legion')?.addEventListener('click', () => this.deployLegion());
+        el('cmd-recon-drone')?.addEventListener('click', () => this.launchReconDrone());
+        el('cmd-dispatch-emissary')?.addEventListener('click', () => {
+            const targetId = this.selectedRealmEntity ? this.selectedRealmEntity.id : 'barony-oakhaven';
+            executeGeopoliticalAction('emissary', targetId);
+        });
+        el('cmd-demand-tribute')?.addEventListener('click', () => {
+            const targetId = this.selectedRealmEntity ? this.selectedRealmEntity.id : 'riverside-vassal';
+            executeGeopoliticalAction('tribute', targetId);
+        });
+        el('cmd-fortify-grid')?.addEventListener('click', () => toggleDefensePosture());
+        el('cmd-open-war-room')?.addEventListener('click', () => openWarRoomModal());
+
         this.syncAudioBtn(this.audio.enabled);
         this.bindKeyboard();
     },
@@ -4251,7 +4368,7 @@ const WorldForgeCG = {
             this.camera.headingStart = this.walker.heading;
         });
 
-        // Contextmenu / Right-Click: Blooms Radial Command Wheel
+        // Contextmenu / Right-Click: RTS Orders or Radial Command Wheel
         c.addEventListener('contextmenu', e => {
             e.preventDefault();
             const rect = c.getBoundingClientRect();
@@ -4264,6 +4381,40 @@ const WorldForgeCG = {
             }
 
             if (this.worldLens === 'realm') {
+                const { wx, wy } = this.screenToWorld(px, py);
+
+                // If a player legion is selected, right click issues RTS move or attack order
+                if (this.selectedLegion) {
+                    let targetWarband = null;
+                    if (this.raiderWarbands) {
+                        for (const rw of this.raiderWarbands) {
+                            if (Math.hypot(wx - rw.x, wy - rw.y) <= 24) {
+                                targetWarband = rw;
+                                break;
+                            }
+                        }
+                    }
+
+                    if (targetWarband) {
+                        this.selectedLegion.targetX = targetWarband.x;
+                        this.selectedLegion.targetY = targetWarband.y;
+                        this.selectedLegion.state = 'marching';
+                        this.audio?.playUnitOrder?.();
+                        this.triggerSparks(targetWarband.x, targetWarband.y);
+                        spawnFloatingText(`⚔️ ENGAGING ${targetWarband.name.toUpperCase()}!`, targetWarband.x, targetWarband.y - 20, 'fx-surge');
+                        showToast('Attack Order Issued! ⚔️', `${this.selectedLegion.name} ordered to intercept ${targetWarband.name}!`);
+                    } else {
+                        this.selectedLegion.targetX = wx;
+                        this.selectedLegion.targetY = wy;
+                        this.selectedLegion.state = 'marching';
+                        this.audio?.playUnitOrder?.();
+                        this.triggerSparks(wx, wy);
+                        spawnFloatingText('⚔️ MARCH ORDER', wx, wy - 15, 'fx-success');
+                    }
+                    this.updateRealmStrategyDock();
+                    return;
+                }
+
                 const realmHit = this.getRealmEntityAt(px, py);
                 if (realmHit) {
                     this.openRadialMenu(px, py, 'entity', realmHit);
@@ -4486,6 +4637,7 @@ const WorldForgeCG = {
             } else if (this.worldLens === 'realm') {
                 const w = c.clientWidth;
                 const h = c.clientHeight;
+                const { wx, wy } = this.screenToWorld(px, py);
 
                 // 1. Check top command HUD pill click -> opens Atlas Radial Command Wheel
                 const pillY = 18;
@@ -4495,13 +4647,71 @@ const WorldForgeCG = {
                     return;
                 }
 
-                // 2. Check Realm & Wonder clicks -> opens contextual Entity Radial Wheel
+                // 2. Check Player Legions (RTS selection)
+                if (this.playerLegions) {
+                    for (const leg of this.playerLegions) {
+                        if (Math.hypot(wx - leg.x, wy - leg.y) <= 24) {
+                            this.selectedLegion = leg;
+                            this.selectedRealmEntity = null;
+                            this.audio?.playUnitOrder?.();
+                            this.updateRealmStrategyDock();
+                            this.triggerSparks(leg.x, leg.y);
+                            spawnFloatingText(`⚔️ ${leg.name.toUpperCase()} READY`, leg.x, leg.y - 20, 'fx-success');
+                            return;
+                        }
+                    }
+                }
+
+                // 3. Check Raider Warbands
+                if (this.raiderWarbands) {
+                    for (const rw of this.raiderWarbands) {
+                        if (Math.hypot(wx - rw.x, wy - rw.y) <= 24) {
+                            if (this.selectedLegion) {
+                                this.selectedLegion.targetX = rw.x;
+                                this.selectedLegion.targetY = rw.y;
+                                this.selectedLegion.state = 'marching';
+                                this.audio?.playUnitOrder?.();
+                                spawnFloatingText(`⚔️ ENGAGING ${rw.name.toUpperCase()}!`, rw.x, rw.y - 20, 'fx-surge');
+                                showToast('Attack Order Issued! ⚔️', `${this.selectedLegion.name} ordered to intercept ${rw.name}!`);
+                            } else {
+                                showToast('Hostile Raiders! ⚔️', `${rw.name}: Incursion party threatening the frontier. Deploy a Peacekeeper Legion!`, 'warning');
+                                this.audio?.playBlip?.(500, 0.05);
+                            }
+                            return;
+                        }
+                    }
+                }
+
+                // 4. Check Anomalies (Click to dispatch recon drone or view reward)
+                const anomalies = this.getAnomalies();
+                for (const a of anomalies) {
+                    if (Math.hypot(wx - a.x, wy - a.y) <= a.r + 14) {
+                        if (!this.exploredAnomalies.has(a.id)) {
+                            this.launchReconDrone(a);
+                        } else {
+                            showToast(`Anomaly Surveyed 🌟`, `${a.name}: ${a.reward}`, 'success');
+                            this.audio?.playBlip?.(880, 0.06);
+                        }
+                        return;
+                    }
+                }
+
+                // 5. Check Realm & Wonder clicks -> selects entity & updates strategy dock
                 const realmHit = this.getRealmEntityAt(px, py);
                 if (realmHit) {
+                    this.selectedRealmEntity = realmHit;
+                    this.selectedLegion = null;
+                    this.updateRealmStrategyDock();
                     this.openRadialMenu(px, py, 'entity', realmHit);
+                    this.audio?.playBlip?.(760, 0.05);
                     return;
                 }
 
+                // Clicked on empty space: deselect unit and update dock
+                if (this.selectedLegion) {
+                    this.selectedLegion = null;
+                    this.updateRealmStrategyDock();
+                }
                 this.audio?.playBlip?.(640, 0.03);
                 return;
             }
@@ -4564,9 +4774,10 @@ const WorldForgeCG = {
             toolbar?.classList.remove('hidden');
             el('immersion-hud')?.classList.toggle('hidden', this.perspectiveMode === 'strategic');
             el('city-build-dock')?.classList.toggle('hidden', this.worldLens !== 'city');
+            el('realm-strategy-dock')?.classList.toggle('hidden', this.worldLens !== 'realm');
             el('play-network-container')?.setAttribute('data-perspective', this.perspectiveMode);
-            const playModal = el('play-modal');
-            playModal?.classList.toggle('lens-realm', this.worldLens === 'realm');
+            const playDialog = el('play-dialog');
+            playDialog?.classList.toggle('lens-realm', this.worldLens === 'realm');
             el('play-network-container')?.setAttribute('data-lens', this.worldLens);
             if (mode === 'realm') {
                 el('play-sidebar')?.classList.remove('drawer-open');
@@ -4575,6 +4786,7 @@ const WorldForgeCG = {
                 this.camera.targetZoom = 0.82;
                 this.camera.hasInteracted = false;
                 this.realmMapLens = this.realmMapLens || 'geopolitics';
+                this.updateRealmStrategyDock();
             } else if (mode === 'city') {
                 this.camera.targetX = 0;
                 this.camera.targetY = 0;
@@ -4595,6 +4807,8 @@ const WorldForgeCG = {
             hud?.classList.add('hidden');
             el('immersion-hud')?.classList.add('hidden');
             el('city-build-dock')?.classList.add('hidden');
+            el('realm-strategy-dock')?.classList.add('hidden');
+            el('play-dialog')?.classList.remove('lens-realm');
             el('play-network-container')?.removeAttribute('data-perspective');
             this.stop();
         }
@@ -5378,25 +5592,19 @@ const WorldForgeCG = {
         }
     },
 
-    getRealmEntityAt(px, py) {
+    screenToWorld(px, py) {
         const w = this.canvas.clientWidth;
         const h = this.canvas.clientHeight;
         const cx = w / 2 + this.camera.x;
         const cy = h / 2 + this.camera.y;
         const wx = (px - cx) / this.camera.zoom;
         const wy = (py - cy) / this.camera.zoom;
+        return { wx, wy };
+    },
 
-        const realms = [
-            { id: 'sanctuary-haven', name: 'Sanctuary Haven', title: 'Your Sovereign Metropolis', power: 'Metropolis · Defense Shield Active', stance: 'ally', x: 0, y: 0, r: 56, crest: '🏰', color: '#f59e0b', type: 'capital', ruler: 'Mayor / Commander (You)', loyalty: 100, military: 320, tribute: 'Self-Governed Capital' },
-            { id: 'barony-oakhaven', name: 'Barony of Oakhaven', title: 'Highland Fiefdom · Baron Kaelen', power: 'Power 125 · Feudal Levies', stance: 'neutral', x: 0, y: -210, r: 48, crest: '🛡️', color: '#eab308', type: 'realm', ruler: 'Baron Kaelen', loyalty: 65, military: 125, tribute: '+40 Food, +30 Timber' },
-            { id: 'riverside-vassal', name: 'Riverside Protectorate', title: 'Agricultural Delta · Gov. Chen', power: 'Tribute: +100 Food, +80 Water', stance: 'vassal', x: -280, y: -30, r: 48, crest: '🌾', color: '#10b981', type: 'realm', ruler: 'Governor Chen', loyalty: 92, military: 85, tribute: '+100 Food, +80 Water' },
-            { id: 'iron-mandate', name: 'Iron Mandate Hegemony', title: 'Imperial Hegemon · Arch-Imperator', power: 'Power 290 · Threat Aura High', stance: 'hostile', x: 280, y: -30, r: 48, crest: '🦅', color: '#ef4444', type: 'realm', ruler: 'Arch-Imperator Vane', loyalty: 20, military: 290, tribute: 'None (Demands submission)' },
-            { id: 'mercantile-league', name: 'Free Mercantile League', title: 'Trade Coalition · Chancellor Mirren', power: 'Coalition Pact · Credit Lines', stance: 'coalition', x: 130, y: 210, r: 48, crest: '⚖️', color: '#38bdf8', type: 'realm', ruler: 'Chancellor Mirren', loyalty: 88, military: 140, tribute: '+150 Credits, +60 Goods' },
-            { id: 'dust-canyon-raiders', name: 'Dust Canyon Raiders', title: 'Desert Insurgency · Warlord Jax', power: 'Warlord Raids · High Incursion', stance: 'hostile', x: -200, y: 190, r: 48, crest: '⚔️', color: '#f97316', type: 'realm', ruler: 'Warlord Jax', loyalty: 10, military: 160, tribute: 'None (Raid Threat 75%)' },
-            { id: 'quantum-monolith', name: 'Quantum Monolith', title: 'Polar Wonder · Leyline Anomaly', power: 'Ancient Wonder · +80 Science Surge', stance: 'wonder', x: -160, y: -260, r: 38, crest: '🔮', color: '#a855f7', type: 'wonder', ruler: 'Precursor Builders', loyalty: 100, military: 0, tribute: '+80 Research XP / cycle' },
-            { id: 'abyssal-rig', name: 'Abyssal Research Dome', title: 'Oceanic Wonder · Geothermal Vent', power: 'Deepsea Wonder · +120 Energy Core', stance: 'wonder', x: 260, y: 230, r: 38, crest: '🌊', color: '#06b6d4', type: 'wonder', ruler: 'Oceanic Institute', loyalty: 100, military: 0, tribute: '+120 MW Geothermal Energy' },
-        ];
-
+    getRealmEntityAt(px, py) {
+        const { wx, wy } = this.screenToWorld(px, py);
+        const realms = this.getRealms();
         for (const r of realms) {
             if (Math.hypot(wx - r.x, wy - r.y) <= r.r) return r;
         }
@@ -7004,6 +7212,23 @@ const WorldForgeCG = {
             speed: 0.12 + Math.random() * 0.1,
             alpha: 0.35 + Math.random() * 0.22,
         }));
+
+        this.exploredAnomalies = this.exploredAnomalies || new Set();
+        this.anomalies = [
+            { id: 'precursor-cache', name: 'Precursor Orbital Cache', icon: '🛸', x: -360, y: -270, r: 32, type: 'tech', reward: '+150 Science XP · Ancient Blueprint' },
+            { id: 'uranium-vein', name: 'Magma Geothermal Fissure', icon: '⚡', x: 370, y: -70, r: 32, type: 'energy', reward: '+180 Energy Surplus · Grid Supercharge' },
+            { id: 'raider-bastion', name: 'Raider Outpost Citadel', icon: '🏴‍☠️', x: -320, y: 220, r: 32, type: 'military', reward: '+120 Bounty Gold · Threat Dismantled' },
+            { id: 'sunken-arcology', name: 'Sunken Gene Sanctuary', icon: '🧬', x: 280, y: 270, r: 32, type: 'ecology', reward: '+200 Bio Health · Flora Resurgence' },
+        ];
+        this.playerLegions = this.playerLegions || [
+            { id: 'legion-1', name: '1st Peacekeeper Legion', x: 45, y: 35, targetX: 45, targetY: 35, speed: 2.2, power: 180, hp: 100, maxHp: 100, state: 'idle', banner: '🛡️', color: '#10b981' }
+        ];
+        this.raiderWarbands = this.raiderWarbands || [
+            { id: 'raiders-1', name: 'Dust Raider Marauders', x: -280, y: 210, targetX: -60, targetY: 40, speed: 0.55, power: 95, hp: 100, maxHp: 100, state: 'advancing', banner: '⚔️', color: '#f97316' }
+        ];
+        this.reconDrone = this.reconDrone || null;
+        this.selectedLegion = this.selectedLegion || null;
+        this.selectedRealmEntity = this.selectedRealmEntity || null;
     },
 
     drawCosmicStarfield(w, h, now) {
@@ -7502,16 +7727,7 @@ const WorldForgeCG = {
         ctx.restore();
 
         // 6. Sovereign Realms & World Entities (Capitals, Citadels & Wonders)
-        const realms = [
-            { id: 'sanctuary-haven', name: 'Sanctuary Haven', title: 'Your Sovereign Metropolis', power: 'Metropolis · Defense Shield Active', stance: 'ally', x: 0, y: 0, r: 56, crest: '🏰', color: '#f59e0b', type: 'capital' },
-            { id: 'barony-oakhaven', name: 'Barony of Oakhaven', title: 'Highland Fiefdom · Baron Kaelen', power: 'Power 125 · Feudal Levies', stance: 'neutral', x: 0, y: -210, r: 48, crest: '🛡️', color: '#eab308', type: 'realm' },
-            { id: 'riverside-vassal', name: 'Riverside Protectorate', title: 'Agricultural Delta · Gov. Chen', power: 'Tribute: +100 Food, +80 Water', stance: 'vassal', x: -280, y: -30, r: 48, crest: '🌾', color: '#10b981', type: 'realm' },
-            { id: 'iron-mandate', name: 'Iron Mandate Hegemony', title: 'Imperial Hegemon · Arch-Imperator', power: 'Power 290 · Threat Aura High', stance: 'hostile', x: 280, y: -30, r: 48, crest: '🦅', color: '#ef4444', type: 'realm' },
-            { id: 'mercantile-league', name: 'Free Mercantile League', title: 'Trade Coalition · Chancellor Mirren', power: 'Coalition Pact · Credit Lines', stance: 'coalition', x: 130, y: 210, r: 48, crest: '⚖️', color: '#38bdf8', type: 'realm' },
-            { id: 'dust-canyon-raiders', name: 'Dust Canyon Raiders', title: 'Desert Insurgency · Warlord Jax', power: 'Warlord Raids · High Incursion', stance: 'hostile', x: -200, y: 190, r: 48, crest: '⚔️', color: '#f97316', type: 'realm' },
-            { id: 'quantum-monolith', name: 'Quantum Monolith', title: 'Polar Wonder · Leyline Anomaly', power: 'Ancient Wonder · +80 Science Surge', stance: 'neutral', x: -160, y: -260, r: 38, crest: '🔮', color: '#a855f7', type: 'wonder' },
-            { id: 'abyssal-rig', name: 'Abyssal Research Dome', title: 'Oceanic Wonder · Geothermal Vent', power: 'Deepsea Wonder · +120 Energy Core', stance: 'ally', x: 260, y: 230, r: 38, crest: '🌊', color: '#06b6d4', type: 'wonder' },
-        ];
+        const realms = this.getRealms();
 
         // Diplomatic Conduits & Trade Routes
         realms.slice(1).forEach(r => {
@@ -7853,6 +8069,668 @@ const WorldForgeCG = {
             ctx.restore();
         }
 
+        // 8. RTS Exploration Anomalies & Cosmic Sensor Shroud (Fog of War)
+        this.updateRealmUnits(now);
+        const anomalies = this.getAnomalies();
+        anomalies.forEach(a => {
+            const isExplored = this.exploredAnomalies.has(a.id);
+            ctx.save();
+            ctx.translate(a.x, a.y);
+
+            if (!isExplored) {
+                // Cosmic Sensor Shroud (Pulsing Nebular Fog of War)
+                const fogR = a.r + 20 + Math.sin(now * 0.003 + a.x) * 4;
+                const shroudGrad = ctx.createRadialGradient(0, 0, 4, 0, 0, fogR);
+                shroudGrad.addColorStop(0, 'rgba(88, 28, 135, 0.75)');
+                shroudGrad.addColorStop(0.65, 'rgba(15, 23, 42, 0.85)');
+                shroudGrad.addColorStop(1, 'transparent');
+                ctx.fillStyle = shroudGrad;
+                ctx.beginPath();
+                ctx.arc(0, 0, fogR, 0, Math.PI * 2);
+                ctx.fill();
+
+                ctx.strokeStyle = 'rgba(192, 132, 252, 0.45)';
+                ctx.lineWidth = 1.2;
+                ctx.setLineDash([4, 6]);
+                ctx.beginPath();
+                ctx.arc(0, 0, a.r + 8, 0, Math.PI * 2);
+                ctx.stroke();
+
+                ctx.font = '16px ' + FONT_SANS;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText('❓', 0, -4);
+
+                ctx.fillStyle = '#c084fc';
+                ctx.font = 'bold 7.5px ' + FONT_MONO;
+                ctx.fillText('UNCHARTED ANOMALY', 0, 16);
+            } else {
+                // Explored Anomaly Site (Gleaming Wonder / Resource)
+                ctx.fillStyle = 'rgba(15, 23, 42, 0.9)';
+                ctx.strokeStyle = a.type === 'tech' ? '#a855f7' : (a.type === 'energy' ? '#f59e0b' : (a.type === 'military' ? '#ef4444' : '#10b981'));
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.arc(0, 0, a.r, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.stroke();
+
+                ctx.font = '16px ' + FONT_SANS;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(a.icon, 0, -2);
+
+                ctx.fillStyle = '#f8fafc';
+                ctx.font = 'bold 8.5px ' + FONT_SANS;
+                ctx.fillText(a.name, 0, a.r + 14);
+
+                ctx.fillStyle = '#38bdf8';
+                ctx.font = '7.5px ' + FONT_MONO;
+                ctx.fillText('ACTIVE BONUS', 0, a.r + 25);
+            }
+            ctx.restore();
+        });
+
+        // 9. Recon Drone in Flight
+        if (this.reconDrone && this.reconDrone.active) {
+            const rd = this.reconDrone;
+            ctx.save();
+            // Drone Ion Trail
+            rd.trail.forEach((pt, i) => {
+                ctx.fillStyle = `rgba(56, 189, 248, ${(i / rd.trail.length) * 0.5})`;
+                ctx.beginPath();
+                ctx.arc(pt.x, pt.y, 2.5 * (i / rd.trail.length), 0, Math.PI * 2);
+                ctx.fill();
+            });
+
+            // Drone Body & Forward Radar Scan Cone
+            ctx.translate(rd.x, rd.y);
+            const dAngle = Math.atan2(rd.targetY - rd.y, rd.targetX - rd.x);
+            ctx.rotate(dAngle);
+
+            // Radar Scan Cone
+            const scanGrad = ctx.createLinearGradient(0, 0, 70, 0);
+            scanGrad.addColorStop(0, 'rgba(56, 189, 248, 0.45)');
+            scanGrad.addColorStop(1, 'transparent');
+            ctx.fillStyle = scanGrad;
+            ctx.beginPath();
+            ctx.moveTo(0, 0);
+            ctx.arc(0, 0, 70, -0.35, 0.35);
+            ctx.closePath();
+            ctx.fill();
+
+            // Drone Sprite
+            ctx.fillStyle = '#0f172a';
+            ctx.strokeStyle = '#38bdf8';
+            ctx.lineWidth = 1.6;
+            ctx.beginPath();
+            ctx.moveTo(10, 0);
+            ctx.lineTo(-7, -6);
+            ctx.lineTo(-4, 0);
+            ctx.lineTo(-7, 6);
+            ctx.closePath();
+            ctx.fill();
+            ctx.stroke();
+
+            ctx.fillStyle = '#22c55e';
+            ctx.beginPath();
+            ctx.arc(0, 0, 2, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.restore();
+        }
+
+        // 10. Raider Warbands
+        if (this.raiderWarbands) {
+            this.raiderWarbands.forEach(rw => {
+                ctx.save();
+                ctx.translate(rw.x, rw.y);
+
+                ctx.fillStyle = 'rgba(239, 68, 68, 0.2)';
+                ctx.strokeStyle = '#ef4444';
+                ctx.lineWidth = 1.2;
+                ctx.beginPath();
+                ctx.arc(0, 0, 16, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.stroke();
+
+                ctx.font = '14px ' + FONT_SANS;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText('⚔️', 0, 0);
+
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+                ctx.fillRect(-14, -20, 28, 4);
+                ctx.fillStyle = '#ef4444';
+                ctx.fillRect(-14, -20, 28 * Math.max(0, rw.hp / rw.maxHp), 4);
+
+                ctx.font = 'bold 7.5px ' + FONT_MONO;
+                ctx.fillStyle = '#fca5a5';
+                ctx.fillText(rw.name, 0, -25);
+                ctx.restore();
+            });
+        }
+
+        // 11. Player Mobile Legions & RTS Selection
+        if (this.playerLegions) {
+            this.playerLegions.forEach(leg => {
+                const isSelected = this.selectedLegion?.id === leg.id;
+                ctx.save();
+
+                if (leg.state === 'marching' || isSelected) {
+                    ctx.save();
+                    ctx.strokeStyle = '#22c55e';
+                    ctx.lineWidth = 1.4;
+                    ctx.setLineDash([4, 4]);
+                    ctx.beginPath();
+                    ctx.moveTo(leg.x, leg.y);
+                    ctx.lineTo(leg.targetX, leg.targetY);
+                    ctx.stroke();
+
+                    ctx.fillStyle = '#22c55e';
+                    ctx.shadowColor = '#22c55e';
+                    ctx.shadowBlur = 6;
+                    ctx.beginPath();
+                    ctx.arc(leg.targetX, leg.targetY, 4, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.shadowBlur = 0;
+                    ctx.restore();
+                }
+
+                ctx.translate(leg.x, leg.y);
+
+                if (isSelected) {
+                    ctx.save();
+                    ctx.rotate(now * 0.003);
+                    ctx.strokeStyle = '#22c55e';
+                    ctx.lineWidth = 2;
+                    ctx.setLineDash([4, 4]);
+                    ctx.beginPath();
+                    ctx.arc(0, 0, 22, 0, Math.PI * 2);
+                    ctx.stroke();
+                    ctx.restore();
+
+                    ctx.fillStyle = 'rgba(34, 197, 94, 0.18)';
+                    ctx.beginPath();
+                    ctx.arc(0, 0, 18, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+
+                ctx.fillStyle = '#0f172a';
+                ctx.strokeStyle = isSelected ? '#4ade80' : '#10b981';
+                ctx.lineWidth = isSelected ? 2.5 : 1.8;
+                ctx.beginPath();
+                ctx.arc(0, 0, 14, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.stroke();
+
+                ctx.font = '13px ' + FONT_SANS;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(leg.banner, 0, -1);
+
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+                ctx.fillRect(-14, -20, 28, 4);
+                ctx.fillStyle = '#22c55e';
+                ctx.fillRect(-14, -20, 28 * Math.max(0, leg.hp / leg.maxHp), 4);
+
+                ctx.font = 'bold 7.5px ' + FONT_MONO;
+                ctx.fillStyle = isSelected ? '#86efac' : '#94a3b8';
+                ctx.fillText(leg.name, 0, -25);
+                ctx.restore();
+            });
+        }
+
+        ctx.restore();
+    },
+
+    getRealms() {
+        const geo = state.play?.data?.city?.geopolitics;
+        const threat = geo?.borderThreat || 0;
+        const posture = geo?.defensePosture || 'standard';
+        return [
+            { id: 'sanctuary-haven', name: 'Sanctuary Haven', title: 'Your Sovereign Metropolis', power: `Metropolis · ${posture === 'fortified' ? 'Fortified Bastion' : 'Shield Active'}`, stance: 'ally', x: 0, y: 0, r: 56, crest: '🏰', color: '#f59e0b', type: 'capital', ruler: 'Commander (You)', loyalty: 100, military: posture === 'fortified' ? 420 : 320, tribute: 'Self-Governed Capital' },
+            { id: 'barony-oakhaven', name: 'Barony of Oakhaven', title: 'Highland Fiefdom · Baron Kaelen', power: 'Power 125 · Feudal Levies', stance: 'neutral', x: 0, y: -210, r: 48, crest: '🛡️', color: '#eab308', type: 'realm', ruler: 'Baron Kaelen', loyalty: 65, military: 125, tribute: '+40 Food, +30 Timber' },
+            { id: 'riverside-vassal', name: 'Riverside Protectorate', title: 'Agricultural Delta · Gov. Chen', power: 'Tribute: +100 Food, +80 Water', stance: 'vassal', x: -280, y: -30, r: 48, crest: '🌾', color: '#10b981', type: 'realm', ruler: 'Governor Chen', loyalty: 92, military: 85, tribute: '+100 Food, +80 Water' },
+            { id: 'iron-mandate', name: 'Iron Mandate Hegemony', title: 'Imperial Hegemon · Arch-Imperator', power: 'Power 290 · Threat Aura High', stance: 'hostile', x: 280, y: -30, r: 48, crest: '🦅', color: '#ef4444', type: 'realm', ruler: 'Arch-Imperator Vane', loyalty: 20, military: 290, tribute: 'None (Demands submission)' },
+            { id: 'mercantile-league', name: 'Free Mercantile League', title: 'Trade Coalition · Chancellor Mirren', power: 'Coalition Pact · Credit Lines', stance: 'coalition', x: 130, y: 210, r: 48, crest: '⚖️', color: '#38bdf8', type: 'realm', ruler: 'Chancellor Mirren', loyalty: 88, military: 140, tribute: '+150 Credits, +60 Goods' },
+            { id: 'dust-canyon-raiders', name: 'Dust Canyon Raiders', title: 'Desert Insurgency · Warlord Jax', power: `Warlord Raids · Threat ${threat}%`, stance: 'hostile', x: -200, y: 190, r: 48, crest: '⚔️', color: '#f97316', type: 'realm', ruler: 'Warlord Jax', loyalty: 10, military: 160, tribute: `None (Raid Threat ${threat}%)` },
+            { id: 'quantum-monolith', name: 'Quantum Monolith', title: 'Polar Wonder · Leyline Anomaly', power: 'Ancient Wonder · +80 Science Surge', stance: 'wonder', x: -160, y: -260, r: 38, crest: '🔮', color: '#a855f7', type: 'wonder', ruler: 'Precursor Builders', loyalty: 100, military: 0, tribute: '+80 Research XP / cycle' },
+            { id: 'abyssal-rig', name: 'Abyssal Research Dome', title: 'Oceanic Wonder · Geothermal Vent', power: 'Deepsea Wonder · +120 Energy Core', stance: 'wonder', x: 260, y: 230, r: 38, crest: '🌊', color: '#06b6d4', type: 'wonder', ruler: 'Oceanic Institute', loyalty: 100, military: 0, tribute: '+120 MW Geothermal Energy' },
+        ];
+    },
+
+    getAnomalies() {
+        return [
+            { id: 'precursor-cache', name: 'Precursor Orbital Cache', icon: '🛸', x: -360, y: -270, r: 32, type: 'tech', reward: '+150 Science XP · Ancient Blueprint' },
+            { id: 'uranium-vein', name: 'Magma Geothermal Fissure', icon: '⚡', x: 370, y: -70, r: 32, type: 'energy', reward: '+180 Energy Surplus · Grid Supercharge' },
+            { id: 'raider-bastion', name: 'Raider Outpost Citadel', icon: '🏴‍☠️', x: -320, y: 220, r: 32, type: 'military', reward: '+120 Bounty Gold · Threat Dismantled' },
+            { id: 'sunken-arcology', name: 'Sunken Gene Sanctuary', icon: '🧬', x: 280, y: 270, r: 32, type: 'ecology', reward: '+200 Bio Health · Flora Resurgence' },
+        ];
+    },
+
+    updateRealmUnits(now) {
+        if (!this.playerLegions) {
+            this.playerLegions = [
+                { id: 'legion-1', name: '1st Peacekeeper Legion', x: 45, y: 35, targetX: 45, targetY: 35, speed: 2.2, power: 180, hp: 100, maxHp: 100, state: 'idle', banner: '🛡️', color: '#10b981' }
+            ];
+        }
+        if (!this.raiderWarbands) {
+            this.raiderWarbands = [
+                { id: 'raiders-1', name: 'Dust Raider Marauders', x: -280, y: 210, targetX: -60, targetY: 40, speed: 0.55, power: 95, hp: 100, maxHp: 100, state: 'advancing', banner: '⚔️', color: '#f97316' }
+            ];
+        }
+
+        // Update Recon Drone
+        if (this.reconDrone && this.reconDrone.active) {
+            const rd = this.reconDrone;
+            const dx = rd.targetX - rd.x;
+            const dy = rd.targetY - rd.y;
+            const dist = Math.hypot(dx, dy);
+            if (dist < rd.speed * 2) {
+                rd.x = rd.targetX;
+                rd.y = rd.targetY;
+                rd.active = false;
+                const anomaly = rd.targetAnomaly;
+                if (anomaly && !this.exploredAnomalies.has(anomaly.id)) {
+                    this.exploredAnomalies.add(anomaly.id);
+                    this.audio?.playDiscoveryFanfare?.();
+                    this.audio?.playUnlock?.();
+                    this.triggerScreenShake(7, 250);
+                    this.triggerFireworks(anomaly.x, anomaly.y, 6);
+                    spawnFloatingText(`✨ DISCOVERED: ${anomaly.name.toUpperCase()}`, anomaly.x, anomaly.y, 'fx-surge');
+                    showToast(`Sector Unveiled! 🛰️`, `${anomaly.name}: Discovered! ${anomaly.reward}`, 'success');
+                    MayorBounties.addXp(40);
+                }
+            } else {
+                rd.x += (dx / dist) * rd.speed;
+                rd.y += (dy / dist) * rd.speed;
+                rd.trail.push({ x: rd.x, y: rd.y, alpha: 0.9 });
+                if (rd.trail.length > 25) rd.trail.shift();
+            }
+        }
+
+        // Update Player Legions
+        this.playerLegions.forEach(leg => {
+            if (leg.state === 'combat') return;
+            const dx = leg.targetX - leg.x;
+            const dy = leg.targetY - leg.y;
+            const dist = Math.hypot(dx, dy);
+            if (dist > leg.speed) {
+                leg.x += (dx / dist) * leg.speed;
+                leg.y += (dy / dist) * leg.speed;
+                leg.state = 'marching';
+            } else {
+                leg.x = leg.targetX;
+                leg.y = leg.targetY;
+                if (leg.state === 'marching') {
+                    leg.state = 'idle';
+                    spawnFloatingText('🛡️ ARRIVED AT POSITION', leg.x, leg.y - 20, 'fx-success');
+                }
+            }
+        });
+
+        // Update Raider Warbands
+        this.raiderWarbands.forEach(rw => {
+            if (rw.state === 'combat') return;
+            const dx = rw.targetX - rw.x;
+            const dy = rw.targetY - rw.y;
+            const dist = Math.hypot(dx, dy);
+            if (dist > rw.speed) {
+                rw.x += (dx / dist) * rw.speed;
+                rw.y += (dy / dist) * rw.speed;
+            }
+        });
+
+        // Combat Detection between Legions and Raiders
+        this.playerLegions.forEach(leg => {
+            this.raiderWarbands.forEach((rw, idx) => {
+                if (rw.hp <= 0) return;
+                const dist = Math.hypot(leg.x - rw.x, leg.y - rw.y);
+                if (dist < 50) {
+                    leg.state = 'combat';
+                    rw.state = 'combat';
+                    if (!leg.lastCombatTick || now - leg.lastCombatTick > 600) {
+                        leg.lastCombatTick = now;
+                        rw.hp -= 20;
+                        leg.hp = Math.max(20, leg.hp - 8);
+                        this.audio?.playBattleClash?.();
+                        this.triggerScreenShake(4, 150);
+                        spawnFloatingText(`-20 HP 💥`, rw.x, rw.y - 15, 'fx-surge');
+                        this.triggerSparks((leg.x + rw.x) / 2, (leg.y + rw.y) / 2);
+
+                        if (rw.hp <= 0) {
+                            this.audio?.playExplosion?.();
+                            this.audio?.playLevelUp?.();
+                            this.triggerFireworks(rw.x, rw.y, 8);
+                            spawnFloatingText(`🏆 RAIDER VANGUARD ROUTED! +150 Cr`, rw.x, rw.y - 30, 'fx-success');
+                            showToast(`Raiders Defeated! ⚔️`, `Your Legion eliminated the Dust Raider warband! Threat reduced.`);
+                            this.raiderWarbands.splice(idx, 1);
+                            leg.state = 'idle';
+                            MayorBounties.addXp(50);
+                            setTimeout(() => {
+                                this.raiderWarbands.push({
+                                    id: 'raiders-' + Date.now(),
+                                    name: 'Dust Raider Warband',
+                                    x: -280, y: 210, targetX: -60, targetY: 40,
+                                    speed: 0.5, power: 90, hp: 100, maxHp: 100, state: 'advancing',
+                                    banner: '⚔️', color: '#f97316'
+                                });
+                            }, 30000);
+                        }
+                    }
+                }
+            });
+        });
+    },
+
+    launchReconDrone(targetAnomaly = null) {
+        const anomalies = this.getAnomalies();
+        const unrevealed = targetAnomaly || anomalies.find(a => !this.exploredAnomalies.has(a.id));
+        if (!unrevealed) {
+            showToast('All Anomalies Explored! 🛰️', 'Planetary sensors indicate all cosmic sectors are fully charted.');
+            this.audio?.playBlip?.(720, 0.05);
+            return;
+        }
+        if (this.exploredAnomalies.has(unrevealed.id)) {
+            showToast('Already Explored 🌟', `${unrevealed.name} has already been surveyed and charted.`);
+            this.audio?.playBlip?.(600, 0.05);
+            return;
+        }
+        this.reconDrone = {
+            active: true,
+            x: 0, y: 0,
+            targetX: unrevealed.x,
+            targetY: unrevealed.y,
+            targetAnomaly: unrevealed,
+            speed: 5.5,
+            trail: []
+        };
+        this.audio?.playReconScan?.();
+        this.audio?.playChirp?.();
+        showToast(`Recon Drone Launched 🛰️`, `Orbital probe scanning vector to ${unrevealed.name}...`, 'info');
+        spawnFloatingText('🛰️ RECON PROBE LAUNCHED', 0, -30, 'fx-surge');
+    },
+
+    deployLegion() {
+        this.playerLegions = this.playerLegions || [];
+        if (this.playerLegions.length >= 3) {
+            showToast('Maximum Legions', '3 Peacekeeper Legions are already active in the field.', 'warning');
+            return;
+        }
+        const num = this.playerLegions.length + 1;
+        const newLeg = {
+            id: 'legion-' + Date.now(),
+            name: `${num === 1 ? '1st' : (num === 2 ? '2nd' : '3rd')} Peacekeeper Legion`,
+            x: 20 + Math.random() * 40,
+            y: 20 + Math.random() * 40,
+            targetX: 20 + Math.random() * 40,
+            targetY: 20 + Math.random() * 40,
+            speed: 2.2,
+            power: 180,
+            hp: 100,
+            maxHp: 100,
+            state: 'idle',
+            banner: '🛡️',
+            color: '#10b981'
+        };
+        this.playerLegions.push(newLeg);
+        this.selectedLegion = newLeg;
+        this.audio?.playWarHorn?.();
+        this.audio?.playUnitOrder?.();
+        this.triggerScreenShake(5, 200);
+        spawnFloatingText(`⚔️ ${newLeg.name.toUpperCase()} MOBILIZED!`, newLeg.x, newLeg.y, 'fx-success');
+        showToast(`Legion Deployed! ⚔️`, `${newLeg.name} ready for orders. Right-click map to move or attack!`);
+        this.updateRealmStrategyDock();
+    },
+
+    updateRealmStrategyDock() {
+        const dock = el('realm-strategy-dock');
+        if (!dock) return;
+        dock.classList.toggle('hidden', this.worldLens !== 'realm');
+
+        let target = null;
+        if (this.selectedLegion) {
+            target = {
+                name: this.selectedLegion.name,
+                crest: this.selectedLegion.banner || '🛡️',
+                stance: 'MOBILE INFANTRY',
+                ruler: 'Commander (You)',
+                power: `Power ${this.selectedLegion.power} · HP ${this.selectedLegion.hp}%`,
+                status: `Orders: ${this.selectedLegion.state.toUpperCase()}`
+            };
+        } else if (this.selectedRealmEntity) {
+            target = {
+                name: this.selectedRealmEntity.name,
+                crest: this.selectedRealmEntity.crest || '🏰',
+                stance: (this.selectedRealmEntity.stance || 'REALM').toUpperCase(),
+                ruler: `Leader: ${this.selectedRealmEntity.ruler || 'Unknown'}`,
+                power: `Mil Power: ${this.selectedRealmEntity.military || 0}`,
+                status: `Yield: ${this.selectedRealmEntity.tribute || 'Trade'}`
+            };
+        } else {
+            target = {
+                name: 'Sanctuary Haven',
+                crest: '🏰',
+                stance: 'SOVEREIGN CAPITAL',
+                ruler: 'Leader: Commander (You)',
+                power: 'Mil Power: 320',
+                status: 'Orders: Defense Grid Active'
+            };
+        }
+
+        const iconEl = el('dossier-avatar-icon');
+        const nameEl = el('dossier-name');
+        const badgeEl = el('dossier-stance-badge');
+        const rulerEl = el('dossier-ruler');
+        const powerEl = el('dossier-power');
+        const statusEl = el('dossier-status');
+
+        if (iconEl) iconEl.textContent = target.crest;
+        if (nameEl) nameEl.textContent = target.name;
+        if (badgeEl) badgeEl.textContent = target.stance;
+        if (rulerEl) rulerEl.textContent = target.ruler;
+        if (powerEl) powerEl.textContent = target.power;
+        if (statusEl) statusEl.textContent = target.status;
+    },
+
+    renderRealmMinimap(ctx, w, h, now) {
+        const s = 0.075;
+        const midX = 0, midY = 0;
+        this.minimapBounds = { s, midX, midY };
+        const toMx = wx => w / 2 + (wx - midX) * s;
+        const toMy = wy => h / 2 + (wy - midY) * s;
+
+        // Background space
+        ctx.fillStyle = '#030712';
+        ctx.fillRect(0, 0, w, h);
+
+        // Planetary mini globe
+        const globeR = 640 * s;
+        ctx.save();
+        ctx.fillStyle = '#06172e';
+        ctx.beginPath();
+        ctx.arc(w / 2, h / 2, globeR, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(56, 189, 248, 0.4)';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+
+        // Mini green crownlands continent
+        ctx.fillStyle = '#15803d';
+        ctx.beginPath();
+        ctx.ellipse(w / 2, h / 2 - 2, 28, 17, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Mini northern frost
+        ctx.fillStyle = '#e2e8f0';
+        ctx.beginPath();
+        ctx.ellipse(w / 2, h / 2 - 20, 18, 10, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Mini desert
+        ctx.fillStyle = '#d97706';
+        ctx.beginPath();
+        ctx.ellipse(w / 2 - 18, h / 2 + 14, 16, 9, 0.2, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Mini volcanic
+        ctx.fillStyle = '#451a03';
+        ctx.beginPath();
+        ctx.ellipse(w / 2 + 20, h / 2 - 4, 14, 8, -0.1, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Radar sweep
+        const sweepLen = 42;
+        const cx = w / 2, cy = h / 2;
+        const sweepGrad = ctx.createLinearGradient(cx, cy, cx + Math.cos(this.radarAngle) * sweepLen, cy + Math.sin(this.radarAngle) * sweepLen);
+        sweepGrad.addColorStop(0, 'rgba(56,189,248,0.25)');
+        sweepGrad.addColorStop(1, 'transparent');
+        ctx.beginPath();
+        ctx.moveTo(cx, cy);
+        ctx.arc(cx, cy, sweepLen, this.radarAngle - 0.45, this.radarAngle);
+        ctx.closePath();
+        ctx.fillStyle = sweepGrad;
+        ctx.fill();
+
+        // Draw Realm entity blips
+        const realms = this.getRealms();
+        realms.forEach(r => {
+            const mx = toMx(r.x);
+            const my = toMy(r.y);
+            ctx.fillStyle = r.color;
+            ctx.beginPath();
+            ctx.arc(mx, my, r.id === 'sanctuary-haven' ? 3.5 : 2.5, 0, Math.PI * 2);
+            ctx.fill();
+        });
+
+        // Draw Mobile Unit blips
+        if (this.playerLegions) {
+            this.playerLegions.forEach(leg => {
+                const lx = toMx(leg.x);
+                const ly = toMy(leg.y);
+                ctx.fillStyle = '#22c55e';
+                ctx.shadowColor = '#22c55e';
+                ctx.shadowBlur = 4;
+                ctx.beginPath();
+                ctx.arc(lx, ly, 3, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.shadowBlur = 0;
+            });
+        }
+        if (this.raiderWarbands) {
+            this.raiderWarbands.forEach(rw => {
+                const rx = toMx(rw.x);
+                const ry = toMy(rw.y);
+                ctx.fillStyle = '#ef4444';
+                ctx.beginPath();
+                ctx.arc(rx, ry, 2.5, 0, Math.PI * 2);
+                ctx.fill();
+            });
+        }
+
+        // Draw Camera Viewport Frustum / Rectangle
+        const canvasW = this.canvas.clientWidth || window.innerWidth;
+        const canvasH = this.canvas.clientHeight || window.innerHeight;
+        const zoom = this.camera.zoom || 1;
+        const worldCamX = -this.camera.x / zoom;
+        const worldCamY = -this.camera.y / zoom;
+        const halfVW = (canvasW / 2) / zoom;
+        const halfVH = (canvasH / 2) / zoom;
+
+        const vx = toMx(worldCamX - halfVW);
+        const vy = toMy(worldCamY - halfVH);
+        const vw = halfVW * 2 * s;
+        const vh = halfVH * 2 * s;
+
+        ctx.strokeStyle = '#38bdf8';
+        ctx.lineWidth = 1.2;
+        ctx.fillStyle = 'rgba(56, 189, 248, 0.12)';
+        ctx.beginPath();
+        ctx.rect(vx, vy, vw, vh);
+        ctx.fill();
+        ctx.stroke();
+        ctx.restore();
+    },
+
+    renderCityMinimap(ctx, w, h, now) {
+        const s = 0.11;
+        const midX = 0, midY = -120;
+        this.minimapBounds = { s, midX, midY };
+        const toMx = wx => w / 2 + (wx - midX) * s;
+        const toMy = wy => h / 2 + (wy - midY) * s;
+
+        ctx.fillStyle = '#060d17';
+        ctx.fillRect(0, 0, w, h);
+
+        // Draw diamond isometric grid base
+        ctx.save();
+        ctx.strokeStyle = 'rgba(56, 189, 248, 0.15)';
+        ctx.lineWidth = 0.8;
+        const p0 = this.toIso(0, 0);
+        const p1 = this.toIso(9, 0);
+        const p2 = this.toIso(9, 9);
+        const p3 = this.toIso(0, 9);
+        ctx.beginPath();
+        ctx.moveTo(toMx(p0.x), toMy(p0.y));
+        ctx.lineTo(toMx(p1.x), toMy(p1.y));
+        ctx.lineTo(toMx(p2.x), toMy(p2.y));
+        ctx.lineTo(toMx(p3.x), toMy(p3.y));
+        ctx.closePath();
+        ctx.fillStyle = 'rgba(16, 30, 50, 0.4)';
+        ctx.fill();
+        ctx.stroke();
+
+        // Draw roads
+        ctx.strokeStyle = 'rgba(148, 163, 184, 0.35)';
+        ctx.lineWidth = 1.2;
+        const r1 = this.toIso(4.5, 0);
+        const r2 = this.toIso(4.5, 9);
+        const r3 = this.toIso(0, 4.5);
+        const r4 = this.toIso(9, 4.5);
+        ctx.beginPath();
+        ctx.moveTo(toMx(r1.x), toMy(r1.y)); ctx.lineTo(toMx(r2.x), toMy(r2.y));
+        ctx.moveTo(toMx(r3.x), toMy(r3.y)); ctx.lineTo(toMx(r4.x), toMy(r4.y));
+        ctx.stroke();
+
+        // Draw placed city buildings
+        for (let gx = 0; gx < 10; gx++) {
+            for (let gy = 0; gy < 10; gy++) {
+                const b = this.getBuildingAtTile(gx, gy);
+                if (b) {
+                    const iso = this.toIso(gx, gy);
+                    const bx = toMx(iso.x);
+                    const by = toMy(iso.y);
+                    const color = b.category === 'residential' ? '#38bdf8'
+                                : b.category === 'food' ? '#10b981'
+                                : b.category === 'energy' ? '#f59e0b'
+                                : b.category === 'civic' ? '#a855f7'
+                                : '#f97316';
+                    ctx.fillStyle = color;
+                    ctx.fillRect(bx - 2, by - 2, 4, 4);
+                }
+            }
+        }
+
+        // Draw camera viewport frustum
+        const canvasW = this.canvas.clientWidth || window.innerWidth;
+        const canvasH = this.canvas.clientHeight || window.innerHeight;
+        const zoom = this.camera.zoom || 1;
+        const worldCamX = -this.camera.x / zoom;
+        const worldCamY = -this.camera.y / zoom;
+        const halfVW = (canvasW / 2) / zoom;
+        const halfVH = (canvasH / 2) / zoom;
+
+        const vx = toMx(worldCamX - halfVW);
+        const vy = toMy(worldCamY - halfVH);
+        const vw = halfVW * 2 * s;
+        const vh = halfVH * 2 * s;
+
+        ctx.strokeStyle = '#38bdf8';
+        ctx.lineWidth = 1.2;
+        ctx.fillStyle = 'rgba(56, 189, 248, 0.12)';
+        ctx.beginPath();
+        ctx.rect(vx, vy, vw, vh);
+        ctx.fill();
+        ctx.stroke();
         ctx.restore();
     },
 
@@ -9182,6 +10060,15 @@ const WorldForgeCG = {
         const w = 130, h = 75;
         ctx.clearRect(0, 0, w, h);
 
+        if (this.worldLens === 'realm') {
+            this.renderRealmMinimap(ctx, w, h, now);
+            return;
+        }
+        if (this.worldLens === 'city') {
+            this.renderCityMinimap(ctx, w, h, now);
+            return;
+        }
+
         const count = this.nodes.size;
         if (!count) return;
 
@@ -9606,6 +10493,20 @@ const WorldForgeCG = {
                         this.realmMapLens = 'threats';
                         showToast('Map Lens', 'THREAT RADAR: Displaying danger zones & citadel shields.');
                     }
+                },
+                {
+                    icon: '⚔️',
+                    title: 'Deploy Legion',
+                    desc: 'Mobilize Peacekeeper Legion onto the world map',
+                    color: '#22c55e',
+                    action: () => this.deployLegion()
+                },
+                {
+                    icon: '🛰️',
+                    title: 'Recon Drone',
+                    desc: 'Launch orbital recon probe to unveil shrouded anomaly',
+                    color: '#06b6d4',
+                    action: () => this.launchReconDrone()
                 },
                 {
                     icon: '🏰',
@@ -10489,6 +11390,12 @@ const CrisisManager = {
 
 window.MayorBounties = MayorBounties;
 window.CrisisManager = CrisisManager;
+window.WorldForgeCG = WorldForgeCG;
+window.startPlaySession = startPlaySession;
+window.openPlayMode = openPlayMode;
+window.launchPlayGameMode = launchPlayGameMode;
+window.toggleDefensePosture = toggleDefensePosture;
+window.openWarRoomModal = openWarRoomModal;
 
 function setupCommanderPowers() {
     // Event delegation for claiming bounties
