@@ -1,7 +1,10 @@
 [package]
 name = "worldforge-bench"
+description = "Benchmarks for World Forge simulation and proof workloads"
 version.workspace = true
-edition = "2021"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
 publish = false
 
 [[bench]]
@@ -9,13 +12,13 @@ name = "simulation"
 harness = false
 
 [dependencies]
-worldforge-core = { path = "../worldforge-core" }
-worldforge-ecs = { path = "../worldforge-ecs" }
-worldforge-economy = { path = "../worldforge-economy" }
-worldforge-proof = { path = "../worldforge-proof" }
-worldforge-runtime = { path = "../worldforge-runtime" }
-worldforge-package = { path = "../worldforge-package" }
-worldforge-world = { path = "../worldforge-world" }
+worldforge-core = { workspace = true }
+worldforge-ecs = { workspace = true }
+worldforge-economy = { workspace = true }
+worldforge-proof = { workspace = true }
+worldforge-runtime = { workspace = true }
+worldforge-package = { workspace = true }
+worldforge-world = { workspace = true }
 
 [dev-dependencies]
-criterion = { version = "0.5", features = ["html_reports"] }
+criterion = { workspace = true }

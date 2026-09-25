@@ -3534,6 +3534,104 @@ const WorldForgeCG = {
                 osc.stop(now + 0.16);
             } catch (_) {}
         },
+        playChirp() {
+            if (!this.enabled) return;
+            this.init();
+            if (!this.ctx) return;
+            try {
+                const now = this.ctx.currentTime;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(740, now);
+                osc.frequency.exponentialRampToValueAtTime(1180, now + 0.08);
+                gain.gain.setValueAtTime(0.08, now);
+                gain.gain.exponentialRampToValueAtTime(0.001, now + 0.08);
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                osc.start(now);
+                osc.stop(now + 0.08);
+            } catch (_) {}
+        },
+        playCoin() {
+            if (!this.enabled) return;
+            this.init();
+            if (!this.ctx) return;
+            try {
+                const now = this.ctx.currentTime;
+                [1318.51, 1760.0].forEach((freq, i) => {
+                    const osc = this.ctx.createOscillator();
+                    const gain = this.ctx.createGain();
+                    osc.type = 'triangle';
+                    osc.frequency.setValueAtTime(freq, now + i * 0.06);
+                    gain.gain.setValueAtTime(0.1, now + i * 0.06);
+                    gain.gain.exponentialRampToValueAtTime(0.001, now + i * 0.06 + 0.18);
+                    osc.connect(gain);
+                    gain.connect(this.ctx.destination);
+                    osc.start(now + i * 0.06);
+                    osc.stop(now + i * 0.06 + 0.18);
+                });
+            } catch (_) {}
+        },
+        playSiren() {
+            if (!this.enabled) return;
+            this.init();
+            if (!this.ctx) return;
+            try {
+                const now = this.ctx.currentTime;
+                [580, 880, 580, 880, 580].forEach((freq, i) => {
+                    const osc = this.ctx.createOscillator();
+                    const gain = this.ctx.createGain();
+                    osc.type = 'sawtooth';
+                    osc.frequency.setValueAtTime(freq, now + i * 0.12);
+                    gain.gain.setValueAtTime(0.08, now + i * 0.12);
+                    gain.gain.exponentialRampToValueAtTime(0.001, now + i * 0.12 + 0.11);
+                    osc.connect(gain);
+                    gain.connect(this.ctx.destination);
+                    osc.start(now + i * 0.12);
+                    osc.stop(now + i * 0.12 + 0.11);
+                });
+            } catch (_) {}
+        },
+        playExplosion() {
+            if (!this.enabled) return;
+            this.init();
+            if (!this.ctx) return;
+            try {
+                const now = this.ctx.currentTime;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(140, now);
+                osc.frequency.exponentialRampToValueAtTime(25, now + 0.35);
+                gain.gain.setValueAtTime(0.16, now);
+                gain.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                osc.start(now);
+                osc.stop(now + 0.35);
+            } catch (_) {}
+        },
+        playCheer() {
+            if (!this.enabled) return;
+            this.init();
+            if (!this.ctx) return;
+            try {
+                const now = this.ctx.currentTime;
+                [523.25, 659.25, 783.99, 1046.5, 1318.51].forEach((freq, i) => {
+                    const osc = this.ctx.createOscillator();
+                    const gain = this.ctx.createGain();
+                    osc.type = 'triangle';
+                    osc.frequency.setValueAtTime(freq, now + i * 0.05);
+                    gain.gain.setValueAtTime(0.08, now + i * 0.05);
+                    gain.gain.exponentialRampToValueAtTime(0.001, now + i * 0.05 + 0.3);
+                    osc.connect(gain);
+                    gain.connect(this.ctx.destination);
+                    osc.start(now + i * 0.05);
+                    osc.stop(now + i * 0.05 + 0.3);
+                });
+            } catch (_) {}
+        },
     },
 
     camera: {

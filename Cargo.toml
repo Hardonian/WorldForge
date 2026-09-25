@@ -25,17 +25,17 @@ rust-version = "1.88"
 
 [workspace.dependencies]
 # Internal crates
-worldforge-core = { path = "crates/worldforge-core" }
-worldforge-ecs = { path = "crates/worldforge-ecs" }
-worldforge-world = { path = "crates/worldforge-world" }
-worldforge-runtime = { path = "crates/worldforge-runtime" }
-worldforge-replay = { path = "crates/worldforge-replay" }
-worldforge-package = { path = "crates/worldforge-package" }
-worldforge-mod-api = { path = "crates/worldforge-mod-api" }
-worldforge-mod-runtime = { path = "crates/worldforge-mod-runtime" }
-worldforge-economy = { path = "crates/worldforge-economy" }
-worldforge-agent = { path = "crates/worldforge-agent" }
-worldforge-proof = { path = "crates/worldforge-proof" }
+worldforge-core = { version = "0.2.0", path = "crates/worldforge-core" }
+worldforge-ecs = { version = "0.2.0", path = "crates/worldforge-ecs" }
+worldforge-world = { version = "0.2.0", path = "crates/worldforge-world" }
+worldforge-runtime = { version = "0.2.0", path = "crates/worldforge-runtime" }
+worldforge-replay = { version = "0.2.0", path = "crates/worldforge-replay" }
+worldforge-package = { version = "0.2.0", path = "crates/worldforge-package" }
+worldforge-mod-api = { version = "0.2.0", path = "crates/worldforge-mod-api" }
+worldforge-mod-runtime = { version = "0.2.0", path = "crates/worldforge-mod-runtime" }
+worldforge-economy = { version = "0.2.0", path = "crates/worldforge-economy" }
+worldforge-agent = { version = "0.2.0", path = "crates/worldforge-agent" }
+worldforge-proof = { version = "0.2.0", path = "crates/worldforge-proof" }
 
 # Serialization
 serde = { version = "1", features = ["derive"] }

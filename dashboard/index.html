@@ -344,11 +344,15 @@
                     <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 3h10l2 2v12H4V3Zm3 0v5h6V3m-6 14v-5h6v5"/></svg>
                     Save
                 </button>
-                <button class="button button-secondary" id="play-saves" type="button">
-                    <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 5h5l2 2h7v9H3V5Z"/></svg>
-                    Saves
-                </button>
-                <label class="speed-control"><span>Speed</span><select id="play-speed"><option value="1">1×</option><option value="2">2×</option><option value="5" selected>5×</option><option value="10">10×</option></select></label>
+                <div class="speed-control-group">
+                    <label class="speed-control"><span>Speed</span><select id="play-speed"><option value="1">1×</option><option value="2">2×</option><option value="5" selected>5×</option><option value="10">10×</option><option value="25">25× WARP</option><option value="50">50× HYPER 🚀</option></select></label>
+                    <div class="quick-speed-chips" role="group" aria-label="Playback speed shortcuts">
+                        <button type="button" class="speed-chip" data-speed="1">1×</button>
+                        <button type="button" class="speed-chip active" data-speed="5">5×</button>
+                        <button type="button" class="speed-chip" data-speed="10">10×</button>
+                        <button type="button" class="speed-chip warp-chip" data-speed="50" title="50x Hyper Turbo Warp Speed">⚡ 50×</button>
+                    </div>
+                </div>
                 <div class="vitality-widget" id="vitality-widget" title="System Vitality: stability and throughput health">
                     <div class="vitality-gauge">
                         <svg viewBox="0 0 36 36">
@@ -424,8 +428,21 @@
                                 <span class="power-icon">🌪️</span>
                                 <span class="power-meta"><strong>Chaos Surge</strong><small>High Stakes</small></span>
                             </button>
+                            <button class="power-btn" id="pwr-patrol" type="button" title="Deploy Cyber Enforcer Patrol: Deploy a defense mech to guard streets and repel raiders">
+                                <span class="power-icon">🤖</span>
+                                <span class="power-meta"><strong>Enforcer</strong><small>Deploy Patrol</small></span>
+                            </button>
+                            <button class="power-btn power-btn-accent" id="pwr-meteor" type="button" title="Cosmic Meteorite: Summon a celestial meteor strike that leaves rare star-metal ore">
+                                <span class="power-icon">☄️</span>
+                                <span class="power-meta"><strong>Meteorite</strong><small>Star-Metal</small></span>
+                            </button>
                         </div>
                         <div class="powers-dock-actions">
+                            <button class="button button-quiet" id="btn-bounties-dock" type="button" title="Toggle Active Missions &amp; Mayor Bounties">
+                                <span>🎯</span>
+                                <span>Directives</span>
+                                <span class="bounty-dock-count-badge" id="bounty-dock-count">3</span>
+                            </button>
                             <button class="button button-quiet" id="btn-achievements-dock" type="button" title="View Trophies &amp; Achievements">
                                 <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M6 3h8v2H6V3Zm-2 4h12v4a6 6 0 0 1-12 0V7Zm2 0v4a4 4 0 0 0 8 0V7H6Zm-4 1h2v3H2V8Zm14 0h2v3h-2V8ZM7 15h6v2H7v-2Z"/></svg>
                                 <span>Trophies</span>
@@ -565,6 +582,44 @@
                                         <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 3h12v3H4V3Zm2 5h8v2H6V8Zm-3 4h14v2H3v-2Zm3 4h8v2H6v-2Z"/></svg>
                                         <span>War Room</span>
                                     </button>
+                            </div>
+
+                            <!-- High-Stakes Frostpunk/SimCity Style Emergency Crisis Alert Banner -->
+                            <div class="crisis-alert-banner hidden" id="crisis-alert-banner" role="alert" aria-live="assertive">
+                                <div class="crisis-alert-glow"></div>
+                                <div class="crisis-badge" id="crisis-badge">🚨 EMERGENCY CRISIS</div>
+                                <div class="crisis-content">
+                                    <strong id="crisis-title">GRID BLACKOUT IMMINENT</strong>
+                                    <p id="crisis-desc">Solar storm overload threatens transformers! Choose an emergency intervention before time expires:</p>
+                                </div>
+                                <div class="crisis-actions" id="crisis-actions">
+                                    <button type="button" class="crisis-btn crisis-btn-a" id="crisis-action-a">⚡ Flush Reserve Coolant</button>
+                                    <button type="button" class="crisis-btn crisis-btn-b" id="crisis-action-b">🏭 Throttle Industrial Grid</button>
+                                </div>
+                                <div class="crisis-timer-track"><div class="crisis-timer-bar" id="crisis-timer-bar"></div></div>
+                            </div>
+
+                            <!-- Active Missions & Mayor Bounties Widget (Dopamine & Quests) -->
+                            <div class="mayor-bounties-widget" id="mayor-bounties-widget">
+                                <div class="bounties-header" id="bounties-toggle-btn" role="button" tabindex="0">
+                                    <div class="bounties-title-row">
+                                        <span class="bounty-icon">🎯</span>
+                                        <strong>DIRECTIVES</strong>
+                                        <span class="bounty-ready-pill hidden" id="bounties-ready-pill">1 READY!</span>
+                                    </div>
+                                    <button type="button" class="bounties-collapse-btn" id="bounties-collapse-btn" aria-label="Toggle Directives">▼</button>
+                                </div>
+                                <div class="bounties-body" id="bounties-body">
+                                    <div class="mayor-rank-bar-wrap">
+                                        <div class="mayor-rank-header">
+                                            <span class="mayor-rank-name" id="mayor-rank-title">Rank 1: Settlement Overseer</span>
+                                            <span class="mayor-rank-pts" id="mayor-rank-pts">0 / 200 XP</span>
+                                        </div>
+                                        <div class="mayor-xp-track"><span id="mayor-xp-fill" style="width: 5%"></span></div>
+                                    </div>
+                                    <div class="bounties-list" id="bounties-list-container">
+                                        <!-- Dynamically populated quest items with instant claim buttons -->
+                                    </div>
                                 </div>
                             </div>
 
