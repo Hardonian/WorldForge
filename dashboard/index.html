@@ -488,6 +488,19 @@
                                         <span>First Person</span>
                                     </button>
                                 </div>
+                                <div class="macro-zoom-telemetry" id="macro-zoom-telemetry" title="Seamless Macro-to-Micro Infinite Zoom Layer [Scroll Wheel]">
+                                    <span class="zoom-layer-icon" id="zoom-layer-icon">🏙️</span>
+                                    <div class="zoom-layer-meta">
+                                        <strong id="zoom-layer-title">CITY METROPOLIS</strong>
+                                        <small id="zoom-layer-alt">ALT 2,500m</small>
+                                    </div>
+                                    <div class="zoom-tier-dots">
+                                        <i class="zoom-dot" id="dot-orbit" title="Orbit 30km"></i>
+                                        <i class="zoom-dot active" id="dot-city" title="City 2.5km"></i>
+                                        <i class="zoom-dot" id="dot-battle" title="Tactical Battle 250m"></i>
+                                        <i class="zoom-dot" id="dot-chase" title="Chase Cam 15m"></i>
+                                    </div>
+                                </div>
                                 <div class="cg-toolbar" id="cg-toolbar">
                                     <button type="button" class="icon-button cg-tool-btn" id="cg-btn-zoom-in" title="Zoom in (+)" aria-label="Zoom in">
                                         <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 5v10M5 10h10"/></svg>
@@ -847,6 +860,18 @@
 
                             <!-- 3D Physics Tactical Battle Simulator HUD -->
                             <div class="battle-3d-hud hidden" id="battle-3d-hud" aria-label="3D Tactical Battlefield Command Console">
+                                <!-- Cinematic Killcam Overlay & Letterboxing -->
+                                <div class="killcam-overlay hidden" id="killcam-overlay" aria-hidden="true">
+                                    <div class="killcam-letterbox top"></div>
+                                    <div class="killcam-banner" id="killcam-banner">
+                                        <div class="killcam-pulse"></div>
+                                        <div class="killcam-tag">TARGET ELIMINATED</div>
+                                        <strong id="killcam-unit-name">DUST WAR-RIG MK-II</strong>
+                                        <span id="killcam-details">CRITICAL REAR HIT · RAILGUN PENETRATION</span>
+                                    </div>
+                                    <div class="killcam-letterbox bottom"></div>
+                                </div>
+
                                 <!-- Top Battle Telemetry & Tug-of-War Bar -->
                                 <div class="battle-telemetry-bar">
                                     <div class="battle-faction-card friendly">
@@ -967,6 +992,11 @@
                                             <span class="ability-info"><strong>Blitz Charge</strong><small>Knockback</small></span>
                                             <span class="ability-hotkey">[4]</span>
                                         </button>
+                                        <button type="button" class="battle-ability-btn" id="btn-power-chaff" title="Chaff &amp; ECM Screen [5]: Deploy electronic countermeasures to deflect incoming missiles and jam enemy radar">
+                                            <span class="ability-icon">✨</span>
+                                            <span class="ability-info"><strong>Chaff Screen</strong><small>Deflect/Jam</small></span>
+                                            <span class="ability-hotkey">[5]</span>
+                                        </button>
                                     </div>
 
                                     <!-- Tactical Battle Controls & Hotkeys -->
@@ -979,6 +1009,9 @@
                                         </button>
                                         <button type="button" class="battle-ctrl-btn" id="btn-battle-reset" title="Reinforce battlefield with new combat wave [R]">
                                             <span>🔄 Reinforce [R]</span>
+                                        </button>
+                                        <button type="button" class="battle-ctrl-btn highlight" id="btn-battle-aar" title="Open After-Action Report, Battle Telemetry &amp; Replay Studio [P]">
+                                            <span>📊 AAR / Replay [P]</span>
                                         </button>
                                         <button type="button" class="battle-ctrl-btn exit" id="btn-battle-exit" title="Return to Realm Atlas">
                                             <span>✖ Return [Esc]</span>
@@ -1071,7 +1104,24 @@
                                 <span><small>Housing</small><strong id="city-housing">0</strong></span>
                                 <span><small>Jobs</small><strong id="city-jobs">0</strong></span>
                                 <span><small>Wellbeing</small><strong id="city-wellbeing">0</strong></span>
+                                <span><small>Happiness</small><strong id="city-happiness">88%</strong></span>
+                                <span><small>Power Grid</small><strong id="city-power-grid">100%</strong></span>
                             </div>
+                            <div class="city-emergency-controls">
+                                <button type="button" class="emergency-shift-btn" id="btn-emergency-shift" title="Toggle Emergency 24-Hour Shifts: +60% Resource Production, +30% Unrest, -20% Happiness">
+                                    <span class="shift-icon">⚡</span>
+                                    <span id="emergency-shift-label">Emergency 24h Shift [OFF]</span>
+                                </button>
+                                <div class="strike-warning-banner hidden" id="city-strike-warning">
+                                    <span>⚠️ WORKER STRIKE IMMINENT! High civic unrest</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="citizen-classes-bar" id="citizen-classes-bar" aria-label="Citizen Social Classes">
+                            <span class="class-chip laborers" title="Laborers: Industrial &amp; agricultural production backbone"><i class="class-icon">🔨</i> Laborers: <b id="class-laborers">78</b></span>
+                            <span class="class-chip engineers" title="Engineers: Power grid integrity &amp; advanced research"><i class="class-icon">⚙️</i> Engineers: <b id="class-engineers">30</b></span>
+                            <span class="class-chip council" title="Civic Council: Administrative stability &amp; diplomatic prestige"><i class="class-icon">⚖️</i> Council: <b id="class-council">12</b></span>
+                            <span class="class-chip power" title="Power Grid Load: Generation vs Demand"><i class="class-icon">⚡</i> Grid: <b id="class-power-load">185 / 160 kW</b></span>
                         </div>
                         <div class="city-system-grid">
                             <section class="city-build-panel" aria-labelledby="city-build-title">
@@ -1337,6 +1387,11 @@
                 </div>
             </header>
             <div class="dialog-body war-room-body">
+                <div class="war-room-tabs" role="tablist" aria-label="War Room Tactical Modules">
+                    <button type="button" class="war-tab active" id="war-tab-entities" data-tab="entities"><span>🏛️ Realm Factions</span></button>
+                    <button type="button" class="war-tab" id="war-tab-summit" data-tab="summit"><span>🤝 Diplomatic Summit</span></button>
+                    <button type="button" class="war-tab" id="war-tab-espionage" data-tab="espionage"><span>🕵️ Shadow Black Ops</span></button>
+                </div>
                 <div class="war-room-top-bar">
                     <div class="war-stat-chip">
                         <span>Regional Posture</span>
@@ -1351,8 +1406,97 @@
                         <strong id="war-stat-coalition">Mercantile League (Defensive)</strong>
                     </div>
                 </div>
-                <div class="realm-entities-grid" id="war-room-entities-grid">
-                    <!-- Populated dynamically via renderGeopolitics() -->
+                <!-- Factions Panel -->
+                <div class="war-room-panel active" id="war-panel-entities">
+                    <div class="realm-entities-grid" id="war-room-entities-grid">
+                        <!-- Populated dynamically via renderGeopolitics() -->
+                    </div>
+                </div>
+                <!-- Diplomatic Summit Panel -->
+                <div class="war-room-panel hidden" id="war-panel-summit">
+                    <div class="summit-chamber">
+                        <div class="summit-faction-selector">
+                            <span class="summit-kicker">Convene Summit With:</span>
+                            <div class="summit-faction-btns">
+                                <button type="button" class="summit-faction-btn active" data-faction="raiders">⚔️ Dust Raiders</button>
+                                <button type="button" class="summit-faction-btn" data-faction="mandate">🦅 Iron Mandate</button>
+                                <button type="button" class="summit-faction-btn" data-faction="mercantile">⚖️ Mercantile League</button>
+                            </div>
+                        </div>
+                        <div class="summit-dialogue-card">
+                            <div class="ambassador-avatar" id="summit-avatar">⚔️</div>
+                            <div class="ambassador-intel">
+                                <strong id="summit-ambassador-name">Warlord Vane (Dust Raider Envoy)</strong>
+                                <blockquote id="summit-dialogue-text">"Your Sanctuary grows fat behind its solar shields. Pay tribute in food and water, or our War-Rigs will breach your eastern dunes."</blockquote>
+                            </div>
+                        </div>
+                        <div class="summit-meters-row">
+                            <div class="summit-meter-item">
+                                <span>Diplomatic Trust: <b id="summit-trust-val">35%</b></span>
+                                <div class="meter-bar"><i id="summit-trust-fill" style="width: 35%;"></i></div>
+                            </div>
+                            <div class="summit-meter-item">
+                                <span>Border Tension: <b id="summit-tension-val">65%</b></span>
+                                <div class="meter-bar tension"><i id="summit-tension-fill" style="width: 65%;"></i></div>
+                            </div>
+                        </div>
+                        <div class="summit-actions-grid">
+                            <button type="button" class="treaty-btn" id="btn-treaty-nap">
+                                <strong>📜 Non-Aggression Pact</strong>
+                                <small>-150 Credits · -40% Raid Risk for 180s</small>
+                            </button>
+                            <button type="button" class="treaty-btn" id="btn-treaty-trade">
+                                <strong>⚖️ Free Trade Accord</strong>
+                                <small>+20 Credits/tick · Requires 50%+ Trust</small>
+                            </button>
+                            <button type="button" class="treaty-btn" id="btn-treaty-tribute">
+                                <strong>💰 Pay Grain Tribute</strong>
+                                <small>-80 Food · Suppresses Next Raid</small>
+                            </button>
+                            <button type="button" class="treaty-btn" id="btn-treaty-dmz">
+                                <strong>🛡️ Enforce Buffer Zone</strong>
+                                <small>Requires Military Power &gt; 50</small>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                <!-- Shadow Espionage Panel -->
+                <div class="war-room-panel hidden" id="war-panel-espionage">
+                    <div class="espionage-chamber">
+                        <div class="espionage-header-row">
+                            <div class="heat-gauge-card">
+                                <span>Shadow Network Heat</span>
+                                <div class="heat-meter-bar"><i id="espionage-heat-fill" style="width: 25%;"></i></div>
+                                <strong id="espionage-heat-val">25% (Low Surveillance)</strong>
+                            </div>
+                            <div class="active-agents-card">
+                                <span>Field Cyber Agents</span>
+                                <strong id="espionage-agent-count">3 Infiltrators Active</strong>
+                            </div>
+                        </div>
+                        <div class="black-ops-grid">
+                            <article class="black-op-card">
+                                <div class="op-head"><span>💥</span><strong>Sabotage Munitions Depot</strong><span class="op-risk">Heat +20</span></div>
+                                <p>Plant EMP charges in rival arsenal. Lowers enemy units by -25% HP in next battle skirmish.</p>
+                                <button type="button" class="button button-danger op-btn" id="btn-op-sabotage">Launch Infiltration (60 🪙)</button>
+                            </article>
+                            <article class="black-op-card">
+                                <div class="op-head"><span>💾</span><strong>Steal Tech Schematics</strong><span class="op-risk">Heat +35</span></div>
+                                <p>Extract classified prototype blueprints from enemy R&amp;D nodes. Yields +120 Science Research.</p>
+                                <button type="button" class="button button-primary op-btn" id="btn-op-blueprints">Deploy Hacker (80 🪙)</button>
+                            </article>
+                            <article class="black-op-card">
+                                <div class="op-head"><span>💎</span><strong>Siphon Shadow Treasury</strong><span class="op-risk">Heat +15</span></div>
+                                <p>Reroute off-grid cryptocurrency transactions from corrupt corporate accounts into City coffers (+280 🪙).</p>
+                                <button type="button" class="button button-quiet op-btn" id="btn-op-siphon">Siphon Funds</button>
+                            </article>
+                            <article class="black-op-card">
+                                <div class="op-head"><span>🛰️</span><strong>Jam Incursion Satellites</strong><span class="op-risk">Heat +25</span></div>
+                                <p>Blind hostile border recon arrays with high-orbit cyber interference. Freezes incursion threat for 90s.</p>
+                                <button type="button" class="button button-secondary op-btn" id="btn-op-jam">Jam Sensors (50 🪙)</button>
+                            </article>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -1423,6 +1567,94 @@
                         <span class="btn-main">♻️ Demolish Structure</span>
                         <small id="inspector-demolish-refund">Recycle &amp; refund 40% (260 Credits · 36 Materials)</small>
                     </button>
+                </div>
+            </div>
+        </div>
+    </dialog>
+
+    <!-- After-Action Report (AAR) & Battle Telemetry Replay Studio Dialog -->
+    <dialog class="tool-dialog battle-aar-dialog" id="battle-aar-dialog" aria-labelledby="battle-aar-title">
+        <div class="dialog-shell battle-aar-shell">
+            <header class="dialog-header battle-aar-header">
+                <div>
+                    <div class="panel-kicker">3D Tactical Battlefield Intelligence</div>
+                    <h2 id="battle-aar-title">After-Action Report &amp; Replay Studio</h2>
+                    <p>Post-combat performance telemetry, unit efficiencies, and deterministic battle replay.</p>
+                </div>
+                <button class="icon-button dialog-close" id="battle-aar-close" type="button" aria-label="Close AAR"><svg viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></svg></button>
+            </header>
+            <div class="dialog-body battle-aar-body">
+                <!-- AAR Summary Banner -->
+                <div class="aar-banner" id="aar-banner">
+                    <div class="aar-rank-badge" id="aar-rank-badge">S-RANK</div>
+                    <div class="aar-banner-text">
+                        <h3 id="aar-outcome-title">DECISIVE TACTICAL VICTORY</h3>
+                        <p id="aar-outcome-desc">Hostile vanguard crushed. Defense matrix held with 0 squad breaches.</p>
+                    </div>
+                    <div class="aar-salvage-pouch">
+                        <span>BATTLE SALVAGE</span>
+                        <strong id="aar-salvage-credits">+350 🪙</strong>
+                        <small id="aar-salvage-xp">+80 Mayor XP</small>
+                    </div>
+                </div>
+
+                <!-- 6 Telemetry Stat Cards -->
+                <div class="aar-stats-grid">
+                    <div class="aar-stat-card">
+                        <span class="stat-label">Friendly Damage Dealt</span>
+                        <strong class="stat-val highlight" id="aar-dmg-dealt">2,480 HP</strong>
+                        <span class="stat-sub" id="aar-dps">124 DPS</span>
+                    </div>
+                    <div class="aar-stat-card">
+                        <span class="stat-label">Shield Deflections</span>
+                        <strong class="stat-val positive" id="aar-dmg-deflected">1,120 HP</strong>
+                        <span class="stat-sub">Aegis &amp; Cover Absorption</span>
+                    </div>
+                    <div class="aar-stat-card">
+                        <span class="stat-label">Hostiles Neutralized</span>
+                        <strong class="stat-val hostile" id="aar-kills">12 Units</strong>
+                        <span class="stat-sub" id="aar-kill-breakdown">1 Rig, 3 Buggies, 8 Raiders</span>
+                    </div>
+                    <div class="aar-stat-card">
+                        <span class="stat-label">Squad Survivability</span>
+                        <strong class="stat-val positive" id="aar-survivability">100%</strong>
+                        <span class="stat-sub" id="aar-friendly-losses">0 Casualties</span>
+                    </div>
+                    <div class="aar-stat-card">
+                        <span class="stat-label">Electronic Warfare</span>
+                        <strong class="stat-val highlight" id="aar-ecm-jams">6 Countermeasures</strong>
+                        <span class="stat-sub">Chaff Missiles Deflected</span>
+                    </div>
+                    <div class="aar-stat-card">
+                        <span class="stat-label">Tactical Rating</span>
+                        <strong class="stat-val accent" id="aar-rating">98 / 100</strong>
+                        <span class="stat-sub">Grand Strategist</span>
+                    </div>
+                </div>
+
+                <!-- Replay Studio Timeline Controls -->
+                <div class="aar-replay-controls">
+                    <div class="replay-scrub-row">
+                        <button type="button" class="replay-btn" id="btn-replay-play" title="Play Replay">▶ Play</button>
+                        <button type="button" class="replay-btn" id="btn-replay-rewind" title="Rewind to Start">⏮ Rewind</button>
+                        <div class="replay-slider-wrap">
+                            <input type="range" class="replay-slider" id="aar-replay-slider" min="0" max="100" value="100">
+                            <span class="replay-timestamp" id="aar-replay-timestamp">00:32 / 00:32</span>
+                        </div>
+                        <div class="replay-speed-group">
+                            <button type="button" class="replay-speed-btn" data-speed="0.5">0.5x</button>
+                            <button type="button" class="replay-speed-btn active" data-speed="1.0">1x</button>
+                            <button type="button" class="replay-speed-btn" data-speed="2.0">2x</button>
+                            <button type="button" class="replay-speed-btn" data-speed="4.0">4x</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Actions -->
+                <div class="aar-footer-actions">
+                    <button type="button" class="button button-primary" id="btn-aar-claim">Claim Salvage &amp; Reinforce</button>
+                    <button type="button" class="button button-secondary" id="btn-aar-restart">Re-engage Combat Wave</button>
+                    <button type="button" class="button button-quiet" id="btn-aar-close-view">Return to Command</button>
                 </div>
             </div>
         </div>

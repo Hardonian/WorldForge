@@ -201,6 +201,9 @@ function bindInteractions() {
     setupBuildDock();
     setupTreeTabs();
     setupCommanderPowers();
+    setupWarRoomModules();
+    setupCityEmergencyShifts();
+    setupBattleAAR();
     document.querySelectorAll('[data-proof]').forEach(button => {
         button.addEventListener('click', () => copyProof(button.dataset.proof));
     });
@@ -1735,6 +1738,7 @@ function renderCityLayer(city) {
     el('city-housing').textContent = formatNumber(city.housing);
     el('city-jobs').textContent = formatNumber(city.jobs);
     el('city-wellbeing').textContent = formatDecimal(city.wellbeing, 1);
+    renderCityLogistics(city);
 
     const buildingSelect = el('city-building-select');
     const currentBuilding = buildingSelect.value;
@@ -4296,6 +4300,16 @@ const WorldForgeCG = {
         el('btn-power-barrier')?.addEventListener('click', () => typeof WorldForgeBattle3D !== 'undefined' && WorldForgeBattle3D.triggerAbility('barrier'));
         el('btn-power-emp')?.addEventListener('click', () => typeof WorldForgeBattle3D !== 'undefined' && WorldForgeBattle3D.triggerAbility('emp'));
         el('btn-power-overdrive')?.addEventListener('click', () => typeof WorldForgeBattle3D !== 'undefined' && WorldForgeBattle3D.triggerAbility('overdrive'));
+        el('btn-power-chaff')?.addEventListener('click', () => typeof WorldForgeBattle3D !== 'undefined' && WorldForgeBattle3D.triggerAbility('chaff'));
+        el('btn-battle-aar')?.addEventListener('click', () => typeof WorldForgeBattle3D !== 'undefined' && WorldForgeBattle3D.openAARModal());
+        el('macro-zoom-telemetry')?.addEventListener('click', () => this.cycleMacroZoom());
+        el('dot-orbit')?.addEventListener('click', () => this.setViewMode('realm'));
+        el('dot-city')?.addEventListener('click', () => this.setViewMode('city'));
+        el('dot-battle')?.addEventListener('click', () => this.setViewMode('battle'));
+        el('dot-chase')?.addEventListener('click', () => {
+            this.setViewMode('battle');
+            if (typeof WorldForgeBattle3D !== 'undefined' && !WorldForgeBattle3D.chaseCam) WorldForgeBattle3D.toggleChaseCam();
+        });
 
         el('btn-battle-bullet-time')?.addEventListener('click', () => typeof WorldForgeBattle3D !== 'undefined' && WorldForgeBattle3D.toggleBulletTime());
         el('btn-battle-follow')?.addEventListener('click', () => typeof WorldForgeBattle3D !== 'undefined' && WorldForgeBattle3D.toggleChaseCam());
@@ -4887,6 +4901,7 @@ const WorldForgeCG = {
                 this.camera.hasInteracted = false;
             }
             this.start();
+            this.updateMacroZoomTelemetry();
         } else {
             btnCg?.classList.remove('active');
             btnSchem?.classList.add('active');
@@ -4954,6 +4969,83 @@ const WorldForgeCG = {
         this.camera.targetX = px - cx - worldX * newZoom;
         this.camera.targetY = py - cy - worldY * newZoom;
         this.camera.hasInteracted = true;
+
+        // Macro-to-Micro Infinite Zoom Transitions
+        if (this.worldLens === 'realm' && factor > 1 && newZoom >= 2.45) {
+            this.setViewMode('city');
+            spawnFloatingText('🏙️ DESCENDING TO CITY SECTOR (2,500m)', px, py, 'fx-surge');
+            showToast('Macro Zoom', 'Atmospheric descent: Sector City Grid engaged.');
+            this.audio?.playConstruction?.();
+            return;
+        } else if (this.worldLens === 'city') {
+            if (factor < 1 && newZoom <= 0.45) {
+                this.setViewMode('realm');
+                spawnFloatingText('🛰️ ASCENDING TO ORBITAL ATLAS (30,000m)', px, py, 'fx-surge');
+                showToast('Macro Zoom', 'Orbital ascent: Continental Realm Atlas engaged.');
+                this.audio?.playWarHorn?.();
+                return;
+            } else if (factor > 1 && newZoom >= 2.9) {
+                this.setViewMode('battle');
+                showToast('Tactical Incursion', 'Ground skirmish detected: 3D Tactical Battle Grid engaged.');
+                return;
+            }
+        }
+        this.updateMacroZoomTelemetry();
+    },
+
+    updateMacroZoomTelemetry() {
+        const icon = el('zoom-layer-icon');
+        const title = el('zoom-layer-title');
+        const alt = el('zoom-layer-alt');
+        const dotOrbit = el('dot-orbit');
+        const dotCity = el('dot-city');
+        const dotBattle = el('dot-battle');
+        const dotChase = el('dot-chase');
+        if (!icon || !title || !alt) return;
+
+        [dotOrbit, dotCity, dotBattle, dotChase].forEach(d => d?.classList.remove('active'));
+
+        if (this.worldLens === 'realm') {
+            icon.textContent = '🛰️';
+            title.textContent = 'REALM ATLAS';
+            alt.textContent = 'ALT 30,000m';
+            dotOrbit?.classList.add('active');
+        } else if (this.worldLens === 'battle') {
+            const isChase = typeof WorldForgeBattle3D !== 'undefined' && WorldForgeBattle3D.chaseCam;
+            if (isChase) {
+                icon.textContent = '🤖';
+                title.textContent = 'CHASE CAM';
+                alt.textContent = 'ALT 15m';
+                dotChase?.classList.add('active');
+            } else {
+                icon.textContent = '⚔️';
+                title.textContent = '3D BATTLE GRID';
+                alt.textContent = 'ALT 250m';
+                dotBattle?.classList.add('active');
+            }
+        } else {
+            icon.textContent = '🏙️';
+            title.textContent = 'CITY METROPOLIS';
+            alt.textContent = 'ALT 2,500m';
+            dotCity?.classList.add('active');
+        }
+    },
+
+    cycleMacroZoom() {
+        if (this.worldLens === 'realm') {
+            this.setViewMode('city');
+        } else if (this.worldLens === 'city') {
+            this.setViewMode('battle');
+        } else if (this.worldLens === 'battle') {
+            if (typeof WorldForgeBattle3D !== 'undefined' && !WorldForgeBattle3D.chaseCam) {
+                WorldForgeBattle3D.toggleChaseCam();
+            } else {
+                this.setViewMode('realm');
+            }
+        } else {
+            this.setViewMode('realm');
+        }
+        this.updateMacroZoomTelemetry();
     },
 
     fitView(force = false) {
@@ -11794,6 +11886,357 @@ function renderTrophiesGrid() {
 }
 
 // ==========================================================================
+// MASTER 100: AAA GRAND STRATEGY & TACTICAL RTS SYSTEMS
+// ==========================================================================
+
+function renderCityLogistics(city) {
+    if (!city) return;
+    const pop = city.population || 120;
+    const laborers = Math.max(1, Math.round(pop * 0.65));
+    const engineers = Math.max(1, Math.round(pop * 0.25));
+    const council = Math.max(1, pop - laborers - engineers);
+
+    const lEl = el('class-laborers');
+    if (lEl) lEl.textContent = formatNumber(laborers);
+    const engEl = el('class-engineers');
+    if (engEl) engEl.textContent = formatNumber(engineers);
+    const cEl = el('class-council');
+    if (cEl) cEl.textContent = formatNumber(council);
+
+    let powerProduced = 180;
+    let powerConsumed = Math.round(pop * 0.8 + (city.buildings ? city.buildings.reduce((acc, b) => acc + (b.count || 0) * 12, 0) : 0));
+    if (city.emergencyShiftActive) powerConsumed = Math.round(powerConsumed * 1.35);
+
+    const powerRatio = Math.round((powerProduced / Math.max(1, powerConsumed)) * 100);
+    const pGridEl = el('city-power-grid');
+    if (pGridEl) {
+        pGridEl.textContent = `${Math.min(100, powerRatio)}%`;
+        pGridEl.style.color = powerRatio >= 100 ? 'var(--mint)' : (powerRatio >= 75 ? 'var(--amber)' : 'var(--coral)');
+    }
+    const pLoadEl = el('class-power-load');
+    if (pLoadEl) {
+        pLoadEl.textContent = `${powerProduced} / ${powerConsumed} kW ${powerRatio < 100 ? '⚠️ BROWNOUT' : ''}`;
+        pLoadEl.style.color = powerRatio < 100 ? 'var(--coral)' : 'var(--mint)';
+    }
+
+    let happiness = Math.round(city.wellbeing || 75);
+    if (city.emergencyShiftActive) happiness -= 22;
+    if (powerRatio < 100) happiness -= 18;
+    happiness = Math.max(5, Math.min(100, happiness));
+
+    const happyEl = el('city-happiness');
+    if (happyEl) {
+        happyEl.textContent = `${happiness}%`;
+        happyEl.style.color = happiness >= 70 ? 'var(--mint)' : (happiness >= 35 ? 'var(--amber)' : 'var(--coral)');
+    }
+
+    const strikeWarn = el('city-strike-warning');
+    if (strikeWarn) {
+        strikeWarn.classList.toggle('hidden', happiness >= 30);
+    }
+
+    const shiftBtn = el('btn-emergency-shift');
+    const shiftLbl = el('emergency-shift-label');
+    if (shiftBtn && shiftLbl) {
+        shiftBtn.classList.toggle('active', !!city.emergencyShiftActive);
+        shiftLbl.textContent = city.emergencyShiftActive ? '⚡ Emergency 24h Shift [ACTIVE]' : '⚡ Emergency 24h Shift [OFF]';
+    }
+}
+
+function setupCityEmergencyShifts() {
+    el('btn-emergency-shift')?.addEventListener('click', () => {
+        const city = state.play?.data?.city;
+        if (!city) return;
+        city.emergencyShiftActive = !city.emergencyShiftActive;
+        if (city.emergencyShiftActive) {
+            WorldForgeCG.audio?.playOverdrive?.();
+            showToast('Emergency Overtime ⚡', '24-hour emergency shifts active! +60% production, +30% unrest, -22% happiness.');
+            spawnFloatingText('⚡ EMERGENCY 24H SHIFTS ENGAGED!', window.innerWidth / 2, window.innerHeight / 2, 'fx-surge');
+        } else {
+            WorldForgeCG.audio?.playConstruction?.();
+            showToast('Standard Shifts', 'Workforce restored to standard 8-hour shifts.');
+        }
+        renderCityLayer(city);
+    });
+}
+
+function setupWarRoomModules() {
+    const tabs = document.querySelectorAll('.war-tab');
+    tabs.forEach(tab => {
+        tab.addEventListener('click', () => {
+            tabs.forEach(t => t.classList.remove('active'));
+            tab.classList.add('active');
+            const target = tab.dataset.tab;
+            el('war-panel-entities')?.classList.toggle('hidden', target !== 'entities');
+            el('war-panel-summit')?.classList.toggle('hidden', target !== 'summit');
+            el('war-panel-espionage')?.classList.toggle('hidden', target !== 'espionage');
+            WorldForgeCG.audio?.playBlip?.(680, 0.05);
+        });
+    });
+
+    const summitFactions = {
+        raiders: {
+            name: 'Warlord Vane (Dust Raider Envoy)',
+            avatar: '⚔️',
+            dialogue: '"Your Sanctuary grows fat behind its solar shields. Pay tribute in food and water, or our War-Rigs will breach your eastern dunes."',
+            trust: 25,
+            tension: 75,
+        },
+        mandate: {
+            name: 'Legate Kaelen (Iron Mandate Dominion)',
+            avatar: '🦅',
+            dialogue: '"Order is forged through iron discipline. Cede buffer sovereignty to our heavy mechanized legions, and we shall guarantee your border survival."',
+            trust: 45,
+            tension: 55,
+        },
+        mercantile: {
+            name: 'Consul Lyra (Free Mercantile League)',
+            avatar: '⚖️',
+            dialogue: '"Trade conduits fuel civilization, Commander. Sign our tariff accords, and our freighters will bring credits and synthetic fuel to your citadel."',
+            trust: 70,
+            tension: 30,
+        }
+    };
+
+    let activeSummitFaction = 'raiders';
+
+    function renderSummitFaction(fKey) {
+        activeSummitFaction = fKey;
+        const f = summitFactions[fKey];
+        if (!f) return;
+        el('summit-avatar').textContent = f.avatar;
+        el('summit-ambassador-name').textContent = f.name;
+        el('summit-dialogue-text').textContent = f.dialogue;
+        el('summit-trust-val').textContent = `${f.trust}%`;
+        el('summit-trust-fill').style.width = `${f.trust}%`;
+        el('summit-tension-val').textContent = `${f.tension}%`;
+        el('summit-tension-fill').style.width = `${f.tension}%`;
+    }
+
+    document.querySelectorAll('.summit-faction-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            document.querySelectorAll('.summit-faction-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            renderSummitFaction(btn.dataset.faction);
+            WorldForgeCG.audio?.playBlip?.(820, 0.05);
+        });
+    });
+
+    el('btn-treaty-nap')?.addEventListener('click', () => {
+        const city = state.play?.data?.city;
+        if (!city || (city.credits || 0) < 150) {
+            showToast('Insufficient Credits', 'A Non-Aggression Pact requires 150 Credits for diplomatic envoys.', 'error');
+            return;
+        }
+        city.credits -= 150;
+        if (city.geopolitics) {
+            city.geopolitics.borderThreat = Math.max(0, (city.geopolitics.borderThreat || 40) - 40);
+        }
+        summitFactions[activeSummitFaction].trust = Math.min(100, summitFactions[activeSummitFaction].trust + 25);
+        summitFactions[activeSummitFaction].tension = Math.max(0, summitFactions[activeSummitFaction].tension - 30);
+        renderSummitFaction(activeSummitFaction);
+        renderCityLayer(city);
+        WorldForgeCG.audio?.playWarHorn?.();
+        showToast('Treaty Ratified! 📜', `Signed Non-Aggression Pact with ${summitFactions[activeSummitFaction].name}. Raid risk reduced by 40%!`, 'success');
+        MayorBounties.addXp(40);
+    });
+
+    el('btn-treaty-trade')?.addEventListener('click', () => {
+        const f = summitFactions[activeSummitFaction];
+        if (f.trust < 50) {
+            showToast('Trust Too Low', `Requires 50%+ Diplomatic Trust (Current: ${f.trust}%).`, 'error');
+            return;
+        }
+        const city = state.play?.data?.city;
+        if (city) {
+            city.credits = (city.credits || 0) + 120;
+            renderCityLayer(city);
+        }
+        f.trust = Math.min(100, f.trust + 10);
+        renderSummitFaction(activeSummitFaction);
+        WorldForgeCG.audio?.playCoin?.();
+        showToast('Trade Accord Signed! ⚖️', 'Open commercial corridors established. Citadel treasury infused with +120 Credits!', 'success');
+        MayorBounties.addXp(35);
+    });
+
+    el('btn-treaty-tribute')?.addEventListener('click', () => {
+        const city = state.play?.data?.city;
+        if (city && city.geopolitics) {
+            city.geopolitics.borderThreat = 0;
+            renderCityLayer(city);
+        }
+        summitFactions[activeSummitFaction].tension = Math.max(0, summitFactions[activeSummitFaction].tension - 40);
+        renderSummitFaction(activeSummitFaction);
+        WorldForgeCG.audio?.playTribute?.();
+        showToast('Tribute Paid 💰', 'Warlord appetites sated for now. Immediate invasion threat neutralized.', 'success');
+    });
+
+    el('btn-treaty-dmz')?.addEventListener('click', () => {
+        const city = state.play?.data?.city;
+        const milPower = city?.geopolitics?.militaryPower || 45;
+        if (milPower < 50) {
+            showToast('Insufficient Military', 'Enforcing a Demilitarized Buffer Zone requires 50+ Military Power.', 'error');
+            return;
+        }
+        if (city?.geopolitics) {
+            city.geopolitics.borderThreat = Math.max(0, (city.geopolitics.borderThreat || 0) - 25);
+            city.geopolitics.defensePosture = 'fortified';
+        }
+        renderCityLayer(city);
+        WorldForgeCG.audio?.playServoLock?.();
+        showToast('DMZ Enforced! 🛡️', '200km Demilitarized Buffer Zone established along border dunes.', 'success');
+        MayorBounties.addXp(50);
+    });
+
+    el('btn-op-sabotage')?.addEventListener('click', () => {
+        const city = state.play?.data?.city;
+        if (!city || (city.credits || 0) < 60) {
+            showToast('Insufficient Funds', 'Operation requires 60 Credits.', 'error');
+            return;
+        }
+        city.credits -= 60;
+        if (typeof WorldForgeBattle3D !== 'undefined') {
+            WorldForgeBattle3D.sabotagedNextWave = true;
+        }
+        renderCityLayer(city);
+        WorldForgeCG.audio?.playBattleClash?.();
+        showToast('Infiltration Successful! 💥', 'Covert operatives sabotaged hostile munitions! Enemy units in next battle will suffer -25% HP penalty.', 'success');
+        MayorBounties.addXp(45);
+    });
+
+    el('btn-op-blueprints')?.addEventListener('click', () => {
+        const city = state.play?.data?.city;
+        if (!city || (city.credits || 0) < 80) {
+            showToast('Insufficient Funds', 'Operation requires 80 Credits.', 'error');
+            return;
+        }
+        city.credits -= 80;
+        renderCityLayer(city);
+        WorldForgeCG.audio?.playBlip?.(980, 0.1);
+        showToast('Data Extracted! 💾', 'Classified prototype blueprints secured! Yielded +120 Science Research progression.', 'success');
+        MayorBounties.addXp(50);
+    });
+
+    el('btn-op-siphon')?.addEventListener('click', () => {
+        const city = state.play?.data?.city;
+        if (city) {
+            city.credits = (city.credits || 0) + 280;
+            renderCityLayer(city);
+        }
+        WorldForgeCG.audio?.playCoin?.();
+        showToast('Shadow Funds Siphoned! 💎', 'Transferred +280 Credits from corporate off-grid accounts into Citadel treasury.', 'success');
+        MayorBounties.addXp(30);
+    });
+
+    el('btn-op-jam')?.addEventListener('click', () => {
+        const city = state.play?.data?.city;
+        if (!city || (city.credits || 0) < 50) {
+            showToast('Insufficient Funds', 'Operation requires 50 Credits.', 'error');
+            return;
+        }
+        city.credits -= 50;
+        if (city.geopolitics) {
+            city.geopolitics.borderThreat = Math.max(0, (city.geopolitics.borderThreat || 0) - 30);
+        }
+        renderCityLayer(city);
+        WorldForgeCG.audio?.playEmpBlast?.();
+        showToast('Sensors Jammed! 🛰️', 'Hostile border arrays blinded. Warband raid incursions frozen for 90s.', 'success');
+        MayorBounties.addXp(35);
+    });
+}
+
+function openBattleAARModal(isVictory = true) {
+    const dialog = el('battle-aar-dialog');
+    if (!dialog) return;
+    const stats = (typeof WorldForgeBattle3D !== 'undefined' && WorldForgeBattle3D.stats) ? WorldForgeBattle3D.stats : { dmgDealt: 1200, dmgMitigated: 400, kills: 6, friendlyLosses: 0, chaffJams: 2, powersUsed: 2 };
+    const elapsed = Math.max(1, Math.round(typeof WorldForgeBattle3D !== 'undefined' ? WorldForgeBattle3D.elapsedBattleTime : 24));
+    const dps = Math.round(stats.dmgDealt / elapsed);
+
+    const survivability = stats.friendlyLosses === 0 ? 100 : Math.max(0, Math.round((1 - stats.friendlyLosses / 8) * 100));
+    let rank = 'S-RANK';
+    let rating = 98;
+    if (!isVictory) { rank = 'F-RANK'; rating = 45; }
+    else if (survivability < 50) { rank = 'C-RANK'; rating = 62; }
+    else if (survivability < 75) { rank = 'B-RANK'; rating = 78; }
+    else if (survivability < 100) { rank = 'A-RANK'; rating = 88; }
+
+    const rankEl = el('aar-rank-badge');
+    if (rankEl) rankEl.textContent = rank;
+
+    const outcomeTitle = el('aar-outcome-title');
+    if (outcomeTitle) outcomeTitle.textContent = isVictory ? 'DECISIVE TACTICAL VICTORY' : 'DEFENSIVE MATRIX COMPROMISED';
+
+    const outcomeDesc = el('aar-outcome-desc');
+    if (outcomeDesc) outcomeDesc.textContent = isVictory ?
+        'Hostile vanguard eradicated. Forward citadel perimeter secured with tactical superiority.' :
+        'Sanctuary vanguard sustained critical damage. Regroup at fallback positions.';
+
+    el('aar-dmg-dealt').textContent = `${stats.dmgDealt} HP`;
+    el('aar-dps').textContent = `${dps} DPS (${elapsed}s duration)`;
+    el('aar-dmg-deflected').textContent = `${stats.dmgMitigated} HP`;
+    el('aar-kills').textContent = `${stats.kills} Units`;
+    el('aar-survivability').textContent = `${survivability}%`;
+    el('aar-friendly-losses').textContent = `${stats.friendlyLosses} Casualties`;
+    el('aar-ecm-jams').textContent = `${stats.chaffJams} Countermeasures`;
+    el('aar-rating').textContent = `${rating} / 100`;
+
+    const credReward = isVictory ? 350 : 100;
+    const xpReward = isVictory ? 80 : 30;
+    el('aar-salvage-credits').textContent = `+${credReward} 🪙`;
+    el('aar-salvage-xp').textContent = `+${xpReward} Mayor XP`;
+
+    if (WorldForgeCG.audio?.playVictoryFanfare && isVictory) {
+        WorldForgeCG.audio.playVictoryFanfare();
+    } else if (typeof WorldForgeBattle3D !== 'undefined' && WorldForgeBattle3D.playTone) {
+        WorldForgeBattle3D.playTone(520, 'triangle', 0.8, 0.35, 120);
+    }
+
+    dialog.showModal();
+}
+
+function closeBattleAARModal() {
+    el('battle-aar-dialog')?.close();
+}
+
+function setupBattleAAR() {
+    el('battle-aar-close')?.addEventListener('click', closeBattleAARModal);
+    el('btn-aar-close-view')?.addEventListener('click', closeBattleAARModal);
+
+    el('btn-aar-claim')?.addEventListener('click', () => {
+        const city = state.play?.data?.city;
+        if (city) {
+            city.credits = (city.credits || 0) + 350;
+            renderCityLayer(city);
+        }
+        MayorBounties.addXp(80);
+        WorldForgeCG.audio?.playCoin?.();
+        showToast('Salvage Claimed! 🪙', 'Harvested 350 Credits & 80 Mayor XP from battlefield wreckage!');
+        closeBattleAARModal();
+        if (typeof WorldForgeBattle3D !== 'undefined') {
+            WorldForgeBattle3D.resetWave();
+        }
+    });
+
+    el('btn-aar-restart')?.addEventListener('click', () => {
+        closeBattleAARModal();
+        if (typeof WorldForgeBattle3D !== 'undefined') {
+            WorldForgeBattle3D.resetWave();
+        }
+    });
+
+    document.querySelectorAll('.replay-speed-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            document.querySelectorAll('.replay-speed-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            const speed = parseFloat(btn.dataset.speed) || 1.0;
+            if (typeof WorldForgeBattle3D !== 'undefined') {
+                WorldForgeBattle3D.timeScale = speed;
+            }
+        });
+    });
+}
+
+// ==========================================================================
 // 3D Tactical Battlefield Simulator (Physics Engine & RTS Command)
 // Pure Canvas 2D/3D Software Projection Pipeline & Newtonian Physics
 // ==========================================================================
@@ -11803,9 +12246,22 @@ const WorldForgeBattle3D = {
     height: 600,
     lastTime: 0,
     elapsedBattleTime: 0,
+    friendlyChaffTimer: 0,
+    killcamTimer: 0,
+    waveEnded: false,
+    sabotagedNextWave: false,
     bulletTime: false,
     chaseCam: false,
     activeFormation: 'line', // 'line' | 'wedge' | 'shield' | 'scatter'
+    stats: {
+        dmgDealt: 0,
+        dmgMitigated: 0,
+        kills: 0,
+        friendlyLosses: 0,
+        chaffJams: 0,
+        powersUsed: 0,
+        startTime: Date.now(),
+    },
 
     // 3D Camera State
     camera: {
@@ -11860,6 +12316,7 @@ const WorldForgeBattle3D = {
 
     // Weather Simulation & Action Cam Timers
     weatherParticles: [],
+    chaffParticles: [],
     lightningTimer: 0,
     lightningFlash: 0,
     actionCamTimer: 0,
@@ -11896,12 +12353,14 @@ const WorldForgeBattle3D = {
         barrier: 0,
         emp: 0,
         overdrive: 0,
+        chaff: 0,
     },
     COOLDOWN_MAX: {
         orbital: 12.0,
         barrier: 15.0,
         emp: 10.0,
         overdrive: 8.0,
+        chaff: 14.0,
     },
 
     // Procedural Web Audio Engine & Battle Symphony
@@ -12059,6 +12518,16 @@ const WorldForgeBattle3D = {
 
     soundOrderAck() {
         this.playTone(650, 'sine', 0.08, 0.12, 180);
+    },
+
+    soundChaff() {
+        this.playNoise(0.55, 0.22, 2200);
+        this.playTone(840, 'sawtooth', 0.35, 0.16, -520);
+    },
+
+    soundKillcam() {
+        this.playTone(55, 'sawtooth', 1.8, 0.45, -25);
+        this.playNoise(1.2, 0.3, 160);
     },
 
     project(x, y, z, w, h) {
@@ -12364,6 +12833,19 @@ const WorldForgeBattle3D = {
     // --------------------------------------------------------------------------
     resetWave() {
         this.elapsedBattleTime = 0;
+        this.friendlyChaffTimer = 0;
+        this.killcamTimer = 0;
+        this.waveEnded = false;
+        this.chaffParticles = [];
+        this.stats = {
+            dmgDealt: 0,
+            dmgMitigated: 0,
+            kills: 0,
+            friendlyLosses: 0,
+            chaffJams: 0,
+            powersUsed: 0,
+            startTime: Date.now(),
+        };
         this.units = [];
         this.projectiles = [];
         this.shockwaves = [];
@@ -12376,6 +12858,7 @@ const WorldForgeBattle3D = {
         this.targetedEnemy = null;
         this.closeRadialMenu();
         this.initWeatherParticles();
+        el('killcam-overlay')?.classList.add('hidden');
 
         // 1. Battlefield Destructible Physical Covers
         this.covers = [
@@ -12696,9 +13179,22 @@ const WorldForgeBattle3D = {
         // Auto-select Titan Mech by default
         this.selectedUnits = [titanMech];
         this.focusedUnit = titanMech;
+
+        // Covert Sabotage Operation effect (from War Room Espionage)
+        if (this.sabotagedNextWave) {
+            this.sabotagedNextWave = false;
+            this.units.filter(u => u.team === 'hostile').forEach(u => {
+                u.hp = Math.round(u.hp * 0.75);
+                u.maxHp = Math.round(u.maxHp * 0.75);
+            });
+            this.spawnFloatie(60, 20, 60, '💥 ENEMY MUNITIONS SABOTAGED! -25% HP', '#f43f5e');
+            this.setTicker('💥 COVERT SABOTAGE ACTIVE: Infiltrators compromised hostile ordnance (-25% enemy HP)');
+        } else {
+            this.setTicker(`Battle wave engaged against ${this.currentHostileFaction.toUpperCase()} forces · Hold the line!`);
+        }
+
         this.updateHUD();
         this.soundOrderAck();
-        this.setTicker(`Battle wave engaged against ${this.currentHostileFaction.toUpperCase()} forces · Hold the line!`);
     },
 
     // --------------------------------------------------------------------------
@@ -12776,6 +13272,8 @@ const WorldForgeBattle3D = {
             return;
         }
 
+        if (this.stats) this.stats.powersUsed++;
+
         if (power === 'orbital') {
             const hostiles = this.units.filter(u => u.team === 'hostile' && u.hp > 0);
             let tx = 50, tz = 50;
@@ -12844,6 +13342,28 @@ const WorldForgeBattle3D = {
             this.soundRailgun();
             this.speakVoice('Blitz overdrive active! Maximum impulse!');
             this.setTicker('🚀 BLITZ OVERDRIVE initiated! +100% velocity & heavy ram impulse');
+        } else if (power === 'chaff') {
+            this.friendlyChaffTimer = 8.0;
+            this.cooldowns.chaff = this.COOLDOWN_MAX.chaff;
+            this.soundChaff();
+            this.speakVoice('Chaff screen deployed! Ballistic guidance jammed!');
+            this.setTicker('📡 CHAFF SCREEN DEPLOYED: High-density aerosol cloud dispersing hostile projectiles');
+
+            const center = this.focusedUnit || this.selectedUnits[0] || { x: -50, z: -50 };
+            for (let i = 0; i < 48; i++) {
+                this.chaffParticles.push({
+                    x: center.x + (Math.random() - 0.5) * 55,
+                    y: Math.random() * 14 + 1.5,
+                    z: center.z + (Math.random() - 0.5) * 55,
+                    vx: (Math.random() - 0.5) * 16,
+                    vy: (Math.random() - 0.5) * 4,
+                    vz: (Math.random() - 0.5) * 16,
+                    life: 6.0 + Math.random() * 2.5,
+                    maxLife: 8.5,
+                    size: Math.random() * 2.6 + 1.2,
+                });
+            }
+            this.spawnFloatie(center.x, 16, center.z, '📡 CHAFF SCREEN ACTIVE!', '#67e8f9');
         }
         this.updateHUD();
     },
@@ -12868,6 +13388,35 @@ const WorldForgeBattle3D = {
     updatePhysics(rawDt) {
         const dt = this.bulletTime ? rawDt * 0.25 : rawDt;
         this.elapsedBattleTime += dt;
+
+        // Cinematic Killcam Timer
+        if (this.killcamTimer > 0) {
+            this.killcamTimer -= rawDt;
+            if (this.killcamTimer <= 0) {
+                this.killcamTimer = 0;
+                this.bulletTime = false;
+                el('killcam-overlay')?.classList.add('hidden');
+                this.camera.targetDist = 340;
+                this.camera.targetPitch = 0.58;
+            }
+        }
+
+        // Electronic Countermeasures (Chaff Cloud Simulation)
+        if (this.friendlyChaffTimer > 0) {
+            this.friendlyChaffTimer = Math.max(0, this.friendlyChaffTimer - dt);
+        }
+
+        for (let i = this.chaffParticles.length - 1; i >= 0; i--) {
+            const cp = this.chaffParticles[i];
+            cp.x += cp.vx * dt;
+            cp.y += cp.vy * dt;
+            cp.z += cp.vz * dt;
+            cp.vx *= 0.94;
+            cp.vy *= 0.94;
+            cp.vz *= 0.94;
+            cp.life -= dt;
+            if (cp.life <= 0) this.chaffParticles.splice(i, 1);
+        }
 
         // Music Symphony & Weather Updates
         this.playMusicStep(dt);
@@ -13070,6 +13619,24 @@ const WorldForgeBattle3D = {
             p.z += p.vz * dt;
             p.life -= dt;
 
+            // Check Electronic Countermeasures (Chaff Screen Dispersal)
+            if (p.team === 'hostile' && this.friendlyChaffTimer > 0 && !p.chaffDeflected) {
+                const nearFriendly = this.units.find(u => u.team === 'friendly' && u.hp > 0 && Math.hypot(p.x - u.x, p.z - u.z) < 55);
+                if (nearFriendly) {
+                    p.chaffDeflected = true;
+                    p.vx += (Math.random() - 0.5) * 160;
+                    p.vz += (Math.random() - 0.5) * 160;
+                    p.vy += Math.random() * 22 + 12;
+                    p.gravity = true;
+                    if (this.stats) {
+                        this.stats.chaffJams++;
+                        this.stats.dmgMitigated += p.damage || 35;
+                    }
+                    this.soundShieldPing();
+                    this.spawnFloatie(p.x, p.y + 4, p.z, '📡 CHAFF JAMMED!', '#67e8f9');
+                }
+            }
+
             // Check Aegis Barrier Dome deflections
             for (const dome of this.barrierDomes) {
                 const domeDist = Math.hypot(p.x - dome.x, p.z - dome.z);
@@ -13078,6 +13645,7 @@ const WorldForgeBattle3D = {
                     p.vz = -p.vz * 0.8;
                     p.vy = Math.abs(p.vy) + 12;
                     p.team = 'friendly';
+                    if (this.stats) this.stats.dmgMitigated += p.damage || 60;
                     this.soundShieldPing();
                     this.spawnFloatie(p.x, p.y + 4, p.z, '🛡️ DEFLECTED!', '#38bdf8');
                     break;
@@ -13093,6 +13661,7 @@ const WorldForgeBattle3D = {
                 if (distToCover <= (cover.w + cover.l) * 0.28 && p.y <= cover.h + 2) {
                     coverBlocked = true;
                     cover.hp = Math.max(0, cover.hp - p.damage);
+                    if (this.stats) this.stats.dmgMitigated += p.damage || 30;
                     this.soundCrunch();
                     this.spawnFloatie(cover.x, cover.h + 4, cover.z, `🛡️ COVER HIT! -${p.damage}`, '#94a3b8');
 
@@ -13184,6 +13753,13 @@ const WorldForgeBattle3D = {
 
                     let finalDmg = Math.round(p.damage * armorMultiplier);
 
+                    // Tally Telemetry
+                    if (t.team === 'hostile') {
+                        if (this.stats) this.stats.dmgDealt += finalDmg;
+                    } else if (t.team === 'friendly') {
+                        if (this.stats) this.stats.dmgMitigated += Math.max(0, p.damage - finalDmg);
+                    }
+
                     // Shield absorption
                     if (t.shield > 0) {
                         const sDmg = Math.min(t.shield, finalDmg);
@@ -13211,8 +13787,16 @@ const WorldForgeBattle3D = {
                     if (t.hp <= 0) {
                         this.createExplosion(t.x, t.z, t.radius * 2.8, t.mass * 0.4, 25, t.team === 'friendly' ? '#38bdf8' : '#ea580c');
                         if (t.team === 'hostile') {
+                            if (this.stats) this.stats.kills++;
                             this.gainHeroXp(t.maxHp * 0.5);
                             this.speakVoice('Target neutralized');
+
+                            // Cinematic Killcam on Heavy Mechs / War-Rigs / Titans
+                            if (t.role.includes('TITAN') || t.role.includes('RAM') || t.role.includes('HEAVY') || t.mass >= 500) {
+                                this.triggerKillcam(t, `${t.name.toUpperCase()} ELIMINATED!`);
+                            }
+                        } else if (t.team === 'friendly') {
+                            if (this.stats) this.stats.friendlyLosses++;
                         }
                     }
 
@@ -13331,6 +13915,30 @@ const WorldForgeBattle3D = {
         this.camera.pitch += (this.camera.targetPitch - this.camera.pitch) * 0.14;
         this.camera.dist += (this.camera.targetDist - this.camera.dist) * 0.14;
 
+        // Wave Victory or Friendly Defeat detection -> Trigger AAR Modal
+        if (!this.waveEnded && this.units.length > 0) {
+            const friendlyLiving = this.units.filter(u => u.team === 'friendly' && u.hp > 0);
+            const hostileLiving = this.units.filter(u => u.team === 'hostile' && u.hp > 0);
+            const hadHostiles = this.units.some(u => u.team === 'hostile');
+            const hadFriendly = this.units.some(u => u.team === 'friendly');
+
+            if (hadHostiles && hostileLiving.length === 0) {
+                this.waveEnded = true;
+                this.speakVoice('Victory achieved! Hostile vanguard neutralized!');
+                this.setTicker('🏆 DECISIVE VICTORY: All hostile forces eliminated!');
+                setTimeout(() => {
+                    openBattleAARModal(true);
+                }, 1400);
+            } else if (hadFriendly && friendlyLiving.length === 0) {
+                this.waveEnded = true;
+                this.speakVoice('Critical alert: Vanguard eliminated. Defensive line compromised.');
+                this.setTicker('💀 CRITICAL DEFEAT: Sanctuary vanguard neutralized!');
+                setTimeout(() => {
+                    openBattleAARModal(false);
+                }, 1400);
+            }
+        }
+
         this.updateHUD();
     },
 
@@ -13359,6 +13967,46 @@ const WorldForgeBattle3D = {
             this.speakVoice(`Titan Mech promoted to Veterancy Rank ${roman}!`);
             this.setTicker(`⭐ HERO PROMOTION: Titan Mech promoted to RANK ${roman}! Maximum hull integrity expanded.`);
         }
+    },
+
+    triggerKillcam(unit, bannerText) {
+        this.killcamTimer = 2.4;
+        this.bulletTime = true;
+        this.soundKillcam();
+
+        this.camera.targetPanX = unit.x;
+        this.camera.targetPanZ = unit.z;
+        this.camera.targetDist = 125;
+        this.camera.targetPitch = 0.28;
+
+        const overlay = el('killcam-overlay');
+        if (overlay) {
+            overlay.classList.remove('hidden');
+            const textEl = el('killcam-banner-text');
+            if (textEl) textEl.textContent = bannerText || 'TARGET ELIMINATED';
+        }
+        this.setTicker(`🎬 CINEMATIC KILLCAM: ${bannerText || 'Hostile Heavy Destroyed'}!`);
+    },
+
+    openAARModal(isVictory = true) {
+        openBattleAARModal(isVictory);
+    },
+
+    renderChaff(ctx, w, h) {
+        if (!this.chaffParticles || !this.chaffParticles.length) return;
+        ctx.save();
+        this.chaffParticles.forEach(cp => {
+            const pt = this.project(cp.x, cp.y, cp.z, w, h);
+            if (pt) {
+                const alpha = Math.max(0, cp.life / cp.maxLife);
+                const sz = cp.size * pt.scale;
+                ctx.fillStyle = `rgba(103, 232, 249, ${alpha * 0.85})`;
+                ctx.shadowColor = '#22d3ee';
+                ctx.shadowBlur = 6;
+                ctx.fillRect(pt.sx - sz / 2, pt.sy - sz / 2, sz, sz);
+            }
+        });
+        ctx.restore();
     },
 
     handleUnitCombat(u, dt) {
@@ -13580,7 +14228,7 @@ const WorldForgeBattle3D = {
             }
         }
 
-        const abilities = ['orbital', 'barrier', 'emp', 'overdrive'];
+        const abilities = ['orbital', 'barrier', 'emp', 'overdrive', 'chaff'];
         abilities.forEach(a => {
             const btn = el(`btn-power-${a === 'overdrive' ? 'overdrive' : a}`);
             if (btn) {
@@ -13759,6 +14407,14 @@ const WorldForgeBattle3D = {
 
     handleWheel(e) {
         const factor = e.deltaY < 0 ? 0.88 : 1.14;
+        if (factor > 1 && this.camera.targetDist >= 440) {
+            WorldForgeCG.setViewMode('city');
+            return;
+        }
+        if (factor < 1 && this.camera.targetDist <= 98 && !this.chaseCam) {
+            this.toggleChaseCam();
+            return;
+        }
         this.camera.targetDist = Math.max(90, Math.min(480, this.camera.targetDist * factor));
     },
 
@@ -13781,6 +14437,16 @@ const WorldForgeBattle3D = {
         if (key === '4') {
             e.preventDefault();
             this.triggerAbility('overdrive');
+            return true;
+        }
+        if (key === '5') {
+            e.preventDefault();
+            this.triggerAbility('chaff');
+            return true;
+        }
+        if (key === 'p') {
+            e.preventDefault();
+            this.openAARModal(true);
             return true;
         }
         if (key === 't') {
@@ -13936,6 +14602,9 @@ const WorldForgeBattle3D = {
 
         // 7. Draw Weather Simulation Layer (Sandstorm / Acid Rain / Lightning)
         this.renderWeatherLayer(ctx, w, h);
+
+        // 7b. Draw Electronic Warfare Chaff Particle Cloud
+        this.renderChaff(ctx, w, h);
 
         // 8. Draw 3D Floating Combat Floaties
         this.renderFloaties(ctx, w, h);
