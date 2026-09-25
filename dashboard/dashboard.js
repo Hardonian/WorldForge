@@ -3223,6 +3223,17 @@ const WorldForgeCG = {
     hoveredTile: null,
     hoveredDistrict: null,
     hoveredRealmEntity: null,
+    realmMapLens: 'geopolitics',
+    radialMenu: {
+        active: false,
+        x: 0,
+        y: 0,
+        mode: 'atlas',
+        targetEntity: null,
+        hoveredIndex: -1,
+        anim: 0,
+        items: [],
+    },
     cityCitizens: [],
     chimneySmoke: [],
     cityLifeInit: false,
@@ -4182,6 +4193,7 @@ const WorldForgeCG = {
         // Pointer / mouse drag
         c.addEventListener('pointerdown', e => {
             if (e.button !== 0) return;
+            if (this.radialMenu && this.radialMenu.active) return;
             c.setPointerCapture(e.pointerId);
             this.camera.isDragging = true;
             this.camera.dragStartX = e.clientX;
@@ -4192,6 +4204,15 @@ const WorldForgeCG = {
         });
 
         window.addEventListener('pointermove', e => {
+            const rect = c.getBoundingClientRect();
+            this.lastPointerX = e.clientX - rect.left;
+            this.lastPointerY = e.clientY - rect.top;
+
+            if (this.radialMenu && this.radialMenu.active) {
+                this.updateRadialMenuHover(this.lastPointerX, this.lastPointerY);
+                return;
+            }
+
             if (this.camera.isDragging) {
                 const dx = e.clientX - this.camera.dragStartX;
                 const dy = e.clientY - this.camera.dragStartY;
@@ -4204,9 +4225,6 @@ const WorldForgeCG = {
                 }
                 this.camera.hasInteracted = true;
             } else if (this.active && this.viewMode === 'cg') {
-                const rect = c.getBoundingClientRect();
-                this.lastPointerX = e.clientX - rect.left;
-                this.lastPointerY = e.clientY - rect.top;
                 this.checkHover(this.lastPointerX, this.lastPointerY);
             }
         });
@@ -4223,6 +4241,11 @@ const WorldForgeCG = {
             const rect = c.getBoundingClientRect();
             const px = e.clientX - rect.left;
             const py = e.clientY - rect.top;
+
+            if (this.radialMenu && this.radialMenu.active) {
+                this.executeRadialMenuSelection();
+                return;
+            }
 
             if (this.worldLens === 'city') {
                 const tile = this.fromIso(px, py);
@@ -8340,6 +8363,14 @@ const WorldForgeCG = {
 
         if (this.perspectiveMode !== 'strategic') this.drawImmersiveOverlay(ctx, w, h, now);
 
+        if (this.worldLens === 'realm') {
+            this.drawRealmOverlayHUD(ctx, w, h, now);
+        }
+
+        if (this.radialMenu && this.radialMenu.active) {
+            this.drawRadialCommandWheel(ctx, w, h, now);
+        }
+
         // Arcade Juice: Fullscreen Fireworks & Confetti
         this.drawFireworks(ctx, now);
         this.drawConfetti(ctx, now);
@@ -9267,6 +9298,668 @@ const WorldForgeCG = {
         if (node.capacity > 1.0) {
             this.drawOverdriveSparks(ctx, 15, now);
         }
+
+        ctx.restore();
+    },
+
+    openRadialMenu(x, y, mode = 'atlas', targetEntity = null) {
+        this.radialMenu.active = true;
+        this.radialMenu.x = x;
+        this.radialMenu.y = y;
+        this.radialMenu.mode = mode;
+        this.radialMenu.targetEntity = targetEntity;
+        this.radialMenu.hoveredIndex = -1;
+        this.radialMenu.anim = 0;
+
+        if (mode === 'entity' && targetEntity) {
+            const r = targetEntity;
+            if (r.type === 'wonder') {
+                this.radialMenu.items = [
+                    {
+                        icon: '🔍',
+                        title: 'Survey',
+                        desc: `Analyze ${r.name} anomaly (+80 Research XP)`,
+                        color: '#a855f7',
+                        action: () => {
+                            this.audio?.playUnlock?.();
+                            this.triggerFireworks(x, y, 4);
+                            spawnFloatingText(`✨ WONDER SURVEY: +80 RESEARCH XP`, x, y, 'fx-surge');
+                            showToast(`Ancient Wonder Analyzed`, `${r.name}: ${r.power}`, 'success');
+                            MayorBounties.addXp(30);
+                        }
+                    },
+                    {
+                        icon: '⚡',
+                        title: 'Harvest',
+                        desc: `Tap geothermal & quantum flux (+120 Power)`,
+                        color: '#06b6d4',
+                        action: () => {
+                            this.audio?.playOverdrive?.();
+                            this.triggerScreenShake(6, 200);
+                            spawnFloatingText(`⚡ CORE HARVEST: +120 ENERGY`, x, y, 'fx-success');
+                            showToast(`Energy Core Harvested`, `Grid surged with clean energy from ${r.name}.`);
+                        }
+                    },
+                    {
+                        icon: '✖️',
+                        title: 'Close',
+                        desc: 'Dismiss command wheel',
+                        color: '#94a3b8',
+                        action: () => {}
+                    }
+                ];
+            } else if (r.id === 'sanctuary-haven') {
+                this.radialMenu.items = [
+                    {
+                        icon: '🏙️',
+                        title: 'Enter City',
+                        desc: 'Switch to Sanctuary Haven City Builder',
+                        color: '#f59e0b',
+                        action: () => {
+                            this.setViewMode('city');
+                            this.audio?.playConstruction?.();
+                        }
+                    },
+                    {
+                        icon: '🏰',
+                        title: 'War Room',
+                        desc: 'Open Realm War Room & Grand Strategy',
+                        color: '#38bdf8',
+                        action: () => {
+                            openWarRoomModal();
+                            this.audio?.playWarHorn?.();
+                        }
+                    },
+                    {
+                        icon: '🛡️',
+                        title: 'Defense Grid',
+                        desc: 'Toggle metropolitan fortified posture',
+                        color: '#10b981',
+                        action: () => {
+                            toggleDefensePosture();
+                        }
+                    },
+                    {
+                        icon: '✖️',
+                        title: 'Close',
+                        desc: 'Dismiss command wheel',
+                        color: '#94a3b8',
+                        action: () => {}
+                    }
+                ];
+            } else {
+                this.radialMenu.items = [
+                    {
+                        icon: '📜',
+                        title: 'Dossier',
+                        desc: `Inspect ${r.name} intelligence & War Room`,
+                        color: '#38bdf8',
+                        action: () => {
+                            openWarRoomModal();
+                            this.audio?.playWarHorn?.();
+                        }
+                    },
+                    {
+                        icon: '🕊️',
+                        title: 'Emissary',
+                        desc: `Dispatch diplomatic envoy to ${r.name}`,
+                        color: '#10b981',
+                        action: () => {
+                            executeGeopoliticalAction('emissary', r.id);
+                            this.audio?.playWarHorn?.();
+                            spawnFloatingText(`🕊️ EMISSARY SENT TO ${r.name.toUpperCase()}`, x, y, 'fx-surge');
+                        }
+                    },
+                    {
+                        icon: '🪙',
+                        title: 'Tribute',
+                        desc: `Demand tribute harvest (${r.tribute || 'Trade'})`,
+                        color: '#f59e0b',
+                        action: () => {
+                            executeGeopoliticalAction('tribute', r.id);
+                            this.audio?.playTribute?.();
+                            spawnFloatingText(`🪙 TRIBUTE HARVESTED: ${r.tribute}`, x, y, 'fx-success');
+                        }
+                    },
+                    {
+                        icon: '🤝',
+                        title: 'Coalition',
+                        desc: `Propose alliance coalition treaty`,
+                        color: '#a855f7',
+                        action: () => {
+                            executeGeopoliticalAction('coalition', r.id);
+                            this.audio?.playWarHorn?.();
+                            spawnFloatingText(`🤝 COALITION PROPOSAL: ${r.name.toUpperCase()}`, x, y, 'fx-surge');
+                        }
+                    },
+                    {
+                        icon: '⚔️',
+                        title: 'Strike',
+                        desc: `Deploy strategic deterrent strike on ${r.name}`,
+                        color: '#ef4444',
+                        action: () => {
+                            executeGeopoliticalAction('strike', r.id);
+                            this.audio?.playBattleClash?.();
+                            this.triggerScreenShake(8, 300);
+                            spawnFloatingText(`⚔️ COUNTER-STRIKE ORDERED`, x, y, 'fx-surge');
+                        }
+                    },
+                    {
+                        icon: '✖️',
+                        title: 'Close',
+                        desc: 'Dismiss command wheel',
+                        color: '#94a3b8',
+                        action: () => {}
+                    }
+                ];
+            }
+        } else if (mode === 'city') {
+            this.radialMenu.items = [
+                {
+                    icon: '🏠',
+                    title: 'Housing',
+                    desc: 'Construct residential courtyard homes',
+                    color: '#38bdf8',
+                    action: () => this.setPlacementBuilding('courtyard-homes')
+                },
+                {
+                    icon: '🌾',
+                    title: 'Food Farm',
+                    desc: 'Construct hydroponic vertical farm',
+                    color: '#10b981',
+                    action: () => this.setPlacementBuilding('vertical-farm')
+                },
+                {
+                    icon: '⚡',
+                    title: 'Clean Energy',
+                    desc: 'Construct solar canopy array',
+                    color: '#f59e0b',
+                    action: () => this.setPlacementBuilding('solar-canopy')
+                },
+                {
+                    icon: '🤖',
+                    title: 'Cyber Enforcer',
+                    desc: 'Deploy peacekeeping patrol mech',
+                    color: '#06b6d4',
+                    action: () => {
+                        this.deployingPatrol = true;
+                        showToast('Deploy Enforcer', 'Click on any city road to deploy your patrol mech.', 'info');
+                    }
+                },
+                {
+                    icon: '☄️',
+                    title: 'Meteor Strike',
+                    desc: 'Summon cosmic meteorite strike',
+                    color: '#ef4444',
+                    action: () => {
+                        el('pwr-meteor')?.click();
+                    }
+                },
+                {
+                    icon: '🌍',
+                    title: 'Realm Atlas',
+                    desc: 'Switch to planetary world map',
+                    color: '#a855f7',
+                    action: () => {
+                        this.setViewMode('realm');
+                        this.audio?.playWarHorn?.();
+                    }
+                }
+            ];
+        } else {
+            // mode === 'atlas' (World Map Lens & Action Wheel)
+            this.radialMenu.items = [
+                {
+                    icon: '🌐',
+                    title: 'Geopolitics',
+                    desc: 'Lens: Sovereign factions, stances & borders',
+                    color: '#f59e0b',
+                    action: () => {
+                        this.realmMapLens = 'geopolitics';
+                        showToast('Map Lens', 'GEOPOLITICS: Viewing sovereign factions & borders.');
+                    }
+                },
+                {
+                    icon: '🚢',
+                    title: 'Trade Routes',
+                    desc: 'Lens: Maritime fleets, airships & commerce flows',
+                    color: '#38bdf8',
+                    action: () => {
+                        this.realmMapLens = 'trade';
+                        showToast('Map Lens', 'TRADE ROUTES: Highlighting shipping fleets & conduits.');
+                    }
+                },
+                {
+                    icon: '💎',
+                    title: 'Resources',
+                    desc: 'Lens: Natural reserves, mines & geothermal vents',
+                    color: '#10b981',
+                    action: () => {
+                        this.realmMapLens = 'resources';
+                        showToast('Map Lens', 'RESOURCES: Surveying strategic regional yields.');
+                    }
+                },
+                {
+                    icon: '⚔️',
+                    title: 'Threat Radar',
+                    desc: 'Lens: Raider incursion corridors & defense shields',
+                    color: '#ef4444',
+                    action: () => {
+                        this.realmMapLens = 'threats';
+                        showToast('Map Lens', 'THREAT RADAR: Displaying danger zones & citadel shields.');
+                    }
+                },
+                {
+                    icon: '🏰',
+                    title: 'War Room',
+                    desc: 'Open Geopolitical War Room & Alliance Pacts',
+                    color: '#eab308',
+                    action: () => {
+                        openWarRoomModal();
+                        this.audio?.playWarHorn?.();
+                    }
+                },
+                {
+                    icon: '🏙️',
+                    title: 'City View',
+                    desc: 'Switch to Sanctuary Haven City Builder',
+                    color: '#a855f7',
+                    action: () => {
+                        this.setViewMode('city');
+                        this.audio?.playConstruction?.();
+                    }
+                }
+            ];
+        }
+
+        this.audio?.playBlip?.(720, 0.05);
+    },
+
+    closeRadialMenu() {
+        if (!this.radialMenu.active) return;
+        this.radialMenu.active = false;
+        this.audio?.playBlip?.(500, 0.04);
+    },
+
+    updateRadialMenuHover(px, py) {
+        if (!this.radialMenu.active) return;
+        const rm = this.radialMenu;
+        const dx = px - rm.x;
+        const dy = py - rm.y;
+        const dist = Math.hypot(dx, dy);
+
+        if (dist < 28) {
+            if (rm.hoveredIndex !== -1) {
+                rm.hoveredIndex = -1;
+                this.audio?.playBlip?.(550, 0.02);
+            }
+        } else if (dist >= 28 && dist <= 135) {
+            let angle = Math.atan2(dy, dx);
+            if (angle < 0) angle += Math.PI * 2;
+            const count = rm.items.length;
+            const sliceAngle = (Math.PI * 2) / count;
+            const adjusted = (angle + sliceAngle / 2) % (Math.PI * 2);
+            const idx = Math.floor(adjusted / sliceAngle);
+            if (idx !== rm.hoveredIndex) {
+                rm.hoveredIndex = idx;
+                this.audio?.playBlip?.(780 + idx * 45, 0.025);
+            }
+        } else if (dist > 185) {
+            rm.hoveredIndex = -1;
+        }
+    },
+
+    executeRadialMenuSelection() {
+        if (!this.radialMenu.active) return false;
+        const rm = this.radialMenu;
+        if (rm.hoveredIndex >= 0 && rm.hoveredIndex < rm.items.length) {
+            const item = rm.items[rm.hoveredIndex];
+            this.audio?.playBlip?.(900, 0.06);
+            item.action();
+        }
+        rm.active = false;
+        return true;
+    },
+
+    drawRadialCommandWheel(ctx, w, h, now) {
+        const rm = this.radialMenu;
+        if (!rm || !rm.active) return;
+
+        rm.anim = Math.min(1, rm.anim + 0.16);
+        const anim = rm.anim;
+
+        ctx.save();
+        ctx.translate(rm.x, rm.y);
+
+        const count = rm.items.length;
+        const sliceAngle = (Math.PI * 2) / count;
+        const innerR = 34 * anim;
+        const baseOuterR = 115 * anim;
+
+        // Frosted dark circular backdrop with cyan cyber tick ring
+        ctx.fillStyle = 'rgba(7, 12, 22, 0.94)';
+        ctx.strokeStyle = 'rgba(56, 189, 248, 0.35)';
+        ctx.lineWidth = 1.2;
+        ctx.beginPath();
+        ctx.arc(0, 0, (baseOuterR + 10), 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+
+        // Outer ticks
+        ctx.save();
+        ctx.strokeStyle = 'rgba(56, 189, 248, 0.2)';
+        ctx.lineWidth = 1;
+        for (let t = 0; t < 24; t++) {
+            const ta = (t * Math.PI * 2) / 24;
+            ctx.beginPath();
+            ctx.moveTo(Math.cos(ta) * (baseOuterR + 4), Math.sin(ta) * (baseOuterR + 4));
+            ctx.lineTo(Math.cos(ta) * (baseOuterR + 9), Math.sin(ta) * (baseOuterR + 9));
+            ctx.stroke();
+        }
+        ctx.restore();
+
+        // Draw each sector slice
+        for (let i = 0; i < count; i++) {
+            const item = rm.items[i];
+            const isHovered = rm.hoveredIndex === i;
+            const startA = i * sliceAngle - sliceAngle / 2 + 0.025;
+            const endA = i * sliceAngle + sliceAngle / 2 - 0.025;
+            const outerR = isHovered ? (baseOuterR + 8) : baseOuterR;
+
+            ctx.save();
+            ctx.beginPath();
+            ctx.arc(0, 0, outerR, startA, endA);
+            ctx.arc(0, 0, innerR, endA, startA, true);
+            ctx.closePath();
+
+            if (isHovered) {
+                const midA = i * sliceAngle;
+                const grad = ctx.createRadialGradient(0, 0, innerR, Math.cos(midA) * outerR, Math.sin(midA) * outerR, outerR);
+                grad.addColorStop(0, `${item.color}55`);
+                grad.addColorStop(1, `${item.color}25`);
+                ctx.fillStyle = grad;
+                ctx.fill();
+                ctx.strokeStyle = item.color;
+                ctx.lineWidth = 2;
+                ctx.shadowColor = item.color;
+                ctx.shadowBlur = 10;
+                ctx.stroke();
+            } else {
+                ctx.fillStyle = 'rgba(15, 23, 42, 0.75)';
+                ctx.fill();
+                ctx.strokeStyle = 'rgba(148, 163, 184, 0.22)';
+                ctx.lineWidth = 1;
+                ctx.stroke();
+            }
+            ctx.shadowBlur = 0;
+
+            // Wedge Content: Emoji & Title
+            const midA = i * sliceAngle;
+            const contentR = (innerR + outerR) / 2;
+            const cx = Math.cos(midA) * contentR;
+            const cy = Math.sin(midA) * contentR;
+
+            ctx.font = `${Math.floor(15 * anim)}px ` + FONT_SANS;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(item.icon, cx, cy - 6 * anim);
+
+            ctx.font = (isHovered ? 'bold 9px ' : '600 8.5px ') + FONT_SANS;
+            ctx.fillStyle = isHovered ? '#ffffff' : '#cbd5e1';
+            ctx.fillText(item.title, cx, cy + 9 * anim);
+
+            ctx.restore();
+        }
+
+        // Center Command Hub
+        const isCenterHovered = rm.hoveredIndex === -1;
+        ctx.save();
+        ctx.fillStyle = isCenterHovered ? 'rgba(30, 41, 59, 0.95)' : '#070c16';
+        ctx.strokeStyle = isCenterHovered ? '#f43f5e' : (rm.hoveredIndex >= 0 ? rm.items[rm.hoveredIndex].color : '#38bdf8');
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(0, 0, innerR - 2, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        if (rm.hoveredIndex >= 0) {
+            const hItem = rm.items[rm.hoveredIndex];
+            ctx.font = `${Math.floor(16 * anim)}px ` + FONT_SANS;
+            ctx.fillText(hItem.icon, 0, 0);
+        } else {
+            ctx.font = `${Math.floor(13 * anim)}px ` + FONT_SANS;
+            ctx.fillStyle = isCenterHovered ? '#f43f5e' : '#38bdf8';
+            ctx.fillText(isCenterHovered ? '✖️' : '⚙️', 0, 0);
+        }
+        ctx.restore();
+
+        // Floating descriptive tooltip pill below the wheel
+        let infoTitle = 'COMMAND WHEEL';
+        let infoDesc = 'Move cursor to choose action · Click to execute · Esc to cancel';
+        let infoColor = '#38bdf8';
+
+        if (rm.hoveredIndex >= 0 && rm.hoveredIndex < count) {
+            const hItem = rm.items[rm.hoveredIndex];
+            infoTitle = `${hItem.icon} ${hItem.title.toUpperCase()}`;
+            infoDesc = hItem.desc;
+            infoColor = hItem.color;
+        } else if (isCenterHovered) {
+            infoTitle = '✖️ DISMISS';
+            infoDesc = 'Click center or press Esc to close command wheel';
+            infoColor = '#f43f5e';
+        }
+
+        const pillW = Math.max(220, ctx.measureText(infoDesc).width + 36);
+        const pillH = 34;
+        const pillY = baseOuterR + 18;
+
+        ctx.fillStyle = 'rgba(7, 12, 22, 0.95)';
+        ctx.strokeStyle = infoColor;
+        ctx.lineWidth = 1.4;
+        ctx.beginPath();
+        ctx.roundRect(-pillW / 2, pillY, pillW, pillH, 6);
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.font = 'bold 9px ' + FONT_MONO;
+        ctx.textAlign = 'center';
+        ctx.fillStyle = infoColor;
+        ctx.fillText(infoTitle, 0, pillY + 12);
+
+        ctx.font = '8.5px ' + FONT_SANS;
+        ctx.fillStyle = '#e2e8f0';
+        ctx.fillText(infoDesc, 0, pillY + 24);
+
+        // Delicate pointer tether line
+        const ptrDx = this.lastPointerX - rm.x;
+        const ptrDy = this.lastPointerY - rm.y;
+        ctx.strokeStyle = 'rgba(56, 189, 248, 0.25)';
+        ctx.lineWidth = 1;
+        ctx.setLineDash([2, 4]);
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        ctx.lineTo(ptrDx, ptrDy);
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        ctx.fillStyle = infoColor;
+        ctx.beginPath();
+        ctx.arc(ptrDx, ptrDy, 2.5, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.restore();
+    },
+
+    drawRealmOverlayHUD(ctx, w, h, now) {
+        ctx.save();
+
+        // 1. Sleek, Non-Intrusive Top HUD Command Pill
+        const lensLabels = {
+            geopolitics: '🌐 GEOPOLITICS',
+            trade: '🚢 TRADE CONDUITS',
+            resources: '💎 STRATEGIC RESERVES',
+            threats: '⚔️ THREAT RADAR',
+        };
+        const currentLens = this.realmMapLens || 'geopolitics';
+        const pillText = `🌍 REALM ATLAS · ${lensLabels[currentLens] || 'GEOPOLITICS'} · [CLICK OR RIGHT-CLICK FOR COMMAND WHEEL]`;
+
+        ctx.font = 'bold 9px ' + FONT_MONO;
+        const tw = ctx.measureText(pillText).width;
+        const pillW = tw + 32;
+        const pillH = 28;
+        const pillX = (w - pillW) / 2;
+        const pillY = 18;
+
+        const isPillHovered = this.lastPointerX >= pillX && this.lastPointerX <= pillX + pillW &&
+                              this.lastPointerY >= pillY && this.lastPointerY <= pillY + pillH;
+
+        ctx.fillStyle = isPillHovered ? 'rgba(15, 23, 42, 0.95)' : 'rgba(7, 12, 22, 0.85)';
+        ctx.strokeStyle = isPillHovered ? '#38bdf8' : 'rgba(56, 189, 248, 0.35)';
+        ctx.lineWidth = isPillHovered ? 1.6 : 1.2;
+        if (isPillHovered) {
+            ctx.shadowColor = '#38bdf8';
+            ctx.shadowBlur = 8;
+        }
+        ctx.beginPath();
+        ctx.roundRect(pillX, pillY, pillW, pillH, 14);
+        ctx.fill();
+        ctx.stroke();
+        ctx.shadowBlur = 0;
+
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillStyle = isPillHovered ? '#ffffff' : '#38bdf8';
+        ctx.fillText(pillText, w / 2, pillY + pillH / 2);
+
+        // 2. Compact Hover Dossier Card (only when cursor is near a realm/wonder)
+        const r = this.hoveredRealmEntity;
+        if (r && (!this.radialMenu || !this.radialMenu.active)) {
+            const cardW = 230;
+            const cardH = 135;
+            let cx = this.lastPointerX + 18;
+            let cy = this.lastPointerY + 18;
+            if (cx + cardW > w - 16) cx = this.lastPointerX - cardW - 18;
+            if (cy + cardH > h - 16) cy = this.lastPointerY - cardH - 18;
+
+            ctx.fillStyle = 'rgba(8, 14, 26, 0.95)';
+            ctx.strokeStyle = r.color || '#38bdf8';
+            ctx.lineWidth = 1.6;
+            ctx.shadowColor = r.color || '#38bdf8';
+            ctx.shadowBlur = 10;
+            ctx.beginPath();
+            ctx.roundRect(cx, cy, cardW, cardH, 8);
+            ctx.fill();
+            ctx.stroke();
+            ctx.shadowBlur = 0;
+
+            // Card Header
+            ctx.fillStyle = 'rgba(30, 41, 59, 0.45)';
+            ctx.beginPath();
+            ctx.roundRect(cx, cy, cardW, 32, [8, 8, 0, 0]);
+            ctx.fill();
+
+            ctx.font = '16px ' + FONT_SANS;
+            ctx.textAlign = 'left';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(r.crest || '🛡️', cx + 10, cy + 16);
+
+            ctx.font = 'bold 11px ' + FONT_SANS;
+            ctx.fillStyle = '#f8fafc';
+            ctx.fillText(r.name, cx + 34, cy + 12);
+
+            ctx.font = '8.5px ' + FONT_MONO;
+            ctx.fillStyle = r.color || '#38bdf8';
+            ctx.fillText((r.stance || 'NEUTRAL').toUpperCase(), cx + 34, cy + 24);
+
+            // Ruler / Bio
+            ctx.font = '9.5px ' + FONT_SANS;
+            ctx.fillStyle = '#cbd5e1';
+            ctx.fillText(`Ruler: ${r.ruler || 'Unknown'}`, cx + 12, cy + 46);
+
+            // Loyalty & Military meters
+            if (r.loyalty != null) {
+                ctx.font = '8.5px ' + FONT_MONO;
+                ctx.fillStyle = '#94a3b8';
+                ctx.fillText(`Loyalty: ${r.loyalty}%`, cx + 12, cy + 62);
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
+                ctx.fillRect(cx + 86, cy + 56, 128, 6);
+                ctx.fillStyle = r.loyalty > 60 ? '#10b981' : (r.loyalty > 30 ? '#f59e0b' : '#ef4444');
+                ctx.fillRect(cx + 86, cy + 56, 128 * (r.loyalty / 100), 6);
+            }
+
+            if (r.military != null && r.military > 0) {
+                ctx.font = '8.5px ' + FONT_MONO;
+                ctx.fillStyle = '#94a3b8';
+                ctx.fillText(`Military: ${r.military}`, cx + 12, cy + 78);
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
+                ctx.fillRect(cx + 86, cy + 72, 128, 6);
+                ctx.fillStyle = '#ef4444';
+                ctx.fillRect(cx + 86, cy + 72, Math.min(128, 128 * (r.military / 350)), 6);
+            }
+
+            // Yield / Perk
+            ctx.font = '9px ' + FONT_SANS;
+            ctx.fillStyle = '#e2e8f0';
+            ctx.fillText(`Yield: ${r.tribute || 'Trade & Science'}`, cx + 12, cy + 96);
+
+            // Radial prompt hint
+            ctx.fillStyle = 'rgba(56, 189, 248, 0.12)';
+            ctx.fillRect(cx + 6, cy + 107, cardW - 12, 20);
+            ctx.strokeStyle = 'rgba(56, 189, 248, 0.35)';
+            ctx.lineWidth = 0.8;
+            ctx.strokeRect(cx + 6, cy + 107, cardW - 12, 20);
+
+            ctx.font = 'bold 8.5px ' + FONT_MONO;
+            ctx.textAlign = 'center';
+            ctx.fillStyle = '#38bdf8';
+            ctx.fillText('⚡ CLICK OR RIGHT-CLICK FOR ACTION WHEEL', cx + cardW / 2, cy + 117);
+        }
+
+        // 3. Tactical Compass in Bottom-Left
+        const compassX = 54;
+        const compassY = h - 54;
+        const compassR = 24;
+
+        ctx.fillStyle = 'rgba(7, 12, 22, 0.8)';
+        ctx.strokeStyle = 'rgba(56, 189, 248, 0.3)';
+        ctx.lineWidth = 1.2;
+        ctx.beginPath();
+        ctx.arc(compassX, compassY, compassR, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.font = 'bold 8.5px ' + FONT_MONO;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillStyle = '#ef4444';
+        ctx.fillText('N', compassX, compassY - 15);
+        ctx.fillStyle = 'rgba(148, 163, 184, 0.7)';
+        ctx.fillText('S', compassX, compassY + 15);
+        ctx.fillText('W', compassX - 15, compassY);
+        ctx.fillText('E', compassX + 15, compassY);
+
+        ctx.fillStyle = '#ef4444';
+        ctx.beginPath();
+        ctx.moveTo(compassX, compassY - 13);
+        ctx.lineTo(compassX - 3, compassY);
+        ctx.lineTo(compassX + 3, compassY);
+        ctx.closePath();
+        ctx.fill();
+        ctx.fillStyle = '#94a3b8';
+        ctx.beginPath();
+        ctx.moveTo(compassX, compassY + 13);
+        ctx.lineTo(compassX - 3, compassY);
+        ctx.lineTo(compassX + 3, compassY);
+        ctx.closePath();
+        ctx.fill();
+
+        // 4. Subtle Bottom-Right Status Telemetry
+        ctx.font = '8.5px ' + FONT_MONO;
+        ctx.textAlign = 'right';
+        ctx.fillStyle = 'rgba(148, 163, 184, 0.6)';
+        ctx.fillText(`SECTOR-07 · ORBITAL ZOOM ${(Math.round(this.camera.zoom * 100))}% · RIGHT-CLICK COMMAND WHEEL · [1-4] LENSES`, w - 24, h - 22);
 
         ctx.restore();
     },
