@@ -1,0 +1,17 @@
+{
+  "formatVersion": 2,
+  "engineVersion": "0.2.0",
+  "profileId": "local",
+  "kind": "autosave",
+  "id": "99f166f2cbf7430fa5b77a2d477da369",
+  "name": "Autosave · supply-chain",
+  "world": "supply-chain",
+  "worldFingerprint": "2aa4a364aa0910f77ecdeb4b83dd20d9ce4a9c949d9dc87e220cd0284e8553e6",
+  "seed": 42,
+  "totalTicks": 1000,
+  "currentTick": 1000,
+  "checkpointFingerprint": "30342b98883a29dbc45ec65c42015759bde5214f2778ca0f981a51cb0d23151d",
+  "interventions": [],
+  "createdAt": 1790302859,
+  "updatedAt": 1790302872
+}
