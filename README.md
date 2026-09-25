@@ -6,7 +6,7 @@ World Forge is a simulation operating system for building games, simulations, wo
 
 ## Status
 
-**0.2.0 development milestone.** The deterministic runtime, local world inheritance, packaging toolchain, replay verification, mod sandbox, CLI, and local Simulation Studio are implemented and covered by the workspace verification suite. The beta is local-first: the dashboard binds to localhost by default and runs simulations on the same machine.
+**0.2.0 Stable Release.** The deterministic runtime, local world inheritance, packaging toolchain, replay verification, mod sandbox, CLI, environmental biosphere engine, 13-building tiered architecture, and Simulation Studio are fully implemented and verified across all platforms.
 
 | Feature | Status | Notes |
 |---------|--------|-------|
@@ -16,17 +16,21 @@ World Forge is a simulation operating system for building games, simulations, wo
 | Purpose-built ECS | ✅ Implemented | BTreeMap-backed, deterministic iteration |
 | World manifest + scenarios | ✅ Implemented | TOML-based with schema validation |
 | Resource economy | ✅ Implemented | Production, transfer, conservation, prices |
-| City construction | ✅ Implemented | District slots, costs, upkeep, yields, housing, jobs, wellbeing, population growth, co-location synergies |
+| City construction | ✅ Implemented | 13 building types, 3 visual upgrade levels, tactical pill badges, co-location synergies |
 | Research trees | ✅ Implemented | Data-driven branches, prerequisites, exclusions, unlocks, and systemic multipliers |
-| Civic governance | ✅ Implemented | Factions, timed dilemmas, branching mandates, support shifts, defaults, and persistent systemic consequences |
-| Geopolitics | ✅ Implemented | Rival realms, loyalty, tribute, coalitions, defense posture, raids, famine pressure, and refugee crises |
-| Corporate intrigue | ✅ Implemented | Rival corporations, trade secrets, cyber agents, attribution heat, compromise, rogue-agent containment |
+| Civic governance | ✅ Implemented | Factions, timed dilemmas, branching mandates, support shifts, defaults, and persistent consequences |
+| Geopolitics & War Room | ✅ Implemented | 5 power factions, tactical radar grid, loyalty, tribute, coalitions, defense posture, raids, and Web Audio SFX |
+| Climate & Biosphere Engine | ✅ Implemented | 4-season cycle, biosphere health index, weather VFX (rain, puddles, splash rings, lightning, snow) |
+| Living Logistics | ✅ Implemented | Hovering sky drones with laser cones & cargo, ground haulers with resource badges |
+| Hall of Triumphs | ✅ Implemented | 10 milestone trophies with golden holographic sheen and cyber-locked styling |
+| Specialized Visualizers | ✅ Implemented | Coastal Resilience offshore seascape (wind turbines, storm surge) & Wilderness Predator-Prey web |
+| Corporate intrigue | ✅ Implemented | Rival corporations, trade secrets, cyber agents, attribution heat, compromise, rogue containment |
 | Crypto markets | ✅ Implemented | Deterministic prices, positions, trades, volatility, manipulation, risk, and proof-chained outcomes |
 | Objective system | ✅ Implemented | Evaluate pass/fail conditions per scenario |
 | Replay artifacts | ✅ Implemented | CBOR-serialized with tamper detection |
 | Proof chain | ✅ Implemented | Event hash chains with verification |
 | Package system (.world) | ✅ Implemented | Deterministic tar with content fingerprinting |
-| Local world inheritance | ✅ Implemented | Recursive sibling resolution, deterministic overlays, dependency locks, cycle and traversal defense |
+| Local world inheritance | ✅ Implemented | Recursive sibling resolution, deterministic overlays, dependency locks, cycle defense |
 | Agent framework | ✅ Implemented | Rule-based and utility-based policies |
 | Capability-based mod API | ✅ Implemented | Deny-by-default capability system |
 | WASM mod runtime | ✅ Implemented | Wasmtime core-Wasm sandbox, fuel/memory limits, capability-gated host ABI |

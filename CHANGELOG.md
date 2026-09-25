@@ -1,6 +1,38 @@
 # Changelog
 
-## [0.2.0] - 2026-09-23
+## [0.2.0] - 2026-09-24
+
+### Environmental, climate & biosphere engine
+
+- Added a deterministic 4-season climate engine (Spring, Summer, Autumn, Winter) with seasonal crop multipliers, solar power variations, heating power upkeep, and frost/drought risks.
+- Added Biosphere Health Index tracking air quality, water table purity, and soil fertility influenced by heavy manufacturing vs. green infrastructure.
+- Added atmospheric weather visual effects: real-time diagonal rain streaks, surface puddles, expanding splash rings, storm lightning flashes, winter snow, and drought heatwave shimmer bars.
+
+### Sky drones & living road logistics
+
+- Added autonomous hovering sky drones with downward scanning laser cones, quad-rotor motion blur, navigation strobe LEDs, and slung cargo containers.
+- Added ground road haulers and citizen logistics carts traveling between production nodes and municipal silos with dynamic resource badges.
+
+### Tiered isometric architecture (13 building types)
+
+- Implemented Level 1, Level 2, and Level 3 architectural graphics for all 13 building types (Courtyard Homes, Civic Lab, Maker Cooperative, Solar Canopy, Vertical Farm, Water Garden, Arcology Spine, Story Forum, Fusion Reactor, Nanotech Foundry, Grand Amphitheater, Hyperloop Exchange, Quantum Observatory).
+- Added holographic glass tactical pill badges (`LVL 2 ★`, `LVL 3 ★`) with glowing borders and drop shadows on upgraded buildings.
+
+### Hall of Triumphs & achievement catalog
+
+- Expanded achievement system to 10 milestone trophies: First Spark of Progress, Master Architect, Cultural Renaissance, Clean Power Hegemony, Post-Scarcity Horizon, Transcendence Arcology, Bastion of Peace, Trade Route Sovereign, Zenith Architecture, and Metropolis of Tomorrow.
+- Added golden holographic sheen animations and corner milestone seals for unlocked achievements, with cyber-blueprint locked states.
+
+### Geopolitical War Room & sensory feedback
+
+- Added Grand Realm War Room modal with radar grid backdrop and threat alert animations.
+- Added 5 power structure factions (Barony of Oakhaven, Riverside Protectorate, Iron Mandate Hegemony, Free Mercantile League, Dust Canyon Raiders) with loyalty, stances, tribute, and military ratings.
+- Added procedural Web Audio SFX: military war horns, battle clash, tribute chimes, and tactical alert sirens.
+
+### Specialized scenario visualizers
+
+- Added Coastal Resilience offshore seascape visualizer with animated ocean swells, surf foam, storm surge floodgates, and rotating wind turbines.
+- Added Wilderness Predator-Prey visualizer tracking savanna vegetation, grazing deer herds, and hunting wolf packs with trophic food web telemetry.
 
 ### City building and research
 
