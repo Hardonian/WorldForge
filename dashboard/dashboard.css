@@ -799,6 +799,25 @@ button, input, select, a { -webkit-tap-highlight-color: transparent; }
     display: none !important;
 }
 
+/* Battle Lens Fullscreen Rules — 3D Tactical Battlefield Simulator */
+.play-dialog.lens-battle .commander-powers-dock,
+.play-dialog.lens-battle #city-hardship-hud,
+.play-dialog.lens-battle .city-build-dock,
+.play-dialog.lens-battle .realm-strategy-dock,
+.play-dialog.lens-battle .cg-view-legend,
+.play-dialog.lens-battle .cg-avatar-card,
+.play-dialog.lens-battle .cg-minimap-card,
+.play-dialog.lens-battle .cg-layer-toggles {
+    display: none !important;
+}
+.play-dialog:not(.lens-battle) .battle-3d-hud {
+    display: none !important;
+}
+.play-dialog.lens-battle .battle-3d-hud {
+    display: flex !important;
+}
+
+
 /* Civilization & Age of Empires RTS Grand Strategy Command Dock */
 .realm-strategy-dock {
     position: absolute;
@@ -969,6 +988,422 @@ button, input, select, a { -webkit-tap-highlight-color: transparent; }
 .strategy-hotkey-strip span b {
     color: #38bdf8;
     font-weight: 700;
+}
+
+/* ==========================================================================
+   3D Tactical Battlefield Simulator HUD (Physics Engine & RTS Command)
+   ========================================================================== */
+.battle-3d-hud {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    z-index: 30;
+    padding: 12px 16px;
+    font-family: var(--font-sans);
+    box-sizing: border-box;
+}
+
+.battle-telemetry-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    max-width: 980px;
+    margin: 0 auto;
+    width: 100%;
+    padding: 8px 16px;
+    background: linear-gradient(180deg, rgba(8, 14, 26, 0.95), rgba(4, 8, 16, 0.98));
+    -webkit-backdrop-filter: blur(16px);
+    backdrop-filter: blur(16px);
+    border: 1px solid rgba(56, 189, 248, 0.35);
+    border-radius: var(--radius-md);
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.75), 0 0 20px rgba(56, 189, 248, 0.15);
+    pointer-events: auto;
+    box-sizing: border-box;
+}
+
+.battle-faction-card {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex: 0 0 240px;
+}
+.battle-faction-card.hostile {
+    justify-content: flex-end;
+}
+.battle-faction-card .faction-emblem {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 34px;
+    height: 34px;
+    border-radius: 8px;
+    font-size: 1.15rem;
+    background: rgba(56, 189, 248, 0.1);
+    border: 1px solid rgba(56, 189, 248, 0.35);
+    box-shadow: 0 0 12px rgba(56, 189, 248, 0.25);
+    flex-shrink: 0;
+}
+.battle-faction-card.hostile .faction-emblem {
+    background: rgba(244, 63, 94, 0.1);
+    border-color: rgba(244, 63, 94, 0.35);
+    box-shadow: 0 0 12px rgba(244, 63, 94, 0.25);
+}
+.battle-faction-card .faction-intel {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    line-height: 1.2;
+}
+.battle-faction-card .faction-intel strong {
+    font-size: 0.78rem;
+    font-weight: 700;
+    color: #38bdf8;
+    letter-spacing: 0.02em;
+}
+.battle-faction-card.hostile .faction-intel strong {
+    color: #f43f5e;
+}
+.battle-faction-card .faction-intel span {
+    font-size: 0.62rem;
+    color: #94a3b8;
+    font-family: var(--font-mono);
+}
+
+.battle-meter-wrap {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+}
+.battle-meter-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.68rem;
+    font-weight: 700;
+}
+.meter-label.friendly {
+    color: #38bdf8;
+}
+.meter-label.hostile {
+    color: #f43f5e;
+}
+.battle-timer {
+    font-family: var(--font-mono);
+    font-size: 0.76rem;
+    font-weight: 800;
+    color: #f59e0b;
+    background: rgba(245, 158, 11, 0.12);
+    border: 1px solid rgba(245, 158, 11, 0.35);
+    padding: 1px 8px;
+    border-radius: 4px;
+}
+.battle-tug-bar {
+    position: relative;
+    height: 10px;
+    border-radius: 5px;
+    background: rgba(15, 23, 42, 0.8);
+    overflow: hidden;
+    display: flex;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+}
+.tug-fill-friendly {
+    height: 100%;
+    background: linear-gradient(90deg, #0284c7, #38bdf8);
+    transition: width 0.35s ease;
+    box-shadow: 0 0 12px rgba(56, 189, 248, 0.7);
+}
+.tug-fill-hostile {
+    height: 100%;
+    background: linear-gradient(90deg, #f43f5e, #be123c);
+    transition: width 0.35s ease;
+    box-shadow: 0 0 12px rgba(244, 63, 94, 0.7);
+}
+.battle-ticker {
+    font-size: 0.64rem;
+    text-align: center;
+    color: #cbd5e1;
+    font-family: var(--font-mono);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    padding: 0 4px;
+}
+
+/* Bottom Tactical Command Console */
+.battle-bottom-dock {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    max-width: 1180px;
+    margin: 0 auto;
+    width: 100%;
+    padding: 8px 12px;
+    background: linear-gradient(180deg, rgba(8, 14, 26, 0.96), rgba(3, 7, 14, 0.99));
+    -webkit-backdrop-filter: blur(16px);
+    backdrop-filter: blur(16px);
+    border: 1px solid rgba(56, 189, 248, 0.35);
+    border-radius: var(--radius-md);
+    box-shadow: 0 16px 44px rgba(0, 0, 0, 0.8), 0 0 28px rgba(56, 189, 248, 0.15);
+    pointer-events: auto;
+    box-sizing: border-box;
+}
+
+.battle-unit-card {
+    flex: 0 0 270px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 4px 8px;
+    background: rgba(255, 255, 255, 0.03);
+    border-right: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 6px 0 0 6px;
+    overflow: hidden;
+}
+.unit-card-avatar {
+    flex: 0 0 38px;
+    width: 38px;
+    height: 38px;
+    border-radius: 8px;
+    border: 1px solid rgba(56, 189, 248, 0.4);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 20px;
+    background: rgba(3, 7, 18, 0.6);
+    box-shadow: 0 0 10px rgba(56, 189, 248, 0.2);
+}
+.unit-card-details {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    min-width: 0;
+}
+.unit-card-title-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px;
+}
+#battle-unit-name {
+    font-size: 0.72rem;
+    font-weight: 700;
+    color: #f8fafc;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.unit-role-pill {
+    font-size: 0.52rem;
+    font-weight: 800;
+    font-family: var(--font-mono);
+    color: #38bdf8;
+    background: rgba(56, 189, 248, 0.15);
+    border: 1px solid rgba(56, 189, 248, 0.3);
+    padding: 1px 5px;
+    border-radius: 3px;
+    letter-spacing: 0.04em;
+    flex-shrink: 0;
+}
+.unit-vitals-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+.unit-vitals-row .vital-bar.hp {
+    flex: 1;
+    height: 6px;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 3px;
+    overflow: hidden;
+}
+.unit-vitals-row .vital-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #10b981, #34d399);
+    transition: width 0.2s ease;
+    border-radius: 3px;
+}
+#battle-unit-hp-text {
+    font-size: 0.58rem;
+    font-family: var(--font-mono);
+    color: #a7f3d0;
+    white-space: nowrap;
+}
+.unit-orders-row {
+    font-size: 0.58rem;
+    color: #94a3b8;
+    font-family: var(--font-mono);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* Formations Ribbon */
+.battle-formations-bar {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 0 8px;
+    border-right: 1px solid rgba(255, 255, 255, 0.08);
+}
+.battle-formations-bar .bar-title {
+    font-size: 0.55rem;
+    font-family: var(--font-mono);
+    font-weight: 800;
+    color: #64748b;
+    letter-spacing: 0.08em;
+    margin-right: 4px;
+    writing-mode: vertical-rl;
+    transform: rotate(180deg);
+}
+.formation-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 6px 9px;
+    font-size: 0.65rem;
+    font-weight: 700;
+    color: #cbd5e1;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+.formation-btn:hover {
+    background: rgba(56, 189, 248, 0.12);
+    border-color: rgba(56, 189, 248, 0.4);
+    color: #38bdf8;
+    transform: translateY(-1px);
+}
+.formation-btn.active {
+    background: linear-gradient(135deg, rgba(14, 165, 233, 0.3), rgba(2, 132, 199, 0.4));
+    border-color: #38bdf8;
+    color: #ffffff;
+    box-shadow: 0 0 10px rgba(56, 189, 248, 0.4);
+}
+
+/* Commander Support Powers Ribbon */
+.battle-abilities-bar {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 0 8px;
+    flex: 1;
+    min-width: 0;
+}
+.battle-abilities-bar .bar-title {
+    font-size: 0.55rem;
+    font-family: var(--font-mono);
+    font-weight: 800;
+    color: #64748b;
+    letter-spacing: 0.08em;
+    margin-right: 2px;
+    writing-mode: vertical-rl;
+    transform: rotate(180deg);
+}
+.battle-ability-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 8px;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    color: #f8fafc;
+    min-width: 0;
+}
+.battle-ability-btn:hover {
+    background: rgba(56, 189, 248, 0.14);
+    border-color: rgba(56, 189, 248, 0.5);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(56, 189, 248, 0.25);
+}
+.battle-ability-btn:active {
+    transform: translateY(0);
+}
+.battle-ability-btn .ability-icon {
+    font-size: 1.1rem;
+}
+.battle-ability-btn .ability-info {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    line-height: 1.15;
+}
+.battle-ability-btn .ability-info strong {
+    font-size: 0.65rem;
+    font-weight: 700;
+    color: #f1f5f9;
+    white-space: nowrap;
+}
+.battle-ability-btn .ability-info small {
+    font-size: 0.54rem;
+    color: #94a3b8;
+    white-space: nowrap;
+}
+.battle-ability-btn .ability-hotkey {
+    font-size: 0.54rem;
+    font-family: var(--font-mono);
+    font-weight: 800;
+    color: #38bdf8;
+    background: rgba(56, 189, 248, 0.15);
+    border: 1px solid rgba(56, 189, 248, 0.35);
+    padding: 1px 4px;
+    border-radius: 3px;
+    margin-left: 2px;
+}
+.battle-ability-btn.on-cooldown {
+    opacity: 0.45;
+    filter: grayscale(0.8);
+    cursor: not-allowed;
+}
+
+/* Tactical Battle Controls & Hotkeys */
+.battle-actions-bar {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    flex-shrink: 0;
+}
+.battle-ctrl-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 6px 10px;
+    font-size: 0.65rem;
+    font-weight: 700;
+    color: #cbd5e1;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    white-space: nowrap;
+}
+.battle-ctrl-btn:hover {
+    background: rgba(255, 255, 255, 0.12);
+    border-color: rgba(255, 255, 255, 0.25);
+    color: #ffffff;
+}
+.battle-ctrl-btn.active {
+    background: linear-gradient(135deg, rgba(245, 158, 11, 0.35), rgba(217, 119, 6, 0.45));
+    border-color: #f59e0b;
+    color: #ffffff;
+    box-shadow: 0 0 10px rgba(245, 158, 11, 0.5);
+}
+.battle-ctrl-btn.exit:hover {
+    background: rgba(239, 68, 68, 0.2);
+    border-color: rgba(239, 68, 68, 0.5);
+    color: #fca5a5;
 }
 
 /* Floating Commander Powers Dock */

@@ -467,6 +467,10 @@
                                         <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 3h12v3H4V3Zm2 5h8v2H6V8Zm-3 4h14v2H3v-2Zm3 4h8v2H6v-2Z"/></svg>
                                         <span>Realm Atlas</span>
                                     </button>
+                                    <button type="button" class="view-toggle-btn" id="btn-view-battle" title="3D Physics Battle Simulator (Total War / StarCraft)">
+                                        <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 3l4 4-2 2-4-4V3h2Zm12 0l-4 4 2 2 4-4V3h-2ZM7 10l3 3-1.5 1.5L7 13l-1.5 1.5L4 13l3-3Zm6 0l3 3-1.5 1.5L13 13l-1.5 1.5L10 13l3-3Z"/></svg>
+                                        <span>3D Battle</span>
+                                    </button>
                                     <button type="button" class="view-toggle-btn" id="btn-view-cg" title="Tactical Resource Flow (StarCraft RTS)">
                                         <svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="7"/><path d="M10 3v14M3 10h14"/></svg>
                                         <span>Tactical Flow</span>
@@ -826,6 +830,11 @@
                                         <span class="cmd-text"><strong>War Room</strong><small>5 Sovereign Realms</small></span>
                                         <span class="cmd-hotkey">[W]</span>
                                     </button>
+                                    <button type="button" class="strategy-cmd-btn" id="cmd-battle-sim" title="Launch into 3D Physics Battle Simulator (Total War / StarCraft)">
+                                        <span class="cmd-icon">💥</span>
+                                        <span class="cmd-text"><strong>3D Battle</strong><small>Simulate Clash</small></span>
+                                        <span class="cmd-hotkey">[B]</span>
+                                    </button>
                                 </div>
                                 <div class="strategy-hotkey-strip">
                                     <span><b>[Q]</b> Radial Menu</span>
@@ -833,6 +842,118 @@
                                     <span><b>[M]</b> Minimap</span>
                                     <span><b>[C]</b> City View</span>
                                     <span><b>[1-4]</b> Lenses</span>
+                                </div>
+                            </div>
+
+                            <!-- 3D Physics Tactical Battle Simulator HUD -->
+                            <div class="battle-3d-hud hidden" id="battle-3d-hud" aria-label="3D Tactical Battlefield Command Console">
+                                <!-- Top Battle Telemetry & Tug-of-War Bar -->
+                                <div class="battle-telemetry-bar">
+                                    <div class="battle-faction-card friendly">
+                                        <span class="faction-emblem">🛡️</span>
+                                        <div class="faction-intel">
+                                            <strong>Peacekeeper Legion</strong>
+                                            <span id="battle-friendly-count">Squads: 3 Active (1 Mech, 1 Tank, 6 Exosuits)</span>
+                                        </div>
+                                    </div>
+                                    <div class="battle-meter-wrap">
+                                        <div class="battle-meter-header">
+                                            <span class="meter-label friendly">Sanctuary Forces <b id="battle-friendly-pct">100%</b></span>
+                                            <span class="battle-timer" id="battle-timer">00:00</span>
+                                            <span class="meter-label hostile"><b id="battle-hostile-pct">100%</b> Raider Horde</span>
+                                        </div>
+                                        <div class="battle-tug-bar">
+                                            <div class="tug-fill-friendly" id="battle-tug-friendly" style="width: 50%;"></div>
+                                            <div class="tug-fill-hostile" id="battle-tug-hostile" style="width: 50%;"></div>
+                                        </div>
+                                        <div class="battle-ticker" id="battle-ticker">Tactical sensors active · Engage hostile raider vanguard</div>
+                                    </div>
+                                    <div class="battle-faction-card hostile">
+                                        <div class="faction-intel text-right">
+                                            <strong>Dust Raider Warlords</strong>
+                                            <span id="battle-hostile-count">War-Rigs: 2 · Buggies: 2 · Berzerkers: 8</span>
+                                        </div>
+                                        <span class="faction-emblem">⚔️</span>
+                                    </div>
+                                </div>
+
+                                <!-- Bottom Tactical Command Console -->
+                                <div class="battle-bottom-dock">
+                                    <!-- Selected Unit Intel Card -->
+                                    <div class="battle-unit-card" id="battle-unit-card">
+                                        <div class="unit-card-avatar" id="battle-unit-avatar">🤖</div>
+                                        <div class="unit-card-details">
+                                            <div class="unit-card-title-row">
+                                                <strong id="battle-unit-name">Titan Siege Mech MK-IV</strong>
+                                                <span class="unit-role-pill" id="battle-unit-role">HEAVY ASSAULT</span>
+                                            </div>
+                                            <div class="unit-vitals-row">
+                                                <div class="vital-bar hp" title="Hull Integrity"><div class="vital-fill" id="battle-unit-hp-bar" style="width: 100%;"></div></div>
+                                                <span id="battle-unit-hp-text">650 / 650 HP</span>
+                                            </div>
+                                            <div class="unit-orders-row">
+                                                <span id="battle-unit-order">Orders: HOLD POSITION &amp; DEFEND</span>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <!-- Formations Ribbon -->
+                                    <div class="battle-formations-bar" role="toolbar" aria-label="Tactical Formations">
+                                        <span class="bar-title">FORMATION</span>
+                                        <button type="button" class="formation-btn active" data-formation="line" id="btn-formation-line" title="Line Formation: Broad firing volley against incoming forces">
+                                            <span>☰ Line</span>
+                                        </button>
+                                        <button type="button" class="formation-btn" data-formation="wedge" id="btn-formation-wedge" title="Wedge Formation: Armored spearhead with +25% collision momentum">
+                                            <span>▲ Wedge</span>
+                                        </button>
+                                        <button type="button" class="formation-btn" data-formation="shield" id="btn-formation-shield" title="Shield Wall: +50% projectile deflection, -30% speed">
+                                            <span>🛡️ Wall</span>
+                                        </button>
+                                        <button type="button" class="formation-btn" data-formation="scatter" id="btn-formation-scatter" title="Scatter Formation: Dispersed evasion against artillery AoE">
+                                            <span>⁖ Scatter</span>
+                                        </button>
+                                    </div>
+
+                                    <!-- Commander Support Abilities Ribbon -->
+                                    <div class="battle-abilities-bar" role="toolbar" aria-label="Commander Support Powers">
+                                        <span class="bar-title">POWERS</span>
+                                        <button type="button" class="battle-ability-btn" id="btn-power-orbital" title="Orbital Railgun Strike [1]: Call down devastating kinetic strike from Selene-1 with physics blast wave">
+                                            <span class="ability-icon">🎯</span>
+                                            <span class="ability-info"><strong>Orbital Strike</strong><small>AoE Blast</small></span>
+                                            <span class="ability-hotkey">[1]</span>
+                                        </button>
+                                        <button type="button" class="battle-ability-btn" id="btn-power-barrier" title="Aegis Energy Barrier [2]: Deploy glowing 3D dome that deflects ballistic projectiles">
+                                            <span class="ability-icon">🛡️</span>
+                                            <span class="ability-info"><strong>Aegis Dome</strong><small>Deflect Fire</small></span>
+                                            <span class="ability-hotkey">[2]</span>
+                                        </button>
+                                        <button type="button" class="battle-ability-btn" id="btn-power-emp" title="EMP Shockwave [3]: Blast wave that stuns enemy vehicles and halts charges">
+                                            <span class="ability-icon">⚡</span>
+                                            <span class="ability-info"><strong>EMP Burst</strong><small>Stun 4s</small></span>
+                                            <span class="ability-hotkey">[3]</span>
+                                        </button>
+                                        <button type="button" class="battle-ability-btn" id="btn-power-overdrive" title="Blitz Overdrive [4]: +100% speed and mass impulse for high-speed ramming">
+                                            <span class="ability-icon">🚀</span>
+                                            <span class="ability-info"><strong>Blitz Charge</strong><small>Knockback</small></span>
+                                            <span class="ability-hotkey">[4]</span>
+                                        </button>
+                                    </div>
+
+                                    <!-- Tactical Battle Controls & Hotkeys -->
+                                    <div class="battle-actions-bar">
+                                        <button type="button" class="battle-ctrl-btn" id="btn-battle-bullet-time" title="Toggle Bullet Time Slow-Motion (0.25x speed) to view physics explosions">
+                                            <span>⏱️ Bullet Time [T]</span>
+                                        </button>
+                                        <button type="button" class="battle-ctrl-btn" id="btn-battle-follow" title="Toggle Cinematic Chase Camera behind selected unit [F]">
+                                            <span>🎥 Chase Cam [F]</span>
+                                        </button>
+                                        <button type="button" class="battle-ctrl-btn" id="btn-battle-reset" title="Reinforce battlefield with new combat wave [R]">
+                                            <span>🔄 Reinforce [R]</span>
+                                        </button>
+                                        <button type="button" class="battle-ctrl-btn exit" id="btn-battle-exit" title="Return to Realm Atlas">
+                                            <span>✖ Return [Esc]</span>
+                                        </button>
+                                    </div>
                                 </div>
                             </div>
 
