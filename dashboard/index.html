@@ -1066,6 +1066,21 @@
                                         <button type="button" class="battle-ctrl-btn highlight" id="btn-battle-nemesis" title="Open Dynamic Nemesis Warlord Dossier &amp; Mercenary Auctions [K]">
                                             <span>⚔️ Nemesis [K]</span>
                                         </button>
+                                        <button type="button" class="battle-ctrl-btn highlight" id="btn-battle-ai-tree" title="Autonomous Deep-Q Behavior Trees &amp; RL Gym [B]">
+                                            <span>🧠 AI Tree [B]</span>
+                                        </button>
+                                        <button type="button" class="battle-ctrl-btn" id="btn-battle-planet" title="Procedural 3D Planetary Voxel &amp; Biome Explorer [G]">
+                                            <span>🪐 Planetoid [G]</span>
+                                        </button>
+                                        <button type="button" class="battle-ctrl-btn" id="btn-battle-replay-theater" title="Live Deterministic Replay Theater &amp; Spline Director [Y]">
+                                            <span>🎬 Replay [Y]</span>
+                                        </button>
+                                        <button type="button" class="battle-ctrl-btn" id="btn-battle-macro-economy" title="Galactic Commodity Exchange &amp; Macro Fleet Simulator [E]">
+                                            <span>📈 Trade [E]</span>
+                                        </button>
+                                        <button type="button" class="battle-ctrl-btn highlight" id="btn-battle-mod-studio" title="In-Browser WASM Modding SDK &amp; Logic Assembler [W]">
+                                            <span>🧩 Mod SDK [W]</span>
+                                        </button>
                                         <button type="button" class="battle-ctrl-btn highlight" id="btn-battle-aar" title="Open After-Action Report, Battle Telemetry &amp; Replay Studio [P]">
                                             <span>📊 AAR / Replay [P]</span>
                                         </button>
@@ -2366,6 +2381,523 @@
                                     <button type="button" class="button button-accent hire-warband-btn" data-warband="goliath">Contract for Next Wave (420 CR)</button>
                                 </div>
                             </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </dialog>
+
+    <!-- Milestone 6: Autonomous Behavior Tree & Reinforcement Learning Gym Dialog -->
+    <dialog class="tool-dialog bt-dialog" id="behavior-tree-dialog" aria-labelledby="bt-title">
+        <div class="dialog-shell bt-shell">
+            <header class="dialog-header bt-header">
+                <div>
+                    <div class="panel-kicker">Reinforcement Learning &amp; Hierarchical Decision Engine</div>
+                    <h2 id="bt-title">Autonomous Neural-Network / Deep-Q Behavior Trees &amp; RL Arena</h2>
+                    <p>Visual hierarchical behavior tree runtime debugger, Q-policy neural weights visualizer, and 100x headless training gym.</p>
+                </div>
+                <button class="icon-button dialog-close" id="bt-close" type="button" aria-label="Close Behavior Tree Dialog"><svg viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></svg></button>
+            </header>
+            <div class="dialog-body bt-body">
+                <div class="bt-layout">
+                    <!-- Left: Behavior Tree Visualizer -->
+                    <div class="bt-col-tree">
+                        <div class="bt-toolbar">
+                            <label class="bt-select-label">
+                                <span>AI Combat Archetype:</span>
+                                <select id="bt-preset-select" class="select">
+                                    <option value="titan">Assault Titan (Aggressive Flanker + Railgun)</option>
+                                    <option value="skimmer">Ghost Skimmer (Hit &amp; Run + Chaff)</option>
+                                    <option value="support">Guardian Aegis (Repair Field + Dome Shield)</option>
+                                    <option value="swarm">Swarm Skirmisher (Pack Flank + Kamikaze)</option>
+                                </select>
+                            </label>
+                            <div class="bt-action-btns">
+                                <button type="button" class="button button-quiet" id="btn-bt-tick">⚡ Step Tree Tick</button>
+                                <button type="button" class="button button-quiet" id="btn-bt-reset">🔄 Reset State</button>
+                            </div>
+                        </div>
+                        <div class="bt-canvas-wrap">
+                            <canvas id="bt-canvas" width="600" height="380"></canvas>
+                        </div>
+                        <div class="bt-legend">
+                            <span><i class="bt-leg-icon bt-sel">?</i> Selector (Fallback)</span>
+                            <span><i class="bt-leg-icon bt-seq">→</i> Sequence</span>
+                            <span><i class="bt-leg-icon bt-cond">◇</i> Condition</span>
+                            <span><i class="bt-leg-icon bt-act">▶</i> Action</span>
+                            <span class="bt-status-tags"><b class="st-run">RUNNING</b> <b class="st-succ">SUCCESS</b> <b class="st-fail">FAILURE</b></span>
+                        </div>
+                        <div class="bt-node-inspector" id="bt-node-inspector">
+                            <span class="inspector-title">Active Node Telemetry:</span>
+                            <span id="bt-inspect-name">Selector: Combat Decision Loop</span> — Status: <strong id="bt-inspect-status" class="st-succ">SUCCESS</strong> — Evaluated in <span id="bt-inspect-time">0.12ms</span>
+                        </div>
+                    </div>
+
+                    <!-- Right: Deep-Q Reinforcement Learning Arena -->
+                    <div class="bt-col-rl">
+                        <div class="rl-card">
+                            <span class="nemesis-card-title">Deep-Q Reinforcement Learning Gym</span>
+                            <div class="rl-stats-grid">
+                                <div class="rl-stat"><small>Episodes Trained</small><strong id="rl-episode-count">1,420</strong></div>
+                                <div class="rl-stat"><small>Exploration (ε)</small><strong id="rl-epsilon-val">0.08</strong></div>
+                                <div class="rl-stat"><small>Mean Reward</small><strong id="rl-mean-reward" class="highlight">+48.6</strong></div>
+                                <div class="rl-stat"><small>Gym Win Rate</small><strong id="rl-win-rate" class="highlight">84.2%</strong></div>
+                            </div>
+                            <div class="rl-controls-box">
+                                <label class="field">
+                                    <span>Epsilon (Greedy Exploration Rate): <b id="rl-epsilon-label">0.08</b></span>
+                                    <input type="range" id="rl-epsilon-slider" min="0.01" max="0.99" step="0.01" value="0.08">
+                                </label>
+                                <div class="rl-btn-row">
+                                    <button type="button" class="button button-accent" id="btn-rl-train-100">⏩ 100x Headless Episodes</button>
+                                    <button type="button" class="button button-quiet" id="btn-rl-step">Step 1 Ep</button>
+                                    <button type="button" class="button button-quiet" id="btn-rl-reset">Reset Model</button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="rl-card">
+                            <span class="nemesis-card-title">Live Policy Weights &amp; Q-Table Matrix</span>
+                            <canvas id="bt-qtable-canvas" width="300" height="150"></canvas>
+                            <div class="q-actions-monitor" id="q-actions-monitor">
+                                <div class="q-row"><span>Primary Fire:</span><div class="q-bar-wrap"><div class="q-bar" id="q-bar-fire" style="width: 78%;"></div></div><small id="q-val-fire">+14.2</small></div>
+                                <div class="q-row"><span>Tactical Evade:</span><div class="q-bar-wrap"><div class="q-bar" id="q-bar-evade" style="width: 45%;"></div></div><small id="q-val-evade">+8.1</small></div>
+                                <div class="q-row"><span>Flank to Cover:</span><div class="q-bar-wrap"><div class="q-bar" id="q-bar-flank" style="width: 92%;"></div></div><small id="q-val-flank">+16.9</small></div>
+                                <div class="q-row"><span>Shield Barrier:</span><div class="q-bar-wrap"><div class="q-bar" id="q-bar-shield" style="width: 28%;"></div></div><small id="q-val-shield">+5.0</small></div>
+                            </div>
+                            <button type="button" class="button button-primary" id="btn-rl-deploy" style="width: 100%; margin-top: 10px;">⚡ Deploy Trained Weights to Active 3D Battle</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </dialog>
+
+    <!-- Milestone 7: Procedural 3D Planetary Voxel & Biome Generator Dialog -->
+    <dialog class="tool-dialog planet-globe-dialog" id="planetary-globe-dialog" aria-labelledby="planet-title">
+        <div class="dialog-shell planet-shell">
+            <header class="dialog-header planet-header">
+                <div>
+                    <div class="panel-kicker">Cosmic Realm Exploration &amp; Multi-Octave Biome Synthesis</div>
+                    <h2 id="planet-title">Procedural 3D Planetary Realm &amp; Atmospheric Explorer</h2>
+                    <p>Continuous 3D spherical planetoid with fractal terrain, Rayleigh atmospheric scattering, Coriolis storms, and infinite zoom.</p>
+                </div>
+                <button class="icon-button dialog-close" id="planet-close" type="button" aria-label="Close Planetary Explorer Dialog"><svg viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></svg></button>
+            </header>
+            <div class="dialog-body planet-body">
+                <div class="planet-layout">
+                    <!-- Left: 3D Spherical Planetoid Canvas -->
+                    <div class="planet-canvas-col">
+                        <div class="planet-viewport-wrap">
+                            <canvas id="planet-canvas" width="560" height="460"></canvas>
+                            <div class="planet-hud-overlay">
+                                <div class="planet-hud-tag"><span class="tag-label">RADIUS:</span> <strong id="planet-tele-radius">6,371 km</strong></div>
+                                <div class="planet-hud-tag"><span class="tag-label">GRAVITY:</span> <strong id="planet-tele-gravity">1.02 G</strong></div>
+                                <div class="planet-hud-tag"><span class="tag-label">DAY CYCLE:</span> <strong id="planet-tele-cycle">26.4h</strong></div>
+                                <div class="planet-hud-tag"><span class="tag-label">BIOME:</span> <strong id="planet-tele-biome" class="highlight">Continental Gaia</strong></div>
+                            </div>
+                            <div class="planet-controls-tip">🖱️ Left Drag: Rotate Planetoid · Scroll: Orbital Zoom · Right Drag: Sun Angle</div>
+                        </div>
+                        <div class="planet-zoom-slider-row">
+                            <span>🛰️ High Orbit (50,000km)</span>
+                            <input type="range" id="planet-altitude-slider" min="1" max="100" value="30">
+                            <span>🛬 Surface Site (0km)</span>
+                        </div>
+                    </div>
+
+                    <!-- Right: Procedural Generator Controls -->
+                    <div class="planet-controls-col">
+                        <div class="planet-card">
+                            <span class="nemesis-card-title">Planetary Archetype Presets</span>
+                            <select id="planet-preset-select" class="select" style="width: 100%;">
+                                <option value="gaia">Gaia Prime (Balanced Oceans, Temperate Forests &amp; Plains)</option>
+                                <option value="arrakis">Arrakis Prime (Hyper-Arid Dunes, Canyons &amp; Solar Wastes)</option>
+                                <option value="gliesia">Gliesia Borealis (Permafrost, Glacial Sheets &amp; Cryo-Seas)</option>
+                                <option value="vulcan">Tartarus Deep (Basaltic Crust, Magma Rifts &amp; Ash Volcanism)</option>
+                                <option value="oceanus">Oceanus VII (Pelagic Abyssal Ocean &amp; Atoll Archipelagos)</option>
+                            </select>
+                        </div>
+
+                        <div class="planet-card">
+                            <span class="nemesis-card-title">Procedural Multi-Octave Noise Parameters</span>
+                            <div class="planet-slider-grid">
+                                <label class="field">
+                                    <span>Planetary Seed:</span>
+                                    <div class="seed-input-row">
+                                        <input type="number" id="planet-seed-input" value="849204" class="input">
+                                        <button type="button" class="button button-quiet" id="btn-planet-random-seed">🎲 Random</button>
+                                    </div>
+                                </label>
+                                <label class="field">
+                                    <span>Fractal Octaves: <b id="planet-octaves-val">5</b></span>
+                                    <input type="range" id="planet-octaves-slider" min="1" max="8" value="5">
+                                </label>
+                                <label class="field">
+                                    <span>Sea Level Elevation: <b id="planet-sealevel-val">42%</b></span>
+                                    <input type="range" id="planet-sealevel-slider" min="5" max="85" value="42">
+                                </label>
+                                <label class="field">
+                                    <span>Atmospheric Rayleigh Glow: <b id="planet-atmo-val">75%</b></span>
+                                    <input type="range" id="planet-atmo-slider" min="10" max="100" value="75">
+                                </label>
+                                <label class="field">
+                                    <span>Coriolis Storm Cloud Coverage: <b id="planet-clouds-val">38%</b></span>
+                                    <input type="range" id="planet-clouds-slider" min="0" max="80" value="38">
+                                </label>
+                                <label class="field">
+                                    <span>Sun Orbital Vector: <b id="planet-sun-val">45°</b></span>
+                                    <input type="range" id="planet-sun-slider" min="0" max="360" value="45">
+                                </label>
+                            </div>
+                        </div>
+
+                        <div class="planet-card">
+                            <span class="nemesis-card-title">Planetary Surface Biome Distribution</span>
+                            <div class="biome-bar-chart">
+                                <div class="biome-bar-row"><span>Ocean / Hydrosphere</span><div class="b-bar"><div class="b-fill ocean" id="bar-fill-ocean" style="width: 48%;"></div></div><small id="bar-val-ocean">48%</small></div>
+                                <div class="biome-bar-row"><span>Temperate Plains / Flora</span><div class="b-bar"><div class="b-fill forest" id="bar-fill-forest" style="width: 26%;"></div></div><small id="bar-val-forest">26%</small></div>
+                                <div class="biome-bar-row"><span>Arid Desert / Canyons</span><div class="b-bar"><div class="b-fill desert" id="bar-fill-desert" style="width: 14%;"></div></div><small id="bar-val-desert">14%</small></div>
+                                <div class="biome-bar-row"><span>Polar Tundra / Glaciers</span><div class="b-bar"><div class="b-fill tundra" id="bar-fill-tundra" style="width: 12%;"></div></div><small id="bar-val-tundra">12%</small></div>
+                            </div>
+                            <div class="planet-actions-row">
+                                <button type="button" class="button button-accent" id="btn-planet-apply-biome">🌐 Deploy to 3D Battle Arena</button>
+                                <button type="button" class="button button-quiet" id="btn-planet-export">💾 Export Heightmap</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </dialog>
+
+    <!-- Milestone 8: Live Replay Theater & Cinematic Director Suite Dialog -->
+    <dialog class="tool-dialog replay-theater-dialog" id="replay-theater-dialog" aria-labelledby="replay-title">
+        <div class="dialog-shell replay-shell">
+            <header class="dialog-header replay-header">
+                <div>
+                    <div class="panel-kicker">Deterministic Match Scrubber &amp; Spline Director</div>
+                    <h2 id="replay-title">Live Cross-Platform Replay Theater &amp; BLAKE3 Proof Suite</h2>
+                    <p>Sub-tick deterministic replay scrubber, Catmull-Rom cubic spline camera director, and cryptographically verified proof certificates.</p>
+                </div>
+                <button class="icon-button dialog-close" id="replay-close" type="button" aria-label="Close Replay Theater"><svg viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></svg></button>
+            </header>
+            <div class="dialog-body replay-body">
+                <!-- Top: Deterministic Timeline Scrubber -->
+                <div class="replay-scrubber-card">
+                    <div class="replay-time-header">
+                        <div class="replay-tick-meta">
+                            <span class="play-badge" id="replay-status-badge">PAUSED</span>
+                            <span>TICK: <strong id="replay-current-tick">184</strong> / <span id="replay-max-tick">600</span></span>
+                            <span>TIME: <strong id="replay-timestamp">00:15.33</strong></span>
+                        </div>
+                        <div class="replay-transport-controls">
+                            <button type="button" class="icon-button" id="btn-replay-step-back" title="Step Back 10 Ticks (←)">⏮</button>
+                            <button type="button" class="button button-accent" id="btn-replay-play" title="Play / Pause Replay (Space)">▶ Play</button>
+                            <button type="button" class="icon-button" id="btn-replay-step-fwd" title="Step Forward 10 Ticks (→)">⏭</button>
+                            <select id="replay-speed-select" class="select select-compact">
+                                <option value="0.25">0.25x</option>
+                                <option value="0.5">0.5x</option>
+                                <option value="1.0" selected>1.0x</option>
+                                <option value="2.0">2.0x</option>
+                                <option value="4.0">4.0x</option>
+                                <option value="10.0">10.0x</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="replay-track-wrap">
+                        <input type="range" id="replay-tick-slider" min="0" max="600" value="184" class="replay-slider">
+                        <div class="replay-markers-track" id="replay-markers-track">
+                            <!-- Dynamic Event Pins injected here -->
+                        </div>
+                    </div>
+                </div>
+
+                <div class="replay-content-grid">
+                    <!-- Left: Catmull-Rom Spline Camera Sequencer -->
+                    <div class="replay-col-spline">
+                        <div class="spline-card">
+                            <div class="spline-card-header">
+                                <span class="nemesis-card-title">Cinematic Catmull-Rom Camera Spline Rail</span>
+                                <div class="spline-header-actions">
+                                    <button type="button" class="button button-quiet button-compact" id="btn-spline-add-keyframe">+ Capture Eye Pos</button>
+                                    <button type="button" class="button button-quiet button-compact" id="btn-spline-clear">Clear</button>
+                                </div>
+                            </div>
+                            <div class="spline-keyframes-list" id="spline-keyframes-list">
+                                <div class="spline-item active">
+                                    <span class="sp-pin">K1</span>
+                                    <div class="sp-meta"><strong>Tick 0 (00:00)</strong><small>Eye: [-80, 110, 140] → Target: [0, 0, 0] · FOV 55°</small></div>
+                                    <span class="sp-tag">Intro Sweep</span>
+                                </div>
+                                <div class="spline-item">
+                                    <span class="sp-pin">K2</span>
+                                    <div class="sp-meta"><strong>Tick 150 (00:12)</strong><small>Eye: [35, 45, -70] → Target: [10, 5, 20] · FOV 65°</small></div>
+                                    <span class="sp-tag">Flank Focus</span>
+                                </div>
+                                <div class="spline-item">
+                                    <span class="sp-pin">K3</span>
+                                    <div class="sp-meta"><strong>Tick 320 (00:26)</strong><small>Eye: [0, 20, 30] → Target: [0, 15, -40] · FOV 48°</small></div>
+                                    <span class="sp-tag">Climax Rail</span>
+                                </div>
+                            </div>
+                            <div class="spline-preview-wrap">
+                                <canvas id="spline-preview-canvas" width="380" height="100"></canvas>
+                            </div>
+                            <button type="button" class="button button-primary" id="btn-spline-play" style="width: 100%; margin-top: 8px;">🎬 Engage Cinematic Spline Director Flythrough</button>
+                        </div>
+                    </div>
+
+                    <!-- Right: BLAKE3 Cryptographic Proof & Integrity Dossier -->
+                    <div class="replay-col-crypto">
+                        <div class="crypto-card">
+                            <span class="nemesis-card-title">Cryptographic State Hash Verification</span>
+                            <div class="crypto-badge-box">
+                                <span class="crypto-icon">🛡️</span>
+                                <div>
+                                    <strong class="highlight">100% DETERMINISTIC EXECUTION</strong>
+                                    <small>All 600 frames match server-authoritative BLAKE3 digests.</small>
+                                </div>
+                            </div>
+                            <div class="crypto-hash-box">
+                                <small>BLAKE3 REPLAY SIGNATURE:</small>
+                                <code id="replay-blake3-hash">f48a29b09c84e1261d7b320d9154a49c25bb081e7d97c385b01859e4ad1b712c</code>
+                            </div>
+                            <div class="replay-telemetry-stats">
+                                <div class="rep-stat"><span>Match Seed:</span><strong id="rep-seed">9182371</strong></div>
+                                <div class="rep-stat"><span>Input Rollbacks:</span><strong id="rep-rollbacks">0 (P2P Lockstep)</strong></div>
+                                <div class="rep-stat"><span>Casualties:</span><strong id="rep-kills">24 Hostiles / 6 Friendly</strong></div>
+                                <div class="rep-stat"><span>Total Ordnance:</span><strong id="rep-damage">142,500 MJ</strong></div>
+                            </div>
+                            <div class="crypto-actions-row">
+                                <button type="button" class="button button-accent" id="btn-replay-export" style="flex: 1;">💾 Export .wfrp Proof</button>
+                                <label class="button button-quiet file-load-btn" style="flex: 1; text-align: center; cursor: pointer;">
+                                    <span>📂 Verify .wfrp</span>
+                                    <input type="file" id="replay-file-input" accept=".wfrp,.json" style="display: none;">
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </dialog>
+
+    <!-- Milestone 9: Galactic Commodity Exchange & Macro Trading Fleets Dialog -->
+    <dialog class="tool-dialog macro-economy-dialog" id="macro-economy-dialog" aria-labelledby="economy-title">
+        <div class="dialog-shell economy-shell">
+            <header class="dialog-header economy-header">
+                <div>
+                    <div class="panel-kicker">Dynamic Galactic Supply/Demand &amp; Trading Fleet Convoys</div>
+                    <h2 id="economy-title">Galactic Commodity Exchange &amp; Macro Fleet Simulator</h2>
+                    <p>8 live traded commodities, interactive candlestick OHLC charts, moving average indicators, and inter-city trade convoy logistics.</p>
+                </div>
+                <button class="icon-button dialog-close" id="economy-close" type="button" aria-label="Close Galactic Economy Dialog"><svg viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></svg></button>
+            </header>
+            <div class="dialog-body economy-body">
+                <!-- 8-Commodity Ticker Tape -->
+                <div class="economy-ticker-tape" id="economy-ticker-tape">
+                    <!-- Dynamic Ticker items injected here -->
+                </div>
+
+                <div class="economy-main-layout">
+                    <!-- Left: Candlestick Chart & Order Book -->
+                    <div class="economy-col-chart">
+                        <div class="chart-card">
+                            <div class="chart-header-row">
+                                <div class="chart-asset-meta">
+                                    <span class="asset-symbol" id="chart-asset-symbol">⚡ HYPER-ALLOYS (HYP)</span>
+                                    <strong class="asset-price" id="chart-asset-price">425.80 CR</strong>
+                                    <span class="asset-change up" id="chart-asset-change">+14.2% (24h)</span>
+                                </div>
+                                <div class="chart-tf-buttons">
+                                    <button type="button" class="tf-btn active" data-tf="1m">1m</button>
+                                    <button type="button" class="tf-btn" data-tf="5m">5m</button>
+                                    <button type="button" class="tf-btn" data-tf="15m">15m</button>
+                                    <button type="button" class="tf-btn" data-tf="1h">1h</button>
+                                </div>
+                            </div>
+                            <div class="candlestick-canvas-wrap">
+                                <canvas id="candlestick-canvas" width="560" height="260"></canvas>
+                            </div>
+                            <div class="chart-indicators-legend">
+                                <span><i class="ind-line sma5"></i> SMA-5 (Cyan)</span>
+                                <span><i class="ind-line sma20"></i> SMA-20 (Amber)</span>
+                                <span><i class="ind-line vol"></i> Volume Histogram</span>
+                                <span class="chart-ohlc-readout" id="chart-ohlc-readout">O: 420.1 H: 429.5 L: 418.0 C: 425.8</span>
+                            </div>
+                        </div>
+
+                        <!-- Instant Market Execution & Order Desk -->
+                        <div class="trade-order-card">
+                            <div class="wallet-balance-row">
+                                <span>Player Treasury: <strong id="economy-player-credits" class="highlight">12,450 CR</strong></span>
+                                <span>Current Commodity Hold: <strong id="economy-player-hold">80 Units</strong></span>
+                            </div>
+                            <div class="order-form-row">
+                                <label class="field" style="flex: 1;">
+                                    <span>Order Quantity:</span>
+                                    <input type="number" id="economy-order-qty" value="10" min="1" max="1000" class="input">
+                                </label>
+                                <div class="order-btn-col">
+                                    <button type="button" class="button button-accent buy-btn" id="btn-economy-buy">Buy at Market (<span id="economy-buy-cost">4,258 CR</span>)</button>
+                                </div>
+                                <div class="order-btn-col">
+                                    <button type="button" class="button sell-btn" id="btn-economy-sell">Sell at Market (<span id="economy-sell-gain">4,258 CR</span>)</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Right: Trade Fleet Logistics & Corporate Index -->
+                    <div class="economy-col-fleets">
+                        <div class="fleets-card">
+                            <span class="nemesis-card-title">Inter-City Trade Fleet Dispatcher</span>
+                            <div class="fleet-builder-box">
+                                <label class="field">
+                                    <span>Route Origin → Destination:</span>
+                                    <select id="fleet-route-select" class="select" style="width: 100%;">
+                                        <option value="iron-to-oasis">Iron Citadel → Oasis Metropolis (Distance 42km)</option>
+                                        <option value="oasis-to-harbor">Oasis Metropolis → Pelagic Deep Harbor (Distance 68km)</option>
+                                        <option value="harbor-to-summit">Pelagic Deep Harbor → Aether Summit (Distance 85km)</option>
+                                    </select>
+                                </label>
+                                <label class="field">
+                                    <span>Convoy Hull Class:</span>
+                                    <select id="fleet-hull-select" class="select" style="width: 100%;">
+                                        <option value="skimmer">Vanguard Skimmer (Fast, 150 Cargo, 15% Piracy Risk)</option>
+                                        <option value="hauler">Armored Hauler (Medium, 500 Cargo, 8% Piracy Risk)</option>
+                                        <option value="behemoth">Titan Behemoth (Slow, 1,500 Cargo, Escorts Mandatory)</option>
+                                    </select>
+                                </label>
+                                <button type="button" class="button button-primary" id="btn-dispatch-fleet" style="width: 100%; margin-top: 6px;">🚀 Dispatch Commercial Convoy</button>
+                            </div>
+
+                            <span class="nemesis-card-title" style="margin-top: 14px;">Active Convoys En Route</span>
+                            <div class="active-fleets-list" id="active-fleets-list">
+                                <div class="fleet-item">
+                                    <div class="fleet-item-head"><strong>Convoy WF-Alpha [Armored Hauler]</strong><span class="fleet-eta">ETA: 14s</span></div>
+                                    <small>Carrying 500x Hyper-Alloys · Escort Wing: Active</small>
+                                    <div class="fleet-progress-bar"><div class="fp-fill" style="width: 65%;"></div></div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Planetary Stock Index WF-500 -->
+                        <div class="fleets-card">
+                            <div class="stock-index-head">
+                                <span class="nemesis-card-title">Planetary Stock Index (WF-500)</span>
+                                <strong class="stock-index-val highlight">4,892.4 <small>(+2.8%)</small></strong>
+                            </div>
+                            <div class="corp-stocks-grid">
+                                <div class="corp-stock"><strong>Aegis Dynamics</strong><span>184.2 CR</span><small class="up">+4.1%</small></div>
+                                <div class="corp-stock"><strong>ChronoTech Quantum</strong><span>312.0 CR</span><small class="up">+1.9%</small></div>
+                                <div class="corp-stock"><strong>Vesper Mining Guild</strong><span>95.4 CR</span><small class="down">-0.8%</small></div>
+                                <div class="corp-stock"><strong>Solaris Agritech</strong><span>62.8 CR</span><small class="up">+5.2%</small></div>
+                            </div>
+                            <button type="button" class="button button-accent button-compact" id="btn-collect-dividends" style="width: 100%; margin-top: 8px;">💰 Collect Accrued Dividends (+320 CR)</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </dialog>
+
+    <!-- Milestone 10: In-Browser WASM Modding SDK & Logic Assembler Dialog -->
+    <dialog class="tool-dialog mod-studio-dialog" id="mod-studio-dialog" aria-labelledby="mod-title">
+        <div class="dialog-shell mod-shell">
+            <header class="dialog-header mod-header">
+                <div>
+                    <div class="panel-kicker">WASM Logic Assembler &amp; In-Browser Extension SDK</div>
+                    <h2 id="mod-title">In-Browser WASM Modding SDK &amp; Visual Logic Assembler</h2>
+                    <p>Compile and hot-inject sandboxed simulation modules, custom weapons, aura fields, and battle mechanics live into the runtime.</p>
+                </div>
+                <button class="icon-button dialog-close" id="mod-close" type="button" aria-label="Close Mod Studio"><svg viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></svg></button>
+            </header>
+            <div class="dialog-body mod-body">
+                <div class="mod-layout">
+                    <!-- Left: Mod Templates & Installed Modules -->
+                    <div class="mod-col-library">
+                        <div class="mod-card">
+                            <span class="nemesis-card-title">Mod Logic Templates</span>
+                            <select id="mod-template-select" class="select" style="width: 100%;">
+                                <option value="plasmastorm">Ion Plasma Storm (Aura EMP Hazard)</option>
+                                <option value="siegemortar">Heavy Siege Mortar (High-Arc Artillery)</option>
+                                <option value="vampiricaura">Vampiric Leech Field (Siphon 20% Damage)</option>
+                                <option value="kamikazedrone">Volatile Kamikaze Drone Swarm</option>
+                                <option value="teleportrift">Quantum Teleport Rift Portal</option>
+                            </select>
+                            <button type="button" class="button button-quiet" id="btn-mod-load-template" style="width: 100%; margin-top: 6px;">Load Template to Editor</button>
+                        </div>
+
+                        <div class="mod-card">
+                            <span class="nemesis-card-title">Installed Active Modules</span>
+                            <div class="installed-mods-list" id="installed-mods-list">
+                                <div class="mod-item">
+                                    <label class="mod-toggle-label">
+                                        <input type="checkbox" checked class="mod-toggle" data-mod="plasma-hazard">
+                                        <div><strong>Ion Plasma Storm v1.2</strong><small>Environmental ion hazard</small></div>
+                                    </label>
+                                </div>
+                                <div class="mod-item">
+                                    <label class="mod-toggle-label">
+                                        <input type="checkbox" checked class="mod-toggle" data-mod="siege-cannon">
+                                        <div><strong>Titan Mortar Pods v2.0</strong><small>Ballistic ordnance mod</small></div>
+                                    </label>
+                                </div>
+                            </div>
+                            <div class="mod-pkg-actions">
+                                <button type="button" class="button button-accent button-compact" id="btn-mod-export" style="flex: 1;">📦 Export .wfmod</button>
+                                <label class="button button-quiet button-compact file-load-btn" style="flex: 1; text-align: center; cursor: pointer;">
+                                    <span>📂 Import .wfmod</span>
+                                    <input type="file" id="mod-file-input" accept=".wfmod,.json" style="display: none;">
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Center: Code Editor -->
+                    <div class="mod-col-editor">
+                        <div class="mod-editor-card">
+                            <div class="mod-editor-header">
+                                <div class="mod-meta-inputs">
+                                    <input type="text" id="mod-name-input" value="Ion Plasma Storm" class="input input-compact" placeholder="Mod Title">
+                                    <input type="text" id="mod-author-input" value="Commander_WFM" class="input input-compact" placeholder="Author">
+                                    <select id="mod-hook-select" class="select select-compact">
+                                        <option value="OnBattleTick">Hook: OnBattleTick</option>
+                                        <option value="OnUnitSpawn">Hook: OnUnitSpawn</option>
+                                        <option value="OnProjectileHit">Hook: OnProjectileHit</option>
+                                        <option value="OnTerrainDeform">Hook: OnTerrainDeform</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="code-textarea-wrap">
+                                <textarea id="mod-code-editor" class="mod-code-editor" rows="18" spellcheck="false"></textarea>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Right: Sandbox Capability Verification & Hot Injector -->
+                    <div class="mod-col-validator">
+                        <div class="validator-card">
+                            <span class="nemesis-card-title">Sandboxed Safety Bounds Verification</span>
+                            <div class="sandbox-checks-list">
+                                <div class="sb-check pass"><span>✓ Memory Allocation Clamp:</span><strong>≤ 16 MB Heap (OK)</strong></div>
+                                <div class="sb-check pass"><span>✓ Execution Fuel Budget:</span><strong>≤ 50,000 Ops/Tick (OK)</strong></div>
+                                <div class="sb-check pass"><span>✓ Mathematical Determinism:</span><strong>Pure PRNG Verified (OK)</strong></div>
+                                <div class="sb-check pass"><span>✓ Host Capability Grant:</span><strong>CAN_TRIGGER_VFX (OK)</strong></div>
+                            </div>
+
+                            <div class="sandbox-badge-status" id="mod-sandbox-status">
+                                🛡️ SANDBOX VERIFIED: 100% SAFE
+                            </div>
+
+                            <button type="button" class="button button-primary" id="btn-mod-inject-live" style="width: 100%; margin-top: 10px;">⚡ Compile &amp; Hot-Inject into Live Battle</button>
+
+                            <span class="nemesis-card-title" style="margin-top: 14px;">WASM Virtual Machine Console</span>
+                            <pre class="mod-console-output" id="mod-console-output">[WASM_VM] Initialized sandbox instance with 16MB linear memory buffer.
+[WASM_VM] Fuel counter: 0/50000 consumed.
+[WASM_VM] Ready to compile and link runtime hooks.</pre>
                         </div>
                     </div>
                 </div>

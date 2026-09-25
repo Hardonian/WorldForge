@@ -5180,3 +5180,470 @@ body.ui-scale-130 {
 .warband-item small { font-size: 0.68rem; color: #94a3b8; }
 .warband-item button { font-size: 0.72rem; font-weight: 700; width: 100%; margin-top: 2px; }
 
+/* ==========================================================================
+   Milestones 6 - 10: Advanced Simulation Suites CSS
+   ========================================================================== */
+
+/* --- Milestone 6: Behavior Tree & Reinforcement Learning Gym --- */
+.bt-shell { max-width: 1000px; width: 94vw; }
+.bt-layout { display: grid; grid-template-columns: 1.35fr 1fr; gap: 16px; }
+.bt-col-tree { display: flex; flex-direction: column; gap: 10px; }
+.bt-toolbar { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
+.bt-select-label { display: flex; align-items: center; gap: 6px; font-size: 0.72rem; color: #94a3b8; }
+.bt-action-btns { display: flex; gap: 6px; }
+.bt-canvas-wrap {
+    background: #080c14;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 8px;
+    overflow: hidden;
+    position: relative;
+    box-shadow: inset 0 0 24px rgba(0, 0, 0, 0.7);
+}
+#bt-canvas { width: 100%; height: 380px; display: block; }
+.bt-legend {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+    font-size: 0.68rem;
+    color: #94a3b8;
+    background: rgba(15, 23, 42, 0.6);
+    padding: 6px 12px;
+    border-radius: 6px;
+    border: 1px solid rgba(255, 255, 255, 0.05);
+}
+.bt-leg-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    border-radius: 4px;
+    font-size: 0.72rem;
+    font-weight: 800;
+    margin-right: 4px;
+}
+.bt-leg-icon.bt-sel { background: rgba(56, 189, 248, 0.2); color: #38bdf8; border: 1px solid #38bdf8; }
+.bt-leg-icon.bt-seq { background: rgba(168, 85, 247, 0.2); color: #c084fc; border: 1px solid #c084fc; }
+.bt-leg-icon.bt-cond { background: rgba(245, 158, 11, 0.2); color: #fbbf24; border: 1px solid #fbbf24; }
+.bt-leg-icon.bt-act { background: rgba(16, 185, 129, 0.2); color: #34d399; border: 1px solid #34d399; }
+.bt-status-tags { margin-left: auto; display: flex; gap: 6px; }
+.bt-status-tags b { font-size: 0.60rem; padding: 2px 6px; border-radius: 3px; }
+.st-run { background: rgba(245, 158, 11, 0.25); color: #fbbf24; border: 1px solid #f59e0b; }
+.st-succ { background: rgba(16, 185, 129, 0.25); color: #34d399; border: 1px solid #10b981; }
+.st-fail { background: rgba(239, 68, 68, 0.25); color: #f87171; border: 1px solid #ef4444; }
+.bt-node-inspector {
+    font-size: 0.70rem;
+    color: #cbd5e1;
+    background: rgba(30, 41, 59, 0.5);
+    padding: 8px 12px;
+    border-radius: 6px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+}
+.inspector-title { color: #38bdf8; font-weight: 800; margin-right: 6px; }
+
+.bt-col-rl { display: flex; flex-direction: column; gap: 12px; }
+.rl-card {
+    background: rgba(15, 23, 42, 0.75);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 8px;
+    padding: 12px;
+}
+.rl-stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px; }
+.rl-stat { background: rgba(30, 41, 59, 0.6); border-radius: 6px; padding: 8px 10px; border-left: 3px solid #38bdf8; }
+.rl-stat small { display: block; font-size: 0.62rem; color: #94a3b8; }
+.rl-stat strong { font-size: 0.88rem; color: #f1f5f9; }
+.rl-controls-box { display: flex; flex-direction: column; gap: 10px; }
+.rl-btn-row { display: flex; gap: 6px; }
+.rl-btn-row button { flex: 1; font-size: 0.70rem; }
+#bt-qtable-canvas { width: 100%; height: 150px; background: #080c14; border-radius: 6px; display: block; margin-bottom: 10px; }
+.q-actions-monitor { display: flex; flex-direction: column; gap: 6px; }
+.q-row { display: flex; align-items: center; gap: 8px; font-size: 0.68rem; color: #cbd5e1; }
+.q-row span { width: 90px; flex-shrink: 0; }
+.q-bar-wrap { flex: 1; height: 8px; background: rgba(255, 255, 255, 0.08); border-radius: 4px; overflow: hidden; }
+.q-bar { height: 100%; background: linear-gradient(90deg, #0284c7, #38bdf8); border-radius: 4px; transition: width 0.2s ease; }
+.q-row small { width: 36px; text-align: right; color: #38bdf8; font-weight: 700; font-family: var(--font-mono); }
+
+/* --- Milestone 7: Procedural 3D Planetary Voxel & Biome Explorer --- */
+.planet-shell { max-width: 1020px; width: 94vw; }
+.planet-layout { display: grid; grid-template-columns: 1.25fr 1fr; gap: 16px; }
+.planet-canvas-col { display: flex; flex-direction: column; gap: 10px; }
+.planet-viewport-wrap {
+    background: radial-gradient(circle at center, #0c1527 0%, #03060d 100%);
+    border: 1px solid rgba(56, 189, 248, 0.3);
+    border-radius: 10px;
+    position: relative;
+    overflow: hidden;
+    box-shadow: 0 0 30px rgba(56, 189, 248, 0.15);
+}
+#planet-canvas { width: 100%; height: 440px; display: block; cursor: grab; }
+#planet-canvas:active { cursor: grabbing; }
+.planet-hud-overlay {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    pointer-events: none;
+}
+.planet-hud-tag {
+    background: rgba(11, 15, 25, 0.85);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    padding: 3px 8px;
+    border-radius: 4px;
+    font-size: 0.65rem;
+    color: #e2e8f0;
+    backdrop-filter: blur(4px);
+}
+.tag-label { color: #38bdf8; font-weight: 700; margin-right: 4px; }
+.planet-controls-tip {
+    position: absolute;
+    bottom: 8px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 0.62rem;
+    color: #94a3b8;
+    background: rgba(0, 0, 0, 0.7);
+    padding: 3px 10px;
+    border-radius: 12px;
+    white-space: nowrap;
+    pointer-events: none;
+}
+.planet-zoom-slider-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: rgba(15, 23, 42, 0.7);
+    padding: 8px 14px;
+    border-radius: 6px;
+    font-size: 0.70rem;
+    color: #cbd5e1;
+}
+.planet-zoom-slider-row input { flex: 1; }
+.planet-controls-col { display: flex; flex-direction: column; gap: 10px; }
+.planet-card {
+    background: rgba(15, 23, 42, 0.75);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 8px;
+    padding: 12px;
+}
+.planet-slider-grid { display: flex; flex-direction: column; gap: 8px; margin-top: 6px; }
+.seed-input-row { display: flex; gap: 6px; }
+.seed-input-row input { flex: 1; }
+.biome-bar-chart { display: flex; flex-direction: column; gap: 6px; margin: 10px 0; }
+.biome-bar-row { display: flex; align-items: center; gap: 8px; font-size: 0.68rem; color: #cbd5e1; }
+.biome-bar-row span { width: 130px; flex-shrink: 0; }
+.b-bar { flex: 1; height: 8px; background: rgba(255, 255, 255, 0.08); border-radius: 4px; overflow: hidden; }
+.b-fill { height: 100%; border-radius: 4px; }
+.b-fill.ocean { background: #0284c7; }
+.b-fill.forest { background: #10b981; }
+.b-fill.desert { background: #f59e0b; }
+.b-fill.tundra { background: #e0f2fe; }
+.biome-bar-row small { width: 32px; text-align: right; color: #94a3b8; font-family: var(--font-mono); }
+.planet-actions-row { display: flex; gap: 8px; margin-top: 10px; }
+.planet-actions-row button { flex: 1; font-size: 0.72rem; }
+
+/* --- Milestone 8: Live Replay Theater & Cinematic Director Suite --- */
+.replay-shell { max-width: 980px; width: 94vw; }
+.replay-scrubber-card {
+    background: rgba(15, 23, 42, 0.85);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 8px;
+    padding: 12px;
+    margin-bottom: 14px;
+}
+.replay-time-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; flex-wrap: wrap; gap: 8px; }
+.replay-tick-meta { display: flex; align-items: center; gap: 14px; font-size: 0.75rem; color: #cbd5e1; }
+.replay-tick-meta strong { color: #38bdf8; font-family: var(--font-mono); font-size: 0.82rem; }
+.replay-transport-controls { display: flex; align-items: center; gap: 6px; }
+.select-compact { padding: 4px 8px; font-size: 0.72rem; }
+.replay-track-wrap { position: relative; width: 100%; padding: 4px 0; }
+.replay-slider { width: 100%; cursor: pointer; accent-color: #38bdf8; }
+.replay-markers-track {
+    position: relative;
+    width: 100%;
+    height: 12px;
+    margin-top: 2px;
+}
+.rep-marker-pin {
+    position: absolute;
+    top: 0;
+    transform: translateX(-50%);
+    font-size: 0.65rem;
+    cursor: pointer;
+    filter: drop-shadow(0 0 3px rgba(0,0,0,0.8));
+    transition: transform 0.15s ease;
+}
+.rep-marker-pin:hover { transform: translateX(-50%) scale(1.3); }
+
+.replay-content-grid { display: grid; grid-template-columns: 1.2fr 1fr; gap: 14px; }
+.spline-card, .crypto-card {
+    background: rgba(15, 23, 42, 0.75);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 8px;
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+.spline-card-header { display: flex; justify-content: space-between; align-items: center; }
+.spline-header-actions { display: flex; gap: 6px; }
+.button-compact { padding: 3px 8px; font-size: 0.68rem; }
+.spline-keyframes-list { display: flex; flex-direction: column; gap: 6px; max-height: 140px; overflow-y: auto; }
+.spline-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: rgba(30, 41, 59, 0.5);
+    padding: 6px 10px;
+    border-radius: 4px;
+    border-left: 3px solid #38bdf8;
+    cursor: pointer;
+}
+.spline-item.active { border-left-color: #10b981; background: rgba(16, 185, 129, 0.12); }
+.sp-pin { font-size: 0.68rem; font-weight: 800; color: #38bdf8; font-family: var(--font-mono); }
+.sp-meta { flex: 1; }
+.sp-meta strong { display: block; font-size: 0.70rem; color: #f1f5f9; }
+.sp-meta small { font-size: 0.62rem; color: #94a3b8; }
+.sp-tag { font-size: 0.60rem; color: #a855f7; background: rgba(168, 85, 247, 0.15); padding: 2px 6px; border-radius: 3px; }
+.spline-preview-wrap { background: #080c14; border-radius: 6px; overflow: hidden; border: 1px solid rgba(255, 255, 255, 0.06); }
+#spline-preview-canvas { width: 100%; height: 90px; display: block; }
+
+.crypto-badge-box {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: rgba(16, 185, 129, 0.1);
+    border: 1px solid rgba(16, 185, 129, 0.3);
+    padding: 8px 12px;
+    border-radius: 6px;
+}
+.crypto-icon { font-size: 1.2rem; }
+.crypto-badge-box strong { font-size: 0.75rem; color: #34d399; display: block; }
+.crypto-badge-box small { font-size: 0.65rem; color: #94a3b8; }
+.crypto-hash-box {
+    background: rgba(8, 12, 20, 0.8);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 4px;
+    padding: 8px;
+}
+.crypto-hash-box small { display: block; font-size: 0.58rem; color: #94a3b8; margin-bottom: 4px; font-weight: 700; }
+.crypto-hash-box code { font-size: 0.62rem; color: #38bdf8; word-break: break-all; font-family: var(--font-mono); }
+.replay-telemetry-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin: 4px 0; }
+.rep-stat { font-size: 0.68rem; color: #94a3b8; }
+.rep-stat strong { display: block; font-size: 0.75rem; color: #f1f5f9; }
+.crypto-actions-row { display: flex; gap: 8px; margin-top: 4px; }
+
+/* --- Milestone 9: Galactic Commodity Exchange & Macro Trade Fleets --- */
+.economy-shell { max-width: 1040px; width: 94vw; }
+.economy-ticker-tape {
+    display: flex;
+    gap: 10px;
+    overflow-x: auto;
+    padding: 6px 2px 10px 2px;
+    margin-bottom: 12px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+.ticker-pill {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: rgba(15, 23, 42, 0.8);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 6px;
+    padding: 6px 10px;
+    flex-shrink: 0;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+.ticker-pill:hover, .ticker-pill.active { border-color: #38bdf8; background: rgba(56, 189, 248, 0.12); }
+.ticker-name { font-size: 0.70rem; font-weight: 700; color: #f1f5f9; }
+.ticker-price { font-size: 0.72rem; font-family: var(--font-mono); color: #e2e8f0; }
+.ticker-delta { font-size: 0.62rem; font-weight: 700; padding: 1px 4px; border-radius: 3px; }
+.ticker-delta.up { color: #34d399; background: rgba(16, 185, 129, 0.15); }
+.ticker-delta.down { color: #f87171; background: rgba(239, 68, 68, 0.15); }
+
+.economy-main-layout { display: grid; grid-template-columns: 1.3fr 1fr; gap: 14px; }
+.economy-col-chart { display: flex; flex-direction: column; gap: 10px; }
+.chart-card {
+    background: rgba(15, 23, 42, 0.75);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 8px;
+    padding: 12px;
+}
+.chart-header-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; flex-wrap: wrap; gap: 8px; }
+.chart-asset-meta { display: flex; align-items: baseline; gap: 10px; }
+.asset-symbol { font-size: 0.78rem; font-weight: 800; color: #38bdf8; }
+.asset-price { font-size: 1.1rem; color: #f1f5f9; font-family: var(--font-mono); }
+.asset-change { font-size: 0.70rem; font-weight: 700; }
+.asset-change.up { color: #34d399; }
+.asset-change.down { color: #f87171; }
+.chart-tf-buttons { display: flex; gap: 4px; }
+.tf-btn {
+    background: rgba(30, 41, 59, 0.6);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    color: #94a3b8;
+    padding: 3px 8px;
+    border-radius: 4px;
+    font-size: 0.65rem;
+    cursor: pointer;
+}
+.tf-btn.active { background: #0284c7; color: #ffffff; border-color: #38bdf8; }
+.candlestick-canvas-wrap { background: #070a10; border-radius: 6px; overflow: hidden; border: 1px solid rgba(255, 255, 255, 0.06); }
+#candlestick-canvas { width: 100%; height: 260px; display: block; }
+.chart-indicators-legend {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-size: 0.65rem;
+    color: #94a3b8;
+    margin-top: 8px;
+    flex-wrap: wrap;
+}
+.ind-line { display: inline-block; width: 14px; height: 3px; border-radius: 2px; margin-right: 4px; vertical-align: middle; }
+.ind-line.sma5 { background: #38bdf8; }
+.ind-line.sma20 { background: #f59e0b; }
+.ind-line.vol { background: #64748b; }
+.chart-ohlc-readout { margin-left: auto; font-family: var(--font-mono); color: #cbd5e1; font-size: 0.65rem; }
+
+.trade-order-card {
+    background: rgba(15, 23, 42, 0.75);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 8px;
+    padding: 12px;
+}
+.wallet-balance-row { display: flex; justify-content: space-between; font-size: 0.72rem; color: #94a3b8; margin-bottom: 10px; }
+.order-form-row { display: flex; align-items: flex-end; gap: 8px; }
+.order-btn-col { flex: 1; }
+.order-btn-col button { width: 100%; font-size: 0.72rem; font-weight: 700; padding: 8px; }
+.buy-btn { background: #059669; border-color: #10b981; }
+.buy-btn:hover { background: #10b981; }
+.sell-btn { background: #dc2626; border-color: #ef4444; color: #fff; }
+.sell-btn:hover { background: #ef4444; }
+
+.economy-col-fleets { display: flex; flex-direction: column; gap: 10px; }
+.fleets-card {
+    background: rgba(15, 23, 42, 0.75);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 8px;
+    padding: 12px;
+}
+.fleet-builder-box { display: flex; flex-direction: column; gap: 8px; }
+.active-fleets-list { display: flex; flex-direction: column; gap: 6px; margin-top: 6px; max-height: 140px; overflow-y: auto; }
+.fleet-item {
+    background: rgba(30, 41, 59, 0.5);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 6px;
+    padding: 8px 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+.fleet-item-head { display: flex; justify-content: space-between; align-items: center; }
+.fleet-item-head strong { font-size: 0.72rem; color: #f1f5f9; }
+.fleet-eta { font-size: 0.65rem; color: #fbbf24; font-family: var(--font-mono); }
+.fleet-item small { font-size: 0.62rem; color: #94a3b8; }
+.fleet-progress-bar { height: 4px; background: rgba(255, 255, 255, 0.08); border-radius: 2px; overflow: hidden; }
+.fp-fill { height: 100%; background: #38bdf8; border-radius: 2px; transition: width 0.3s ease; }
+.stock-index-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+.stock-index-val { font-size: 0.95rem; font-family: var(--font-mono); }
+.corp-stocks-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.corp-stock {
+    background: rgba(30, 41, 59, 0.5);
+    padding: 6px 8px;
+    border-radius: 4px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+.corp-stock strong { font-size: 0.68rem; color: #cbd5e1; }
+.corp-stock span { font-size: 0.72rem; font-weight: 700; color: #f1f5f9; font-family: var(--font-mono); }
+.corp-stock small.up { font-size: 0.60rem; color: #34d399; font-weight: 700; }
+.corp-stock small.down { font-size: 0.60rem; color: #f87171; font-weight: 700; }
+
+/* --- Milestone 10: In-Browser WASM Modding SDK & Logic Assembler --- */
+.mod-shell { max-width: 1080px; width: 95vw; }
+.mod-layout { display: grid; grid-template-columns: 240px 1fr 270px; gap: 14px; }
+.mod-col-library, .mod-col-editor, .mod-col-validator { display: flex; flex-direction: column; gap: 10px; }
+.mod-card, .validator-card, .mod-editor-card {
+    background: rgba(15, 23, 42, 0.75);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 8px;
+    padding: 12px;
+}
+.installed-mods-list { display: flex; flex-direction: column; gap: 6px; margin: 8px 0; max-height: 180px; overflow-y: auto; }
+.mod-item {
+    background: rgba(30, 41, 59, 0.5);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 4px;
+    padding: 6px 8px;
+}
+.mod-toggle-label { display: flex; align-items: center; gap: 8px; cursor: pointer; }
+.mod-toggle-label strong { display: block; font-size: 0.68rem; color: #f1f5f9; }
+.mod-toggle-label small { font-size: 0.60rem; color: #94a3b8; }
+.mod-pkg-actions { display: flex; gap: 6px; margin-top: 6px; }
+
+.mod-editor-header { margin-bottom: 8px; }
+.mod-meta-inputs { display: flex; gap: 6px; }
+.input-compact { padding: 4px 8px; font-size: 0.72rem; }
+.code-textarea-wrap {
+    background: #080c14;
+    border: 1px solid rgba(56, 189, 248, 0.3);
+    border-radius: 6px;
+    overflow: hidden;
+}
+.mod-code-editor {
+    width: 100%;
+    background: transparent;
+    border: none;
+    outline: none;
+    color: #e2e8f0;
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    line-height: 1.5;
+    padding: 10px;
+    resize: vertical;
+    tab-size: 2;
+    box-sizing: border-box;
+}
+.mod-code-editor:focus { border-color: #38bdf8; }
+
+.sandbox-checks-list { display: flex; flex-direction: column; gap: 6px; margin: 8px 0; }
+.sb-check {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: rgba(30, 41, 59, 0.5);
+    padding: 6px 8px;
+    border-radius: 4px;
+    font-size: 0.65rem;
+}
+.sb-check span { color: #94a3b8; }
+.sb-check.pass strong { color: #34d399; }
+.sb-check.fail strong { color: #f87171; }
+.sandbox-badge-status {
+    background: rgba(16, 185, 129, 0.15);
+    border: 1px solid #10b981;
+    color: #34d399;
+    font-size: 0.70rem;
+    font-weight: 800;
+    text-align: center;
+    padding: 6px;
+    border-radius: 6px;
+    margin-top: 6px;
+}
+.mod-console-output {
+    background: #05080e;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 6px;
+    padding: 8px;
+    font-size: 0.62rem;
+    font-family: var(--font-mono);
+    color: #94a3b8;
+    max-height: 140px;
+    overflow-y: auto;
+    margin: 4px 0 0 0;
+    white-space: pre-wrap;
+}
+
