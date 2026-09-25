@@ -1229,6 +1229,116 @@ button, input, select, a { -webkit-tap-highlight-color: transparent; }
     padding: 0 4px;
 }
 
+/* Sub-Ribbon: Biomes, Weather & Tactical Overlays */
+.battle-sub-ribbon {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    max-width: 980px;
+    margin: 4px auto 0;
+    width: calc(100% - 32px);
+    pointer-events: auto;
+    box-sizing: border-box;
+}
+.sub-ribbon-group {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+.battle-sub-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 8px;
+    font-size: 0.58rem;
+    font-weight: 700;
+    color: #94a3b8;
+    background: rgba(8, 14, 26, 0.88);
+    -webkit-backdrop-filter: blur(12px);
+    backdrop-filter: blur(12px);
+    border: 1px solid rgba(56, 189, 248, 0.22);
+    border-radius: 12px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    white-space: nowrap;
+}
+.battle-sub-btn:hover {
+    color: #f8fafc;
+    border-color: rgba(56, 189, 248, 0.5);
+    background: rgba(56, 189, 248, 0.12);
+    transform: translateY(-1px);
+}
+.battle-sub-btn.active {
+    color: #38bdf8;
+    background: rgba(14, 165, 233, 0.2);
+    border-color: #38bdf8;
+    box-shadow: 0 0 10px rgba(56, 189, 248, 0.3);
+}
+
+/* Veterancy Rank Pill */
+.unit-veterancy-pill {
+    font-size: 0.46rem;
+    font-weight: 900;
+    font-family: var(--font-mono);
+    color: #f59e0b;
+    background: rgba(245, 158, 11, 0.16);
+    border: 1px solid rgba(245, 158, 11, 0.4);
+    padding: 1px 4px;
+    border-radius: 3px;
+    letter-spacing: 0.05em;
+    flex-shrink: 0;
+}
+
+/* Floating Holographic Radial Order Menu */
+.battle-radial-menu {
+    position: absolute;
+    width: 140px;
+    height: 140px;
+    border-radius: 50%;
+    pointer-events: auto;
+    z-index: 60;
+    transform: translate(-50%, -50%);
+    background: radial-gradient(circle, rgba(14, 165, 233, 0.25) 0%, rgba(2, 6, 23, 0.85) 70%);
+    border: 1px solid rgba(56, 189, 248, 0.5);
+    box-shadow: 0 0 30px rgba(56, 189, 248, 0.35);
+    animation: radialFadeIn 0.14s ease-out;
+}
+@keyframes radialFadeIn {
+    from { opacity: 0; transform: translate(-50%, -50%) scale(0.75); }
+    to { opacity: 1; transform: translate(-50%, -50%) scale(1.0); }
+}
+.radial-center {
+    position: absolute;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    width: 44px; height: 44px;
+    border-radius: 50%;
+    background: rgba(15, 23, 42, 0.95);
+    border: 1px solid rgba(56, 189, 248, 0.6);
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    cursor: pointer; transition: all 0.15s ease;
+    color: #e2e8f0; font-size: 14px;
+}
+.radial-center small { font-size: 7px; font-weight: 800; color: #38bdf8; text-transform: uppercase; }
+.radial-center:hover { background: rgba(56, 189, 248, 0.3); transform: translate(-50%, -50%) scale(1.1); }
+.radial-slice {
+    position: absolute;
+    width: 40px; height: 32px;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    cursor: pointer; transition: all 0.15s ease;
+    color: #e2e8f0; font-size: 12px;
+    border-radius: 6px;
+    background: rgba(15, 23, 42, 0.7);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+}
+.radial-slice small { font-size: 7px; font-weight: 800; text-transform: uppercase; color: #94a3b8; }
+.radial-slice:hover { background: rgba(56, 189, 248, 0.35); border-color: #38bdf8; transform: scale(1.12); }
+.radial-slice.top { top: 4px; left: calc(50% - 20px); }
+.radial-slice.right { top: calc(50% - 16px); right: 4px; }
+.radial-slice.bottom { bottom: 4px; left: calc(50% - 20px); }
+.radial-slice.left { top: calc(50% - 16px); left: 4px; }
+
 /* Bottom Tactical Command Console */
 .battle-bottom-dock {
     display: flex;

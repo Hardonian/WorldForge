@@ -870,10 +870,39 @@
                                     </div>
                                     <div class="battle-faction-card hostile">
                                         <div class="faction-intel text-right">
-                                            <strong>Dust Raider Warlords</strong>
+                                            <strong id="battle-hostile-faction-name">Dust Raider Warlords</strong>
                                             <span id="battle-hostile-count">War-Rigs: 2 · Buggies: 2 · Berzerkers: 8</span>
                                         </div>
-                                        <span class="faction-emblem">⚔️</span>
+                                        <span class="faction-emblem" id="battle-hostile-emblem">⚔️</span>
+                                    </div>
+                                </div>
+
+                                <!-- Tactical Sub-Bar: Biomes, Weather & Overlays -->
+                                <div class="battle-sub-ribbon" role="toolbar" aria-label="Tactical Overlays and Environment">
+                                    <div class="sub-ribbon-group">
+                                        <button type="button" class="battle-sub-btn" id="btn-biome-toggle" title="Cycle Battlefield Biome: Desert Dunes, Cyber Metropolis, Arctic Glaciers, Volcanic Crag">
+                                            <span id="biome-icon">🏜️</span> <span id="biome-label">Dunes</span>
+                                        </button>
+                                        <button type="button" class="battle-sub-btn" id="btn-weather-toggle" title="Cycle Environmental Weather: Clear Skies, Dust Storm, Acid Rain, Ion Lightning Storm">
+                                            <span id="weather-icon">☀️</span> <span id="weather-label">Clear</span>
+                                        </button>
+                                        <button type="button" class="battle-sub-btn" id="btn-faction-skirmish" title="Cycle Hostile Faction: Dust Raiders, Iron Mandate, Free Mercantile League">
+                                            <span>⚔️</span> <span id="skirmish-faction-label">Raiders</span>
+                                        </button>
+                                    </div>
+                                    <div class="sub-ribbon-group">
+                                        <button type="button" class="battle-sub-btn toggle" id="btn-overlay-heatmap" title="Toggle Threat Heatmap & Weapon Firing Arcs [H]">
+                                            <span>📡</span> <span>Heatmap [H]</span>
+                                        </button>
+                                        <button type="button" class="battle-sub-btn toggle" id="btn-overlay-cover" title="Toggle Physical Cover & Elevation Indicators [C]">
+                                            <span>🛡️</span> <span>Cover [C]</span>
+                                        </button>
+                                        <button type="button" class="battle-sub-btn toggle" id="btn-action-cam" title="Toggle Dynamic Cinematic Action Cam & Killcam [K]">
+                                            <span>🎬</span> <span>Action Cam [K]</span>
+                                        </button>
+                                        <button type="button" class="battle-sub-btn toggle active" id="btn-battle-audio" title="Toggle Dynamic Procedural Battle Symphony [M]">
+                                            <span>🎵</span> <span>Symphony [M]</span>
+                                        </button>
                                     </div>
                                 </div>
 
@@ -885,6 +914,7 @@
                                         <div class="unit-card-details">
                                             <div class="unit-card-title-row">
                                                 <strong id="battle-unit-name">Titan Siege Mech MK-IV</strong>
+                                                <span class="unit-veterancy-pill" id="battle-unit-rank" title="Veterancy Rank">RANK I</span>
                                                 <span class="unit-role-pill" id="battle-unit-role">HEAVY ASSAULT</span>
                                             </div>
                                             <div class="unit-vitals-row">
@@ -941,7 +971,7 @@
 
                                     <!-- Tactical Battle Controls & Hotkeys -->
                                     <div class="battle-actions-bar">
-                                        <button type="button" class="battle-ctrl-btn" id="btn-battle-bullet-time" title="Toggle Bullet Time Slow-Motion (0.25x speed) to view physics explosions">
+                                        <button type="button" class="battle-ctrl-btn" id="btn-battle-bullet-time" title="Toggle Bullet Time Slow-Motion (0.25x speed) [T]">
                                             <span>⏱️ Bullet Time [T]</span>
                                         </button>
                                         <button type="button" class="battle-ctrl-btn" id="btn-battle-follow" title="Toggle Cinematic Chase Camera behind selected unit [F]">
@@ -954,6 +984,15 @@
                                             <span>✖ Return [Esc]</span>
                                         </button>
                                     </div>
+                                </div>
+
+                                <!-- Floating Contextual Radial Command Wheel -->
+                                <div class="battle-radial-menu hidden" id="battle-radial-menu" aria-hidden="true">
+                                    <div class="radial-center" id="radial-cmd-move" title="Move In Formation"><span>📍</span><small>Move</small></div>
+                                    <div class="radial-slice top" id="radial-cmd-assault" title="All-Out Assault / Focus Fire"><span>⚔️</span><small>Assault</small></div>
+                                    <div class="radial-slice right" id="radial-cmd-defend" title="Defensive Fortify Stance"><span>🛡️</span><small>Defend</small></div>
+                                    <div class="radial-slice bottom" id="radial-cmd-retreat" title="Tactical Fallback &amp; Regroup"><span>🏃</span><small>Retreat</small></div>
+                                    <div class="radial-slice left" id="radial-cmd-flank" title="Flank Hostile Rear Armor"><span>⚡</span><small>Flank</small></div>
                                 </div>
                             </div>
 

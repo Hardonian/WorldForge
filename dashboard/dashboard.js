@@ -4302,6 +4302,22 @@ const WorldForgeCG = {
         el('btn-battle-reset')?.addEventListener('click', () => typeof WorldForgeBattle3D !== 'undefined' && WorldForgeBattle3D.resetWave());
         el('btn-battle-exit')?.addEventListener('click', () => this.setViewMode('realm'));
 
+        // AAA Tactical Overlays, Biomes & Symphony
+        el('btn-biome-toggle')?.addEventListener('click', () => typeof WorldForgeBattle3D !== 'undefined' && WorldForgeBattle3D.cycleBiome());
+        el('btn-weather-toggle')?.addEventListener('click', () => typeof WorldForgeBattle3D !== 'undefined' && WorldForgeBattle3D.cycleWeather());
+        el('btn-faction-skirmish')?.addEventListener('click', () => typeof WorldForgeBattle3D !== 'undefined' && WorldForgeBattle3D.cycleHostileFaction());
+        el('btn-overlay-heatmap')?.addEventListener('click', () => typeof WorldForgeBattle3D !== 'undefined' && WorldForgeBattle3D.toggleHeatmap());
+        el('btn-overlay-cover')?.addEventListener('click', () => typeof WorldForgeBattle3D !== 'undefined' && WorldForgeBattle3D.toggleCover());
+        el('btn-action-cam')?.addEventListener('click', () => typeof WorldForgeBattle3D !== 'undefined' && WorldForgeBattle3D.toggleActionCam());
+        el('btn-battle-audio')?.addEventListener('click', () => typeof WorldForgeBattle3D !== 'undefined' && WorldForgeBattle3D.toggleAudioSymphony());
+
+        // Contextual Radial Menu Orders
+        el('radial-cmd-move')?.addEventListener('click', () => typeof WorldForgeBattle3D !== 'undefined' && WorldForgeBattle3D.executeRadialOrder('MOVE'));
+        el('radial-cmd-assault')?.addEventListener('click', () => typeof WorldForgeBattle3D !== 'undefined' && WorldForgeBattle3D.executeRadialOrder('ASSAULT'));
+        el('radial-cmd-defend')?.addEventListener('click', () => typeof WorldForgeBattle3D !== 'undefined' && WorldForgeBattle3D.executeRadialOrder('DEFEND'));
+        el('radial-cmd-retreat')?.addEventListener('click', () => typeof WorldForgeBattle3D !== 'undefined' && WorldForgeBattle3D.executeRadialOrder('RETREAT'));
+        el('radial-cmd-flank')?.addEventListener('click', () => typeof WorldForgeBattle3D !== 'undefined' && WorldForgeBattle3D.executeRadialOrder('FLANK'));
+
         el('cg-btn-zoom-in')?.addEventListener('click', () => this.zoomBy(1.28));
         el('cg-btn-zoom-out')?.addEventListener('click', () => this.zoomBy(0.78));
         el('cg-btn-reset-cam')?.addEventListener('click', () => this.fitView(true));
@@ -11823,6 +11839,43 @@ const WorldForgeBattle3D = {
         curY: 0,
     },
 
+    // AAA Biomes & Environmental States
+    currentBiome: 'dunes', // 'dunes' | 'cyber' | 'arctic' | 'volcanic'
+    currentWeather: 'clear', // 'clear' | 'sandstorm' | 'acid_rain' | 'lightning'
+    currentHostileFaction: 'raiders', // 'raiders' | 'mandate' | 'mercantile'
+
+    // Tactical Overlays & Presentation
+    showHeatmap: false,
+    showCover: false,
+    actionCam: false,
+    audioSymphony: true,
+
+    // Hero Unit Veterancy & Progression
+    heroRank: 1,
+    heroXp: 0,
+    heroKills: 0,
+
+    // Battlefield Covers & Obstacles (Destructible Physical Cover)
+    covers: [],
+
+    // Weather Simulation & Action Cam Timers
+    weatherParticles: [],
+    lightningTimer: 0,
+    lightningFlash: 0,
+    actionCamTimer: 0,
+    actionCamTarget: null,
+    musicTimer: 0,
+    musicNote: 0,
+
+    // Floating Contextual Radial Command Wheel
+    radialMenu: {
+        active: false,
+        x: 0,
+        y: 0,
+        wx: 0,
+        wz: 0,
+    },
+
     // Units, Projectiles, Shockwaves, Debris, and FX
     units: [],
     projectiles: [],
@@ -11851,7 +11904,7 @@ const WorldForgeBattle3D = {
         overdrive: 8.0,
     },
 
-    // Procedural Web Audio Engine
+    // Procedural Web Audio Engine & Battle Symphony
     audioCtx: null,
 
     initAudio() {
@@ -11861,6 +11914,46 @@ const WorldForgeBattle3D = {
         }
         if (this.audioCtx && this.audioCtx.state === 'suspended') {
             this.audioCtx.resume();
+        }
+    },
+
+    speakVoice(text) {
+        if (!this.audioSymphony) return;
+        try {
+            if ('speechSynthesis' in window) {
+                window.speechSynthesis.cancel();
+                const u = new SpeechSynthesisUtterance(text);
+                u.rate = 1.18;
+                u.pitch = 0.88;
+                u.volume = 0.7;
+                window.speechSynthesis.speak(u);
+            }
+        } catch (_) {}
+    },
+
+    playMusicStep(dt) {
+        if (!this.audioSymphony) return;
+        this.musicTimer = (this.musicTimer || 0) + dt;
+        if (this.musicTimer > 0.24) {
+            this.musicTimer = 0;
+            this.musicNote = ((this.musicNote || 0) + 1) % 16;
+
+            const bassNotes = [36.7, 36.7, 43.6, 36.7, 49.0, 36.7, 55.0, 43.6, 36.7, 36.7, 43.6, 49.0, 65.4, 55.0, 49.0, 43.6];
+            const bassFreq = bassNotes[this.musicNote];
+            const hasEnemies = this.units.filter(u => u.hp > 0 && u.team === 'hostile').length > 0;
+            const intensity = hasEnemies ? 1.0 : 0.35;
+
+            if (this.musicNote % 2 === 0) {
+                this.playTone(bassFreq, 'sawtooth', 0.16, 0.06 * intensity, -12);
+            }
+            if (this.musicNote % 4 === 2 && intensity > 0.5) {
+                this.playNoise(0.06, 0.03 * intensity, 1600);
+            }
+            if (this.musicNote % 8 === 0 && intensity > 0.5) {
+                const leadNotes = [293.7, 349.2, 440.0, 523.2];
+                const leadFreq = leadNotes[Math.floor(this.musicNote / 4) % leadNotes.length];
+                this.playTone(leadFreq, 'sine', 0.24, 0.04 * intensity, 0);
+            }
         }
     },
 
@@ -11945,6 +12038,20 @@ const WorldForgeBattle3D = {
         this.playTone(1420, 'triangle', 0.35, 0.22, 100);
     },
 
+    soundShieldHit() {
+        this.playTone(880, 'triangle', 0.16, 0.18, -320);
+    },
+
+    soundThunder() {
+        this.playNoise(1.4, 0.42, 280);
+        this.playTone(45, 'sawtooth', 1.1, 0.32, -25);
+    },
+
+    soundCrunch() {
+        this.playNoise(0.3, 0.28, 520);
+        this.playTone(85, 'square', 0.22, 0.22, -50);
+    },
+
     soundEmpZap() {
         this.playTone(450, 'sawtooth', 0.4, 0.3, -380);
         this.playNoise(0.4, 0.28, 1800);
@@ -12002,7 +12109,6 @@ const WorldForgeBattle3D = {
         const sinY = Math.sin(cam.yaw);
 
         // Ray in camera space: (u, v, 1)
-        // Inverse pitch rotation (-pitch around X)
         const x1 = u;
         const y1 = v * cosP - 1.0 * sinP;
         const z1 = v * sinP + 1.0 * cosP;
@@ -12017,7 +12123,6 @@ const WorldForgeBattle3D = {
         const camY = cam.dist * sinP;
         const camZ = cam.panZ - cam.dist * cosP * cosY;
 
-        // Ray intersection with ground plane Y = 0: camY + t * rdy = 0 => t = -camY / rdy
         if (rdy >= -0.001) return { wx: cam.panX, wz: cam.panZ };
         const t = -camY / rdy;
         if (t <= 0) return { wx: cam.panX, wz: cam.panZ };
@@ -12029,7 +12134,7 @@ const WorldForgeBattle3D = {
     },
 
     // --------------------------------------------------------------------------
-    // Lifecycle & Scene Reset
+    // Lifecycle & Tactical Controls
     // --------------------------------------------------------------------------
     activate() {
         this.active = true;
@@ -12041,6 +12146,222 @@ const WorldForgeBattle3D = {
         this.setTicker('Tactical battle grid engaged · Sanctuary Peacekeepers standing by');
     },
 
+    cycleBiome() {
+        const biomes = ['dunes', 'cyber', 'arctic', 'volcanic'];
+        const idx = (biomes.indexOf(this.currentBiome) + 1) % biomes.length;
+        this.currentBiome = biomes[idx];
+
+        const icons = { dunes: '🏜️', cyber: '🌆', arctic: '❄️', volcanic: '🌋' };
+        const names = { dunes: 'Dunes', cyber: 'Cyber', arctic: 'Arctic', volcanic: 'Volcanic' };
+
+        const iconEl = el('biome-icon');
+        if (iconEl) iconEl.textContent = icons[this.currentBiome];
+        const lblEl = el('biome-label');
+        if (lblEl) lblEl.textContent = names[this.currentBiome];
+
+        this.soundOrderAck();
+        this.speakVoice(`Environmental biome shifted to ${names[this.currentBiome]}`);
+        this.setTicker(`Environment Re-zoned: ${names[this.currentBiome].toUpperCase()} Combat Theater`);
+    },
+
+    cycleWeather() {
+        const weathers = ['clear', 'sandstorm', 'acid_rain', 'lightning'];
+        const idx = (weathers.indexOf(this.currentWeather) + 1) % weathers.length;
+        this.currentWeather = weathers[idx];
+
+        const icons = { clear: '☀️', sandstorm: '🌪️', acid_rain: '🧪', lightning: '⚡' };
+        const names = { clear: 'Clear', sandstorm: 'Sandstorm', acid_rain: 'Acid Rain', lightning: 'Ion Storm' };
+
+        const iconEl = el('weather-icon');
+        if (iconEl) iconEl.textContent = icons[this.currentWeather];
+        const lblEl = el('weather-label');
+        if (lblEl) lblEl.textContent = names[this.currentWeather];
+
+        this.initWeatherParticles();
+        this.soundOrderAck();
+        this.speakVoice(`Weather condition: ${names[this.currentWeather]}`);
+        this.setTicker(`Atmospheric Alert: ${names[this.currentWeather].toUpperCase()} sweeping across battle zone`);
+    },
+
+    cycleHostileFaction() {
+        const factions = ['raiders', 'mandate', 'mercantile'];
+        const idx = (factions.indexOf(this.currentHostileFaction) + 1) % factions.length;
+        this.currentHostileFaction = factions[idx];
+
+        const names = { raiders: 'Raiders', mandate: 'Iron Mandate', mercantile: 'Mercantile' };
+        const lblEl = el('skirmish-faction-label');
+        if (lblEl) lblEl.textContent = names[this.currentHostileFaction];
+
+        this.soundOrderAck();
+        this.speakVoice(`Opposing skirmish faction set to ${names[this.currentHostileFaction]}`);
+        this.setTicker(`Hostile Threat Detected: ${names[this.currentHostileFaction].toUpperCase()} forces deploying!`);
+        this.resetWave();
+    },
+
+    toggleHeatmap() {
+        this.showHeatmap = !this.showHeatmap;
+        el('btn-overlay-heatmap')?.classList.toggle('active', this.showHeatmap);
+        this.soundOrderAck();
+        this.speakVoice(this.showHeatmap ? 'Threat heatmap active' : 'Threat heatmap offline');
+        this.setTicker(this.showHeatmap ? '📡 Threat Heatmap & Firing Arcs Engaged' : '📡 Threat Heatmap Deactivated');
+    },
+
+    toggleCover() {
+        this.showCover = !this.showCover;
+        el('btn-overlay-cover')?.classList.toggle('active', this.showCover);
+        this.soundOrderAck();
+        this.speakVoice(this.showCover ? 'Physical cover overlay online' : 'Cover overlay offline');
+        this.setTicker(this.showCover ? '🛡️ Physical Cover & Structural Integrity Overlays Active' : '🛡️ Cover Overlays Deactivated');
+    },
+
+    toggleActionCam() {
+        this.actionCam = !this.actionCam;
+        el('btn-action-cam')?.classList.toggle('active', this.actionCam);
+        this.soundOrderAck();
+        this.actionCamTimer = 0;
+        this.speakVoice(this.actionCam ? 'Cinematic action cam online' : 'Tactical orbital cam restored');
+        this.setTicker(this.actionCam ? '🎬 Cinematic Action Cam Locked onto Frontline Skirmishes' : '🎬 Tactical Free-Orbit Restored');
+    },
+
+    toggleAudioSymphony() {
+        this.audioSymphony = !this.audioSymphony;
+        el('btn-battle-audio')?.classList.toggle('active', this.audioSymphony);
+        this.soundOrderAck();
+        if (this.audioSymphony) this.speakVoice('Battle symphony active');
+        this.setTicker(this.audioSymphony ? '🎵 Procedural Battle Symphony & Tactical Radio Barks ON' : '🎵 Battle Symphony Muted');
+    },
+
+    initWeatherParticles() {
+        this.weatherParticles = [];
+        const count = this.currentWeather === 'clear' ? 0 : 120;
+        for (let i = 0; i < count; i++) {
+            this.weatherParticles.push({
+                x: (Math.random() - 0.5) * 440,
+                y: Math.random() * 90 + 5,
+                z: (Math.random() - 0.5) * 440,
+                vx: this.currentWeather === 'sandstorm' ? (Math.random() * 40 + 70) : (Math.random() - 0.5) * 15,
+                vy: this.currentWeather === 'acid_rain' ? -(Math.random() * 70 + 90) : (Math.random() - 0.5) * 8,
+                vz: this.currentWeather === 'sandstorm' ? (Math.random() * 25 + 20) : (Math.random() - 0.5) * 15,
+                size: Math.random() * 2.2 + 0.8,
+                color: this.currentWeather === 'sandstorm' ? '#f59e0b' : (this.currentWeather === 'acid_rain' ? '#10b981' : '#38bdf8'),
+            });
+        }
+    },
+
+    // --------------------------------------------------------------------------
+    // Contextual Radial Command Wheel
+    // --------------------------------------------------------------------------
+    openRadialMenu(screenX, screenY, wx, wz) {
+        const menu = el('battle-radial-menu');
+        if (!menu) return;
+        this.radialMenu.active = true;
+        this.radialMenu.x = screenX;
+        this.radialMenu.y = screenY;
+        this.radialMenu.wx = wx;
+        this.radialMenu.wz = wz;
+
+        menu.style.left = `${screenX}px`;
+        menu.style.top = `${screenY}px`;
+        menu.classList.remove('hidden');
+        menu.setAttribute('aria-hidden', 'false');
+        this.soundOrderAck();
+    },
+
+    closeRadialMenu() {
+        const menu = el('battle-radial-menu');
+        if (!menu) return;
+        this.radialMenu.active = false;
+        menu.classList.add('hidden');
+        menu.setAttribute('aria-hidden', 'true');
+    },
+
+    executeRadialOrder(orderType) {
+        this.closeRadialMenu();
+        const wx = this.radialMenu.wx;
+        const wz = this.radialMenu.wz;
+
+        if (orderType === 'MOVE') {
+            this.issueFormationOrder(wx, wz);
+            this.speakVoice('Vanguard moving to coordinates');
+            this.setTicker(`Tactical Move Order: Repositioning to (${Math.round(wx)}, ${Math.round(wz)})`);
+        } else if (orderType === 'ASSAULT') {
+            this.selectedUnits.forEach(u => {
+                u.order = 'ASSAULT';
+                u.targetX = wx;
+                u.targetZ = wz;
+                u.cooldown = Math.max(0, u.cooldown - 0.3); // Quick assault reaction
+            });
+            this.spawnFloatie(wx, 16, wz, '⚔️ ALL-OUT ASSAULT!', '#f43f5e');
+            this.speakVoice('All units, assault doctrine engaged!');
+            this.soundRailgun();
+            this.setTicker('⚔️ Assault Directive: Aggressive forward push initiated');
+        } else if (orderType === 'DEFEND') {
+            this.selectedUnits.forEach(u => {
+                u.order = 'DEFEND';
+                u.targetX = u.x;
+                u.targetZ = u.z;
+                u.suppression = Math.max(0, (u.suppression || 0) - 20); // Rally
+            });
+            this.spawnFloatie(wx, 16, wz, '🛡️ FORTIFY LINE!', '#10b981');
+            this.speakVoice('Fortify position and hold ground!');
+            this.soundShieldPing();
+            this.setTicker('🛡️ Defensive Stance: Units anchored in position with 25% defense bonus');
+        } else if (orderType === 'RETREAT') {
+            this.selectedUnits.forEach(u => {
+                u.order = 'RETREAT';
+                u.targetX = -130;
+                u.targetZ = -90;
+                u.pinned = false;
+                u.suppression = 0;
+            });
+            // Deploy tactical smoke screen
+            for (let s = 0; s < 10; s++) {
+                this.debris.push({
+                    x: wx + (Math.random() - 0.5) * 20,
+                    y: Math.random() * 4 + 1,
+                    z: wz + (Math.random() - 0.5) * 20,
+                    vx: (Math.random() - 0.5) * 6,
+                    vy: Math.random() * 8 + 3,
+                    vz: (Math.random() - 0.5) * 6,
+                    rx: 0, ry: 0, rz: 0,
+                    vrx: 1, vry: 1, vrz: 1,
+                    size: 3.5,
+                    color: '#64748b',
+                    life: 2.5,
+                    maxLife: 2.5,
+                });
+            }
+            this.spawnFloatie(wx, 16, wz, '🏃 TACTICAL FALLBACK!', '#38bdf8');
+            this.speakVoice('Tactical retreat! Fall back and regroup!');
+            this.soundOrderAck();
+            this.setTicker('🏃 Retreat Order: Smoke deployed, squads falling back to rally point');
+        } else if (orderType === 'FLANK') {
+            // Maneuver in a broad arc around hostile flank
+            const hostiles = this.units.filter(u => u.team === 'hostile' && u.hp > 0);
+            let hx = 40, hz = 40;
+            if (hostiles.length) {
+                hx = hostiles.reduce((acc, h) => acc + h.x, 0) / hostiles.length;
+                hz = hostiles.reduce((acc, h) => acc + h.z, 0) / hostiles.length;
+            }
+            const flankX = hx + (wz > hz ? 65 : -65);
+            const flankZ = hz + (wx > hx ? -65 : 65);
+
+            this.selectedUnits.forEach(u => {
+                u.order = 'FLANK';
+                u.targetX = flankX;
+                u.targetZ = flankZ;
+            });
+            this.spawnFloatie(flankX, 16, flankZ, '⚡ FLANKING VECTOR!', '#fbbf24');
+            this.speakVoice('Flanking maneuver engaged, targeting rear armor!');
+            this.soundOrderAck();
+            this.setTicker('⚡ Flanking Vector: Circling behind enemy defenses to strike rear engine ports');
+        }
+        this.updateHUD();
+    },
+
+    // --------------------------------------------------------------------------
+    // Wave Deployment & Factions
+    // --------------------------------------------------------------------------
     resetWave() {
         this.elapsedBattleTime = 0;
         this.units = [];
@@ -12053,27 +12374,37 @@ const WorldForgeBattle3D = {
         this.selectedUnits = [];
         this.focusedUnit = null;
         this.targetedEnemy = null;
+        this.closeRadialMenu();
+        this.initWeatherParticles();
 
-        // Sanctuary Peacekeepers (Friendly - Blue/Cyan)
-        // 1. Titan Siege Mech MK-IV
+        // 1. Battlefield Destructible Physical Covers
+        this.covers = [
+            { id: 'cover-bunker-1', type: 'bunker', x: -20, z: -40, w: 22, h: 8, l: 12, hp: 600, maxHp: 600, angle: 0.4 },
+            { id: 'cover-trench-1', type: 'trench', x: 20, z: -20, w: 30, h: 4, l: 8, hp: 350, maxHp: 350, angle: -0.5 },
+            { id: 'cover-wreck-1', type: 'wreck', x: 0, z: 20, w: 18, h: 9, l: 14, hp: 500, maxHp: 500, angle: 1.1 },
+            { id: 'cover-trench-2', type: 'trench', x: -40, z: 30, w: 28, h: 4, l: 8, hp: 350, maxHp: 350, angle: 0.8 },
+            { id: 'cover-bunker-2', type: 'bunker', x: 40, z: 40, w: 20, h: 8, l: 12, hp: 650, maxHp: 650, angle: -0.3 },
+        ];
+
+        // 2. Sanctuary Peacekeepers (Friendly Force)
+        // Titan Siege Mech MK-IV (Player Hero)
         const titanMech = {
             id: 'sanctuary-titan',
             name: 'Titan Siege Mech MK-IV',
-            role: 'HEAVY ASSAULT',
+            role: 'HERO TITAN',
             icon: '🤖',
             team: 'friendly',
+            hero: true,
             x: -120,
             y: 0,
             z: -60,
-            vx: 0,
-            vy: 0,
-            vz: 0,
+            vx: 0, vy: 0, vz: 0,
             mass: 920,
             radius: 9.5,
-            hp: 650,
-            maxHp: 650,
-            shield: 250,
-            maxShield: 250,
+            hp: 650 + (this.heroRank - 1) * 80,
+            maxHp: 650 + (this.heroRank - 1) * 80,
+            shield: 250 + (this.heroRank - 1) * 40,
+            maxShield: 250 + (this.heroRank - 1) * 40,
             speed: 15,
             range: 175,
             cooldown: 0,
@@ -12087,9 +12418,11 @@ const WorldForgeBattle3D = {
             walkCycle: 0,
             overdriveTime: 0,
             stunnedTime: 0,
+            suppression: 0,
+            pinned: false,
         };
 
-        // 2. Hover Rail-Tank
+        // Hover Rail-Tank
         const hoverTank = {
             id: 'sanctuary-tank',
             name: 'Hover Rail-Tank',
@@ -12099,9 +12432,7 @@ const WorldForgeBattle3D = {
             x: -80,
             y: 0,
             z: -120,
-            vx: 0,
-            vy: 0,
-            vz: 0,
+            vx: 0, vy: 0, vz: 0,
             mass: 540,
             radius: 7.2,
             hp: 440,
@@ -12121,11 +12452,13 @@ const WorldForgeBattle3D = {
             walkCycle: 0,
             overdriveTime: 0,
             stunnedTime: 0,
+            suppression: 0,
+            pinned: false,
         };
 
         this.units.push(titanMech, hoverTank);
 
-        // 3. Vanguard Exosuit Infantry (Squad of 6)
+        // Vanguard Exosuit Infantry (Squad of 6)
         const infantryCoords = [
             [-60, -25], [-80, -40], [-100, -20],
             [-45, -60], [-30, -80], [-115, 10],
@@ -12140,9 +12473,7 @@ const WorldForgeBattle3D = {
                 x: pt[0],
                 y: 0,
                 z: pt[1],
-                vx: 0,
-                vy: 0,
-                vz: 0,
+                vx: 0, vy: 0, vz: 0,
                 mass: 95,
                 radius: 3.6,
                 hp: 125,
@@ -12162,130 +12493,212 @@ const WorldForgeBattle3D = {
                 walkCycle: Math.random() * Math.PI * 2,
                 overdriveTime: 0,
                 stunnedTime: 0,
+                suppression: 0,
+                pinned: false,
             });
         });
 
-        // Dust Raider Horde (Hostile - Crimson/Orange)
-        // 1. Raider Heavy War-Rigs (x2)
-        const rigCoords = [[110, 70], [80, 115]];
-        rigCoords.forEach((pt, idx) => {
-            this.units.push({
-                id: `raider-rig-${idx + 1}`,
-                name: `Raider War-Rig MK-${idx + 1}`,
-                role: 'SIEGE RAM',
-                icon: '🚜',
-                team: 'hostile',
-                x: pt[0],
-                y: 0,
-                z: pt[1],
-                vx: 0,
-                vy: 0,
-                vz: 0,
-                mass: 880,
-                radius: 8.8,
-                hp: 580,
-                maxHp: 580,
-                shield: 0,
-                maxShield: 0,
-                speed: 13,
-                range: 135,
-                cooldown: idx * 0.8,
-                fireRate: 2.3,
-                weaponType: 'mortar',
-                angle: -Math.PI * 0.75,
-                turretAngle: -Math.PI * 0.75,
-                order: 'ASSAULT',
-                targetX: -40,
-                targetZ: -40,
-                walkCycle: 0,
-                overdriveTime: 0,
-                stunnedTime: 0,
+        // 3. Hostile Forces by Selected Faction
+        if (this.currentHostileFaction === 'raiders') {
+            // Dust Raider Horde: War-Rigs, Scav-Buggies, Berzerkers
+            const rigCoords = [[110, 70], [80, 115]];
+            rigCoords.forEach((pt, idx) => {
+                this.units.push({
+                    id: `raider-rig-${idx + 1}`,
+                    name: `Raider War-Rig MK-${idx + 1}`,
+                    role: 'SIEGE RAM',
+                    icon: '🚜',
+                    team: 'hostile',
+                    x: pt[0], y: 0, z: pt[1],
+                    vx: 0, vy: 0, vz: 0,
+                    mass: 880, radius: 8.8,
+                    hp: 580, maxHp: 580, shield: 0, maxShield: 0,
+                    speed: 13, range: 135,
+                    cooldown: idx * 0.8, fireRate: 2.3,
+                    weaponType: 'mortar',
+                    angle: -Math.PI * 0.75, turretAngle: -Math.PI * 0.75,
+                    order: 'ASSAULT', targetX: -40, targetZ: -40,
+                    walkCycle: 0, overdriveTime: 0, stunnedTime: 0, suppression: 0, pinned: false,
+                });
             });
-        });
 
-        // 2. Scav-Buggies (x2)
-        const buggyCoords = [[140, 35], [50, 140]];
-        buggyCoords.forEach((pt, idx) => {
-            this.units.push({
-                id: `raider-buggy-${idx + 1}`,
-                name: `Scav-Buggy Alpha-${idx + 1}`,
-                role: 'FAST SKIRMISHER',
-                icon: '🏎️',
-                team: 'hostile',
-                x: pt[0],
-                y: 0,
-                z: pt[1],
-                vx: 0,
-                vy: 0,
-                vz: 0,
-                mass: 290,
-                radius: 5.2,
-                hp: 210,
-                maxHp: 210,
-                shield: 0,
-                maxShield: 0,
-                speed: 28,
-                range: 105,
-                cooldown: idx * 0.4,
-                fireRate: 0.9,
-                weaponType: 'plasma',
-                angle: -Math.PI * 0.75,
-                turretAngle: -Math.PI * 0.75,
-                order: 'FLANK',
-                targetX: -60,
-                targetZ: -60,
-                walkCycle: 0,
-                overdriveTime: 0,
-                stunnedTime: 0,
+            const buggyCoords = [[140, 35], [50, 140]];
+            buggyCoords.forEach((pt, idx) => {
+                this.units.push({
+                    id: `raider-buggy-${idx + 1}`,
+                    name: `Scav-Buggy Alpha-${idx + 1}`,
+                    role: 'FAST SKIRMISHER',
+                    icon: '🏎️',
+                    team: 'hostile',
+                    x: pt[0], y: 0, z: pt[1],
+                    vx: 0, vy: 0, vz: 0,
+                    mass: 290, radius: 5.2,
+                    hp: 210, maxHp: 210, shield: 0, maxShield: 0,
+                    speed: 28, range: 105,
+                    cooldown: idx * 0.4, fireRate: 0.9,
+                    weaponType: 'plasma',
+                    angle: -Math.PI * 0.75, turretAngle: -Math.PI * 0.75,
+                    order: 'FLANK', targetX: -60, targetZ: -60,
+                    walkCycle: 0, overdriveTime: 0, stunnedTime: 0, suppression: 0, pinned: false,
+                });
             });
-        });
 
-        // 3. Raider Berzerkers (x8)
-        const berzerkerCoords = [
-            [65, 30], [85, 50], [50, 70], [40, 90],
-            [75, 20], [95, 40], [60, 60], [45, 80],
-        ];
-        berzerkerCoords.forEach((pt, idx) => {
-            this.units.push({
-                id: `raider-berzerker-${idx + 1}`,
-                name: `Raider Berzerker #${idx + 1}`,
-                role: 'SHOCK MELEE',
-                icon: '🪓',
-                team: 'hostile',
-                x: pt[0],
-                y: 0,
-                z: pt[1],
-                vx: 0,
-                vy: 0,
-                vz: 0,
-                mass: 105,
-                radius: 3.5,
-                hp: 115,
-                maxHp: 115,
-                shield: 0,
-                maxShield: 0,
-                speed: 24,
-                range: 22,
-                cooldown: idx * 0.2,
-                fireRate: 0.75,
-                weaponType: 'melee',
-                angle: -Math.PI * 0.75,
-                turretAngle: -Math.PI * 0.75,
-                order: 'CHARGE',
-                targetX: -70,
-                targetZ: -70,
-                walkCycle: Math.random() * Math.PI * 2,
-                overdriveTime: 0,
-                stunnedTime: 0,
+            const berzerkerCoords = [
+                [65, 30], [85, 50], [50, 70], [40, 90],
+                [75, 20], [95, 40], [60, 60], [45, 80],
+            ];
+            berzerkerCoords.forEach((pt, idx) => {
+                this.units.push({
+                    id: `raider-berzerker-${idx + 1}`,
+                    name: `Raider Berzerker #${idx + 1}`,
+                    role: 'SHOCK MELEE',
+                    icon: '🪓',
+                    team: 'hostile',
+                    x: pt[0], y: 0, z: pt[1],
+                    vx: 0, vy: 0, vz: 0,
+                    mass: 105, radius: 3.5,
+                    hp: 115, maxHp: 115, shield: 0, maxShield: 0,
+                    speed: 24, range: 22,
+                    cooldown: idx * 0.2, fireRate: 0.75,
+                    weaponType: 'melee',
+                    angle: -Math.PI * 0.75, turretAngle: -Math.PI * 0.75,
+                    order: 'CHARGE', targetX: -70, targetZ: -70,
+                    walkCycle: Math.random() * Math.PI * 2, overdriveTime: 0, stunnedTime: 0, suppression: 0, pinned: false,
+                });
             });
-        });
+        } else if (this.currentHostileFaction === 'mandate') {
+            // Iron Mandate Hegemony: Imperial Dreadnought Walker, Centurion Tanks, Legionnaires
+            this.units.push({
+                id: 'mandate-dreadnought',
+                name: 'Imperial Dreadnought Walker',
+                role: 'HEAVY TITAN',
+                icon: '🤖',
+                team: 'hostile',
+                x: 115, y: 0, z: 95,
+                vx: 0, vy: 0, vz: 0,
+                mass: 980, radius: 10.0,
+                hp: 750, maxHp: 750, shield: 300, maxShield: 300,
+                speed: 12, range: 185,
+                cooldown: 0, fireRate: 2.2,
+                weaponType: 'railgun',
+                angle: -Math.PI * 0.75, turretAngle: -Math.PI * 0.75,
+                order: 'ASSAULT', targetX: -40, targetZ: -40,
+                walkCycle: 0, overdriveTime: 0, stunnedTime: 0, suppression: 0, pinned: false,
+            });
+
+            const centurionCoords = [[85, 45], [45, 85]];
+            centurionCoords.forEach((pt, idx) => {
+                this.units.push({
+                    id: `mandate-centurion-${idx + 1}`,
+                    name: `Centurion Battle Tank #${idx + 1}`,
+                    role: 'MAIN BATTLE TANK',
+                    icon: '🛡️',
+                    team: 'hostile',
+                    x: pt[0], y: 0, z: pt[1],
+                    vx: 0, vy: 0, vz: 0,
+                    mass: 620, radius: 7.5,
+                    hp: 480, maxHp: 480, shield: 140, maxShield: 140,
+                    speed: 18, range: 150,
+                    cooldown: idx * 0.5, fireRate: 1.8,
+                    weaponType: 'ion_slug',
+                    angle: -Math.PI * 0.75, turretAngle: -Math.PI * 0.75,
+                    order: 'DEFEND', targetX: -30, targetZ: -30,
+                    walkCycle: 0, overdriveTime: 0, stunnedTime: 0, suppression: 0, pinned: false,
+                });
+            });
+
+            const legionCoords = [[65, 15], [80, 25], [95, 35], [35, 65], [45, 80], [55, 95]];
+            legionCoords.forEach((pt, idx) => {
+                this.units.push({
+                    id: `mandate-legionnaire-${idx + 1}`,
+                    name: `Mandate Phalanx #${idx + 1}`,
+                    role: 'SHIELD PHALANX',
+                    icon: '⚔️',
+                    team: 'hostile',
+                    x: pt[0], y: 0, z: pt[1],
+                    vx: 0, vy: 0, vz: 0,
+                    mass: 120, radius: 3.8,
+                    hp: 140, maxHp: 140, shield: 60, maxShield: 60,
+                    speed: 18, range: 95,
+                    cooldown: idx * 0.18, fireRate: 0.7,
+                    weaponType: 'plasma',
+                    angle: -Math.PI * 0.75, turretAngle: -Math.PI * 0.75,
+                    order: 'DEFEND', targetX: pt[0] - 40, targetZ: pt[1] - 40,
+                    walkCycle: Math.random() * Math.PI * 2, overdriveTime: 0, stunnedTime: 0, suppression: 0, pinned: false,
+                });
+            });
+        } else if (this.currentHostileFaction === 'mercantile') {
+            // Free Mercantile League: Ion-Skimmers, Automated Turrets, Enforcers
+            const skimmerCoords = [[120, 50], [90, 90], [50, 120]];
+            skimmerCoords.forEach((pt, idx) => {
+                this.units.push({
+                    id: `league-skimmer-${idx + 1}`,
+                    name: `League Ion-Skimmer #${idx + 1}`,
+                    role: 'ION SKIMMER',
+                    icon: '🛸',
+                    team: 'hostile',
+                    x: pt[0], y: 0, z: pt[1],
+                    vx: 0, vy: 0, vz: 0,
+                    mass: 380, radius: 6.5,
+                    hp: 360, maxHp: 360, shield: 180, maxShield: 180,
+                    speed: 30, range: 140,
+                    cooldown: idx * 0.4, fireRate: 1.3,
+                    weaponType: 'ion_slug',
+                    angle: -Math.PI * 0.75, turretAngle: -Math.PI * 0.75,
+                    order: 'FLANK', targetX: -50, targetZ: -50,
+                    walkCycle: 0, overdriveTime: 0, stunnedTime: 0, suppression: 0, pinned: false,
+                });
+            });
+
+            const turretCoords = [[70, 40], [40, 70]];
+            turretCoords.forEach((pt, idx) => {
+                this.units.push({
+                    id: `league-turret-${idx + 1}`,
+                    name: `Pulse Turret Pod #${idx + 1}`,
+                    role: 'RAPID TURRET',
+                    icon: '📡',
+                    team: 'hostile',
+                    x: pt[0], y: 0, z: pt[1],
+                    vx: 0, vy: 0, vz: 0,
+                    mass: 700, radius: 5.8,
+                    hp: 310, maxHp: 310, shield: 100, maxShield: 100,
+                    speed: 0, range: 160,
+                    cooldown: idx * 0.3, fireRate: 0.5,
+                    weaponType: 'plasma',
+                    angle: -Math.PI * 0.75, turretAngle: -Math.PI * 0.75,
+                    order: 'DEFEND', targetX: pt[0], targetZ: pt[1],
+                    walkCycle: 0, overdriveTime: 0, stunnedTime: 0, suppression: 0, pinned: false,
+                });
+            });
+
+            const enforcerCoords = [[80, 20], [90, 30], [100, 40], [30, 80], [40, 90], [50, 100]];
+            enforcerCoords.forEach((pt, idx) => {
+                this.units.push({
+                    id: `guild-enforcer-${idx + 1}`,
+                    name: `Guild Enforcer #${idx + 1}`,
+                    role: 'CORP ENFORCER',
+                    icon: '⚡',
+                    team: 'hostile',
+                    x: pt[0], y: 0, z: pt[1],
+                    vx: 0, vy: 0, vz: 0,
+                    mass: 90, radius: 3.5,
+                    hp: 120, maxHp: 120, shield: 50, maxShield: 50,
+                    speed: 21, range: 100,
+                    cooldown: idx * 0.15, fireRate: 0.65,
+                    weaponType: 'plasma',
+                    angle: -Math.PI * 0.75, turretAngle: -Math.PI * 0.75,
+                    order: 'ASSAULT', targetX: -50, targetZ: -50,
+                    walkCycle: Math.random() * Math.PI * 2, overdriveTime: 0, stunnedTime: 0, suppression: 0, pinned: false,
+                });
+            });
+        }
 
         // Auto-select Titan Mech by default
         this.selectedUnits = [titanMech];
         this.focusedUnit = titanMech;
         this.updateHUD();
         this.soundOrderAck();
-        this.setTicker('Fresh Sanctuary battle wave deployed · Stand firm against the Raider horde!');
+        this.setTicker(`Battle wave engaged against ${this.currentHostileFaction.toUpperCase()} forces · Hold the line!`);
     },
 
     // --------------------------------------------------------------------------
@@ -12300,7 +12713,6 @@ const WorldForgeBattle3D = {
         this.soundOrderAck();
         this.setTicker(`Tactical Formation adjusted: ${type.toUpperCase()} active`);
 
-        // If units are selected, realign their formation targets
         if (this.selectedUnits.length > 1 && this.focusedUnit) {
             this.issueFormationOrder(this.focusedUnit.x, this.focusedUnit.z);
         }
@@ -12365,16 +12777,15 @@ const WorldForgeBattle3D = {
         }
 
         if (power === 'orbital') {
-            // Target centroid of hostiles or ground aim
             const hostiles = this.units.filter(u => u.team === 'hostile' && u.hp > 0);
-            let tx = 50;
-            let tz = 50;
+            let tx = 50, tz = 50;
             if (hostiles.length) {
                 tx = hostiles.reduce((acc, h) => acc + h.x, 0) / hostiles.length;
                 tz = hostiles.reduce((acc, h) => acc + h.z, 0) / hostiles.length;
             }
             this.cooldowns.orbital = this.COOLDOWN_MAX.orbital;
             this.soundOrbitalBeam();
+            this.speakVoice('Orbital kinetic strike authorized from Selene-1!');
             this.setTicker('🎯 ORBITAL KINETIC STRIKE authorized from Selene-1!');
 
             setTimeout(() => {
@@ -12383,7 +12794,6 @@ const WorldForgeBattle3D = {
                 this.spawnFloatie(tx, 15, tz, '💥 ORBITAL BLAST! -360', '#f59e0b');
             }, 750);
         } else if (power === 'barrier') {
-            // Deploy Aegis Dome at center of selected units or Titan Mech
             const center = this.focusedUnit || this.selectedUnits[0] || { x: -50, z: -50 };
             this.barrierDomes.push({
                 x: center.x,
@@ -12394,10 +12804,10 @@ const WorldForgeBattle3D = {
             });
             this.cooldowns.barrier = this.COOLDOWN_MAX.barrier;
             this.soundShieldPing();
+            this.speakVoice('Aegis barrier dome deployed!');
             this.setTicker('🛡️ AEGIS ENERGY BARRIER deployed! Deflecting ballistic trajectories');
             this.spawnFloatie(center.x, 15, center.z, '🛡️ AEGIS SHIELD ACTIVE', '#38bdf8');
         } else if (power === 'emp') {
-            // EMP Burst from friendly vanguard center
             const center = this.focusedUnit || { x: -50, z: -50 };
             this.shockwaves.push({
                 x: center.x,
@@ -12410,7 +12820,6 @@ const WorldForgeBattle3D = {
                 color: '#818cf8',
                 hitUnits: new Set(),
             });
-            // Stun all hostiles within 120m for 4.2 seconds
             this.units.filter(u => u.team === 'hostile' && u.hp > 0).forEach(u => {
                 const dist = Math.hypot(u.x - center.x, u.z - center.z);
                 if (dist <= 120) {
@@ -12422,9 +12831,9 @@ const WorldForgeBattle3D = {
             });
             this.cooldowns.emp = this.COOLDOWN_MAX.emp;
             this.soundEmpZap();
-            this.setTicker('⚡ EMP SHOCKWAVE detonated! Raider electronics disabled for 4s');
+            this.speakVoice('EMP detonation successful. Hostile electronics offline!');
+            this.setTicker('⚡ EMP SHOCKWAVE detonated! Enemy electronics disabled for 4s');
         } else if (power === 'overdrive') {
-            // Blitz Charge: +100% velocity and 3x mass impulse for 5s
             this.selectedUnits.forEach(u => {
                 u.overdriveTime = 5.0;
                 u.vx *= 2.0;
@@ -12433,6 +12842,7 @@ const WorldForgeBattle3D = {
             });
             this.cooldowns.overdrive = this.COOLDOWN_MAX.overdrive;
             this.soundRailgun();
+            this.speakVoice('Blitz overdrive active! Maximum impulse!');
             this.setTicker('🚀 BLITZ OVERDRIVE initiated! +100% velocity & heavy ram impulse');
         }
         this.updateHUD();
@@ -12453,11 +12863,40 @@ const WorldForgeBattle3D = {
     },
 
     // --------------------------------------------------------------------------
-    // Physics Simulation Engine (Euler Integration, Collisions, Projectiles)
+    // Physics Simulation Engine (Cover Absorption, Directional Armor, Morale)
     // --------------------------------------------------------------------------
     updatePhysics(rawDt) {
         const dt = this.bulletTime ? rawDt * 0.25 : rawDt;
         this.elapsedBattleTime += dt;
+
+        // Music Symphony & Weather Updates
+        this.playMusicStep(dt);
+
+        if (this.currentWeather === 'lightning') {
+            this.lightningTimer = (this.lightningTimer || 0) + dt;
+            if (this.lightningTimer > 4.5 + Math.random() * 4.0) {
+                this.lightningTimer = 0;
+                this.lightningFlash = 1.0;
+                this.soundThunder();
+                this.speakVoice('Ion lightning strike detected');
+            }
+        }
+        if (this.lightningFlash > 0) {
+            this.lightningFlash = Math.max(0, this.lightningFlash - dt * 2.8);
+        }
+
+        // Weather Particle Simulation
+        this.weatherParticles.forEach(p => {
+            p.x += p.vx * dt;
+            p.y += p.vy * dt;
+            p.z += p.vz * dt;
+            if (p.x > 220) p.x = -220;
+            if (p.x < -220) p.x = 220;
+            if (p.z > 220) p.z = -220;
+            if (p.z < -220) p.z = 220;
+            if (p.y < 0) p.y = 80;
+            if (p.y > 90) p.y = 10;
+        });
 
         // Ability Cooldowns
         for (const k in this.cooldowns) {
@@ -12472,11 +12911,11 @@ const WorldForgeBattle3D = {
         this.units.forEach(u => {
             if (u.hp <= 0) return;
 
+            // Stun & Overdrive timers
             if (u.stunnedTime > 0) {
                 u.stunnedTime = Math.max(0, u.stunnedTime - dt);
                 return;
             }
-
             if (u.overdriveTime > 0) {
                 u.overdriveTime = Math.max(0, u.overdriveTime - dt);
             }
@@ -12486,14 +12925,22 @@ const WorldForgeBattle3D = {
                 u.cooldown = Math.max(0, u.cooldown - dt);
             }
 
-            // Movement toward target or order
+            // Morale & Suppression Recovery
+            if (u.suppression > 0) {
+                u.suppression = Math.max(0, u.suppression - dt * 14.0);
+                if (u.suppression < 45) {
+                    u.pinned = false;
+                }
+            }
+
+            // Movement logic & Pinned penalty
             const dx = u.targetX - u.x;
             const dz = u.targetZ - u.z;
             const dist = Math.hypot(dx, dz);
+            let effectiveSpeed = u.overdriveTime > 0 ? u.speed * 2.1 : u.speed;
+            if (u.pinned) effectiveSpeed *= 0.35; // 65% speed penalty when pinned
 
-            const effectiveSpeed = u.overdriveTime > 0 ? u.speed * 2.1 : u.speed;
-
-            if (dist > 4.0) {
+            if (dist > 4.0 && u.speed > 0) {
                 const moveAngle = Math.atan2(dz, dx);
                 u.angle += (moveAngle - u.angle) * 0.14;
                 const ax = Math.cos(moveAngle) * effectiveSpeed * 4.0;
@@ -12517,7 +12964,7 @@ const WorldForgeBattle3D = {
             if (u.y < 0) {
                 u.y = 0;
                 if (Math.abs(u.vy) > 2.0) {
-                    u.vy = -u.vy * 0.35; // Ground bounce
+                    u.vy = -u.vy * 0.35;
                 } else {
                     u.vy = 0;
                 }
@@ -12527,6 +12974,23 @@ const WorldForgeBattle3D = {
             const friction = Math.pow(0.88, dt * 60);
             u.vx *= friction;
             u.vz *= friction;
+
+            // Destructible Cover Repulsion (Rigid obstacle navigation)
+            this.covers.forEach(c => {
+                if (c.hp <= 0) return;
+                const cdx = u.x - c.x;
+                const cdz = u.z - c.z;
+                const cdist = Math.hypot(cdx, cdz) || 0.001;
+                const minDist = u.radius + (c.w + c.l) * 0.22;
+                if (cdist < minDist) {
+                    const nx = cdx / cdist;
+                    const nz = cdz / cdist;
+                    u.x = c.x + nx * minDist;
+                    u.z = c.z + nz * minDist;
+                    u.vx *= 0.5;
+                    u.vz *= 0.5;
+                }
+            });
 
             // Combat AI: Acquire Targets & Fire
             this.handleUnitCombat(u, dt);
@@ -12545,7 +13009,6 @@ const WorldForgeBattle3D = {
                 const minDist = u1.radius + u2.radius;
 
                 if (cdist < minDist) {
-                    // Normal vector
                     const nx = cdx / cdist;
                     const nz = cdz / cdist;
                     const pen = minDist - cdist;
@@ -12554,26 +13017,23 @@ const WorldForgeBattle3D = {
                     const m2 = u2.overdriveTime > 0 ? u2.mass * 3.0 : u2.mass;
                     const totalMass = m1 + m2;
 
-                    // Positional separation
                     u1.x -= nx * pen * (m2 / totalMass);
                     u1.z -= nz * pen * (m2 / totalMass);
                     u2.x += nx * pen * (m1 / totalMass);
                     u2.z += nz * pen * (m1 / totalMass);
 
-                    // Impulse collision response
                     const rvx = u2.vx - u1.vx;
                     const rvz = u2.vz - u1.vz;
                     const velAlongNorm = rvx * nx + rvz * nz;
 
                     if (velAlongNorm < 0) {
-                        const e = 0.42; // Restitution
+                        const e = 0.42;
                         const impulse = -(1 + e) * velAlongNorm / (1 / m1 + 1 / m2);
                         u1.vx -= (impulse / m1) * nx;
                         u1.vz -= (impulse / m1) * nz;
                         u2.vx += (impulse / m2) * nx;
                         u2.vz += (impulse / m2) * nz;
 
-                        // Ramming damage if collision speed is significant
                         const relSpeed = Math.abs(velAlongNorm);
                         if (relSpeed > 9.0) {
                             const ramDamage = Math.floor(relSpeed * 3.5);
@@ -12583,21 +13043,12 @@ const WorldForgeBattle3D = {
                                 this.spawnFloatie((u1.x + u2.x) / 2, 8, (u1.z + u2.z) / 2, `💥 RAM! -${ramDamage}`, '#f59e0b');
                                 this.soundExplosion3D(Math.hypot(u1.x, u1.z), 0.6);
                             }
-                            // Spawn spark debris
                             for (let s = 0; s < 5; s++) {
                                 this.debris.push({
-                                    x: (u1.x + u2.x) / 2,
-                                    y: 3,
-                                    z: (u1.z + u2.z) / 2,
-                                    vx: (Math.random() - 0.5) * 16,
-                                    vy: Math.random() * 14 + 5,
-                                    vz: (Math.random() - 0.5) * 16,
-                                    rx: 0, ry: 0, rz: 0,
-                                    vrx: Math.random() * 8, vry: Math.random() * 8, vrz: Math.random() * 8,
-                                    size: 1.2,
-                                    color: '#fde047',
-                                    life: 0.8,
-                                    maxLife: 0.8,
+                                    x: (u1.x + u2.x) / 2, y: 3, z: (u1.z + u2.z) / 2,
+                                    vx: (Math.random() - 0.5) * 16, vy: Math.random() * 14 + 5, vz: (Math.random() - 0.5) * 16,
+                                    rx: 0, ry: 0, rz: 0, vrx: 5, vry: 5, vrz: 5,
+                                    size: 1.2, color: '#fde047', life: 0.8, maxLife: 0.8,
                                 });
                             }
                         }
@@ -12606,7 +13057,7 @@ const WorldForgeBattle3D = {
             }
         }
 
-        // 3. Update Ballistic Projectiles
+        // 3. Update Ballistic Projectiles (With Cover Interception & Directional Armor)
         for (let i = this.projectiles.length - 1; i >= 0; i--) {
             const p = this.projectiles[i];
 
@@ -12623,15 +13074,49 @@ const WorldForgeBattle3D = {
             for (const dome of this.barrierDomes) {
                 const domeDist = Math.hypot(p.x - dome.x, p.z - dome.z);
                 if (p.team === 'hostile' && domeDist < dome.radius && p.y < dome.radius) {
-                    // Deflect projectile!
                     p.vx = -p.vx * 0.8;
                     p.vz = -p.vz * 0.8;
                     p.vy = Math.abs(p.vy) + 12;
-                    p.team = 'friendly'; // Rebounded!
+                    p.team = 'friendly';
                     this.soundShieldPing();
                     this.spawnFloatie(p.x, p.y + 4, p.z, '🛡️ DEFLECTED!', '#38bdf8');
                     break;
                 }
+            }
+
+            // Check Physical Destructible Cover Interception
+            let coverBlocked = false;
+            for (let cIdx = this.covers.length - 1; cIdx >= 0; cIdx--) {
+                const cover = this.covers[cIdx];
+                if (cover.hp <= 0) continue;
+                const distToCover = Math.hypot(p.x - cover.x, p.z - cover.z);
+                if (distToCover <= (cover.w + cover.l) * 0.28 && p.y <= cover.h + 2) {
+                    coverBlocked = true;
+                    cover.hp = Math.max(0, cover.hp - p.damage);
+                    this.soundCrunch();
+                    this.spawnFloatie(cover.x, cover.h + 4, cover.z, `🛡️ COVER HIT! -${p.damage}`, '#94a3b8');
+
+                    // Spark & rubble debris from cover
+                    for (let s = 0; s < 4; s++) {
+                        this.debris.push({
+                            x: p.x, y: p.y, z: p.z,
+                            vx: (Math.random() - 0.5) * 14, vy: Math.random() * 12 + 4, vz: (Math.random() - 0.5) * 14,
+                            rx: 0, ry: 0, rz: 0, vrx: 4, vry: 4, vrz: 4,
+                            size: 1.5, color: '#64748b', life: 0.9, maxLife: 0.9,
+                        });
+                    }
+
+                    if (cover.hp <= 0) {
+                        this.createExplosion(cover.x, cover.z, 20, 160, 20, '#64748b');
+                        this.spawnFloatie(cover.x, 14, cover.z, '💥 COVER DESTROYED!', '#f43f5e');
+                        this.speakVoice('Battlefield cover structure collapsed!');
+                    }
+                    break;
+                }
+            }
+            if (coverBlocked) {
+                this.projectiles.splice(i, 1);
+                continue;
             }
 
             // Impact with Ground
@@ -12644,18 +13129,62 @@ const WorldForgeBattle3D = {
                 continue;
             }
 
-            // Impact with Enemy Unit
+            // Impact with Target Units (Directional Armor Calculation)
             const targets = this.units.filter(u => u.hp > 0 && u.team !== p.team);
             let hit = false;
             for (const t of targets) {
                 const distXZ = Math.hypot(p.x - t.x, p.z - t.z);
                 if (distXZ <= t.radius + 1.5 && p.y <= 12) {
                     hit = true;
-                    // Apply damage
-                    let finalDmg = p.damage;
-                    if (this.activeFormation === 'shield' && t.team === 'friendly') {
-                        finalDmg = Math.floor(finalDmg * 0.65); // 35% reduction in shield wall
+
+                    // Directional Armor Calculation
+                    const projectileHeading = Math.atan2(p.vz, p.vx);
+                    let angleDiff = Math.abs(projectileHeading - t.angle) % (Math.PI * 2);
+                    if (angleDiff > Math.PI) angleDiff = Math.PI * 2 - angleDiff;
+
+                    let armorMultiplier = 1.0;
+                    let armorLabel = '';
+                    let armorColor = '#f87171';
+
+                    if (angleDiff > 2.2) {
+                        // Frontal Armor Deflection (-50% damage)
+                        armorMultiplier = 0.5;
+                        armorLabel = '🛡️ FRONT DEFLECT';
+                        armorColor = '#38bdf8';
+                        this.soundShieldHit();
+                    } else if (angleDiff < 0.95) {
+                        // Rear Engine Critical (2.2x damage!)
+                        armorMultiplier = 2.2;
+                        armorLabel = '💥 REAR CRIT x2.2!';
+                        armorColor = '#f43f5e';
+                        this.soundCrunch();
+                    } else {
+                        // Flanking Multiplier (1.35x damage)
+                        armorMultiplier = 1.35;
+                        armorLabel = '⚡ FLANKED x1.35';
+                        armorColor = '#fbbf24';
                     }
+
+                    // Check if unit is in physical cover (-40% damage absorption)
+                    let inCover = false;
+                    for (const cv of this.covers) {
+                        if (cv.hp > 0 && Math.hypot(t.x - cv.x, t.z - cv.z) < 18) {
+                            inCover = true;
+                            break;
+                        }
+                    }
+                    if (inCover) {
+                        armorMultiplier *= 0.6;
+                        armorLabel += ' [IN COVER]';
+                    }
+
+                    if (this.activeFormation === 'shield' && t.team === 'friendly') {
+                        armorMultiplier *= 0.65;
+                    }
+
+                    let finalDmg = Math.round(p.damage * armorMultiplier);
+
+                    // Shield absorption
                     if (t.shield > 0) {
                         const sDmg = Math.min(t.shield, finalDmg);
                         t.shield -= sDmg;
@@ -12663,12 +13192,30 @@ const WorldForgeBattle3D = {
                     }
                     t.hp = Math.max(0, t.hp - finalDmg);
 
+                    // Suppression build-up
+                    t.suppression = Math.min(100, (t.suppression || 0) + (p.explosive ? 35 : 18));
+                    if (t.suppression >= 60 && !t.pinned) {
+                        t.pinned = true;
+                        this.spawnFloatie(t.x, 18, t.z, '⚠️ PINNED!', '#fbbf24');
+                        if (t.team === 'friendly') this.speakVoice('Squad pinned under heavy fire!');
+                    }
+
                     // Impact impulse
                     t.vx += (p.vx * (p.mass || 10) / t.mass) * 1.5;
                     t.vz += (p.vz * (p.mass || 10) / t.mass) * 1.5;
                     t.vy += 2.0;
 
-                    this.spawnFloatie(t.x, 14, t.z, `-${p.damage}`, p.color || '#f87171');
+                    this.spawnFloatie(t.x, 14, t.z, `${armorLabel} -${finalDmg}`, armorColor);
+
+                    // Check Unit Destruction & Hero Veterancy XP
+                    if (t.hp <= 0) {
+                        this.createExplosion(t.x, t.z, t.radius * 2.8, t.mass * 0.4, 25, t.team === 'friendly' ? '#38bdf8' : '#ea580c');
+                        if (t.team === 'hostile') {
+                            this.gainHeroXp(t.maxHp * 0.5);
+                            this.speakVoice('Target neutralized');
+                        }
+                    }
+
                     if (p.explosive) {
                         this.createExplosion(p.x, p.z, p.splashRadius || 20, p.splashPower || 180, p.damage * 0.5, p.color || '#f97316');
                     }
@@ -12680,12 +13227,11 @@ const WorldForgeBattle3D = {
             }
         }
 
-        // 4. Update Explosive Radial Shockwaves
+        // 4. Update Explosive Radial Shockwaves (Suppression + Impulse)
         for (let i = this.shockwaves.length - 1; i >= 0; i--) {
             const sw = this.shockwaves[i];
             sw.r += sw.speed * dt;
 
-            // Damage and fling units touched by shockwave
             this.units.filter(u => u.hp > 0).forEach(u => {
                 if (sw.hitUnits.has(u.id)) return;
                 const d = Math.hypot(u.x - sw.x, u.z - sw.z);
@@ -12694,16 +13240,19 @@ const WorldForgeBattle3D = {
                     const falloff = Math.max(0.2, 1.0 - d / sw.maxR);
                     const dmg = Math.floor(sw.damage * falloff);
                     u.hp = Math.max(0, u.hp - dmg);
+                    u.suppression = Math.min(100, (u.suppression || 0) + 40);
 
-                    // Physics impulse: outward + launch into the air
                     const nx = (u.x - sw.x) / (d || 1);
                     const nz = (u.z - sw.z) / (d || 1);
                     const impulse = (sw.power / u.mass) * falloff * 24.0;
                     u.vx += nx * impulse;
                     u.vz += nz * impulse;
-                    u.vy += Math.min(22, impulse * 0.45 + 3.0); // Launch airborne
+                    u.vy += Math.min(22, impulse * 0.45 + 3.0);
 
                     this.spawnFloatie(u.x, 12, u.z, `💥 -${dmg}`, sw.color);
+                    if (u.hp <= 0 && u.team === 'hostile') {
+                        this.gainHeroXp(u.maxHp * 0.5);
+                    }
                 }
             });
 
@@ -12719,19 +13268,15 @@ const WorldForgeBattle3D = {
             d.x += d.vx * dt;
             d.y += d.vy * dt;
             d.z += d.vz * dt;
-
             d.rx += d.vrx * dt;
             d.ry += d.vry * dt;
             d.rz += d.vrz * dt;
 
-            // Ground bounce
             if (d.y <= 0) {
                 d.y = 0;
                 d.vy = -d.vy * 0.42;
                 d.vx *= 0.82;
                 d.vz *= 0.82;
-                d.vrx *= 0.7;
-                d.vry *= 0.7;
             }
 
             d.life -= dt;
@@ -12764,8 +13309,18 @@ const WorldForgeBattle3D = {
             if (f.life <= 0) this.floaties.splice(i, 1);
         }
 
-        // Camera follow lerp
-        if (this.chaseCam && this.focusedUnit && this.focusedUnit.hp > 0) {
+        // Camera Follow & Action Cam Logic
+        if (this.actionCam) {
+            this.actionCamTimer = (this.actionCamTimer || 0) + dt;
+            const hero = this.units.find(u => u.hero && u.hp > 0) || this.focusedUnit;
+            if (hero) {
+                this.camera.targetPanX = hero.x;
+                this.camera.targetPanZ = hero.z;
+                this.camera.targetDist = 135;
+                this.camera.targetPitch = 0.32;
+                this.camera.targetYaw = hero.turretAngle + Math.PI + Math.sin(this.actionCamTimer * 0.4) * 0.35;
+            }
+        } else if (this.chaseCam && this.focusedUnit && this.focusedUnit.hp > 0) {
             this.camera.targetPanX = this.focusedUnit.x;
             this.camera.targetPanZ = this.focusedUnit.z;
         }
@@ -12779,16 +13334,41 @@ const WorldForgeBattle3D = {
         this.updateHUD();
     },
 
+    gainHeroXp(amount) {
+        this.heroXp += amount;
+        this.heroKills += 1;
+        const thresholds = [0, 240, 600, 1100, 1800];
+        let newRank = 1;
+        for (let r = 1; r < thresholds.length; r++) {
+            if (this.heroXp >= thresholds[r]) newRank = r + 1;
+        }
+
+        if (newRank > this.heroRank) {
+            this.heroRank = newRank;
+            const roman = ['I', 'II', 'III', 'IV', 'V'][this.heroRank - 1] || 'V';
+            const rankPill = el('battle-unit-rank');
+            if (rankPill) rankPill.textContent = `RANK ${roman}`;
+
+            const hero = this.units.find(u => u.hero);
+            if (hero) {
+                hero.maxHp += 80;
+                hero.hp = Math.min(hero.maxHp, hero.hp + 120);
+                this.spawnFloatie(hero.x, 22, hero.z, `⭐ VETERANCY PROMOTION: RANK ${roman}!`, '#f59e0b');
+            }
+            this.playTone(880, 'triangle', 0.6, 0.35, 120);
+            this.speakVoice(`Titan Mech promoted to Veterancy Rank ${roman}!`);
+            this.setTicker(`⭐ HERO PROMOTION: Titan Mech promoted to RANK ${roman}! Maximum hull integrity expanded.`);
+        }
+    },
+
     handleUnitCombat(u, dt) {
         const enemies = this.units.filter(e => e.hp > 0 && e.team !== u.team);
         if (!enemies.length) return;
 
-        // Determine target
         let target = null;
         if (u.team === 'friendly' && this.targetedEnemy && this.targetedEnemy.hp > 0) {
             target = this.targetedEnemy;
         } else {
-            // Find closest enemy
             let closestDist = Infinity;
             enemies.forEach(e => {
                 const d = Math.hypot(e.x - u.x, e.z - u.z);
@@ -12805,22 +13385,18 @@ const WorldForgeBattle3D = {
         const aimAngle = Math.atan2(target.z - u.z, target.x - u.x);
         u.turretAngle += (aimAngle - u.turretAngle) * 0.2;
 
-        // Firing logic
         if (dToTarget <= u.range && u.cooldown <= 0) {
             u.cooldown = u.fireRate;
 
             if (u.weaponType === 'railgun') {
-                // High-velocity kinetic railgun slug
                 const speed = 340;
                 this.projectiles.push({
-                    x: u.x,
-                    y: 8,
-                    z: u.z,
+                    x: u.x, y: 8, z: u.z,
                     vx: Math.cos(u.turretAngle) * speed,
                     vy: 0,
                     vz: Math.sin(u.turretAngle) * speed,
                     gravity: false,
-                    damage: 180,
+                    damage: 180 + (u.hero ? (this.heroRank - 1) * 25 : 0),
                     mass: 35,
                     team: u.team,
                     color: '#38bdf8',
@@ -12831,9 +13407,7 @@ const WorldForgeBattle3D = {
             } else if (u.weaponType === 'ion_slug') {
                 const speed = 260;
                 this.projectiles.push({
-                    x: u.x,
-                    y: 6,
-                    z: u.z,
+                    x: u.x, y: 6, z: u.z,
                     vx: Math.cos(u.turretAngle) * speed,
                     vy: 0,
                     vz: Math.sin(u.turretAngle) * speed,
@@ -12848,9 +13422,7 @@ const WorldForgeBattle3D = {
             } else if (u.weaponType === 'plasma') {
                 const speed = 190;
                 this.projectiles.push({
-                    x: u.x,
-                    y: 5,
-                    z: u.z,
+                    x: u.x, y: 5, z: u.z,
                     vx: Math.cos(u.turretAngle) * speed + (Math.random() - 0.5) * 15,
                     vy: (Math.random() - 0.5) * 4,
                     vz: Math.sin(u.turretAngle) * speed + (Math.random() - 0.5) * 15,
@@ -12863,14 +13435,11 @@ const WorldForgeBattle3D = {
                 });
                 this.soundPlasma();
             } else if (u.weaponType === 'mortar') {
-                // Ballistic parabolic trajectory
                 const flightTime = 1.6;
                 const vxz = dToTarget / flightTime;
-                const vy = -0.5 * -36.0 * flightTime; // Peak arc
+                const vy = -0.5 * -36.0 * flightTime;
                 this.projectiles.push({
-                    x: u.x,
-                    y: 7,
-                    z: u.z,
+                    x: u.x, y: 7, z: u.z,
                     vx: Math.cos(u.turretAngle) * vxz,
                     vy: vy,
                     vz: Math.sin(u.turretAngle) * vxz,
@@ -12887,7 +13456,6 @@ const WorldForgeBattle3D = {
                 this.soundArtilleryLaunch();
                 this.setTicker(`${u.name} launched heavy ballistic artillery shell!`);
             } else if (u.weaponType === 'melee') {
-                // Melee strike
                 target.hp = Math.max(0, target.hp - 45);
                 target.vx += Math.cos(u.turretAngle) * 8.0;
                 target.vz += Math.sin(u.turretAngle) * 8.0;
@@ -12899,41 +13467,24 @@ const WorldForgeBattle3D = {
 
     createExplosion(x, z, radius, power, damage, color) {
         this.shockwaves.push({
-            x: x,
-            z: z,
-            r: 2,
-            maxR: radius,
-            speed: 90,
-            power: power,
-            damage: damage,
-            color: color,
+            x: x, z: z,
+            r: 2, maxR: radius, speed: 90, power: power, damage: damage, color: color,
             hitUnits: new Set(),
         });
 
-        // Spawn 18 tumbling 3D debris fragments
         for (let i = 0; i < 18; i++) {
             const angle = Math.random() * Math.PI * 2;
             const speed = Math.random() * 24 + 10;
             this.debris.push({
-                x: x,
-                y: Math.random() * 3 + 1,
-                z: z,
-                vx: Math.cos(angle) * speed,
-                vy: Math.random() * 22 + 10,
-                vz: Math.sin(angle) * speed,
-                rx: Math.random() * Math.PI,
-                ry: Math.random() * Math.PI,
-                rz: Math.random() * Math.PI,
-                vrx: (Math.random() - 0.5) * 12,
-                vry: (Math.random() - 0.5) * 12,
-                vrz: (Math.random() - 0.5) * 12,
+                x: x, y: Math.random() * 3 + 1, z: z,
+                vx: Math.cos(angle) * speed, vy: Math.random() * 22 + 10, vz: Math.sin(angle) * speed,
+                rx: Math.random() * Math.PI, ry: Math.random() * Math.PI, rz: Math.random() * Math.PI,
+                vrx: (Math.random() - 0.5) * 12, vry: (Math.random() - 0.5) * 12, vrz: (Math.random() - 0.5) * 12,
                 size: Math.random() * 2.8 + 1.2,
                 color: i % 3 === 0 ? '#f59e0b' : (i % 2 === 0 ? '#38bdf8' : '#64748b'),
-                life: Math.random() * 1.8 + 1.0,
-                maxLife: 2.8,
+                life: Math.random() * 1.8 + 1.0, maxLife: 2.8,
             });
         }
-
         this.soundExplosion3D(Math.hypot(x, z), 1.4);
     },
 
@@ -12977,7 +13528,6 @@ const WorldForgeBattle3D = {
         const hPctEl = el('battle-hostile-pct');
         if (hPctEl) hPctEl.textContent = `${hPct}%`;
 
-        // Tug-of-war meter
         const totalLivingPower = totalFriendlyHp + totalHostileHp || 1;
         const fRatio = Math.max(10, Math.min(90, Math.round((totalFriendlyHp / totalLivingPower) * 100)));
         const tugF = el('battle-tug-friendly');
@@ -12985,17 +13535,15 @@ const WorldForgeBattle3D = {
         const tugH = el('battle-tug-hostile');
         if (tugH) tugH.style.width = `${100 - fRatio}%`;
 
-        // Unit count strings
         const fCountEl = el('battle-friendly-count');
         if (fCountEl) {
-            fCountEl.textContent = `Squads: ${friendlyLiving.length} Active (${totalFriendlyHp} HP)`;
+            fCountEl.textContent = `Sanctuary: ${friendlyLiving.length} Active (${totalFriendlyHp} HP)`;
         }
         const hCountEl = el('battle-hostile-count');
         if (hCountEl) {
-            hCountEl.textContent = `Raiders: ${hostileLiving.length} Active (${totalHostileHp} HP)`;
+            hCountEl.textContent = `${this.currentHostileFaction.toUpperCase()}: ${hostileLiving.length} Active (${totalHostileHp} HP)`;
         }
 
-        // Battle Timer
         const mins = Math.floor(this.elapsedBattleTime / 60);
         const secs = Math.floor(this.elapsedBattleTime % 60);
         const timerEl = el('battle-timer');
@@ -13003,7 +13551,6 @@ const WorldForgeBattle3D = {
             timerEl.textContent = `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
         }
 
-        // Selected Unit Intel Card
         const u = this.focusedUnit || this.selectedUnits[0];
         if (u) {
             const avatar = el('battle-unit-avatar');
@@ -13023,11 +13570,16 @@ const WorldForgeBattle3D = {
             }
             const orderEl = el('battle-unit-order');
             if (orderEl) {
-                orderEl.textContent = `Orders: ${u.order} ${u.stunnedTime > 0 ? '· ⚡ STUNNED' : ''} ${u.overdriveTime > 0 ? '· 🚀 OVERDRIVE' : ''}`;
+                orderEl.textContent = `Orders: ${u.order} ${u.pinned ? '· ⚠️ PINNED' : ''} ${u.stunnedTime > 0 ? '· ⚡ STUNNED' : ''} ${u.overdriveTime > 0 ? '· 🚀 OVERDRIVE' : ''}`;
+            }
+
+            const rankPill = el('battle-unit-rank');
+            if (rankPill) {
+                const roman = ['I', 'II', 'III', 'IV', 'V'][this.heroRank - 1] || 'V';
+                rankPill.textContent = u.hero ? `RANK ${roman}` : 'REGULAR';
             }
         }
 
-        // Ability Cooldown buttons overlay
         const abilities = ['orbital', 'barrier', 'emp', 'overdrive'];
         abilities.forEach(a => {
             const btn = el(`btn-power-${a === 'overdrive' ? 'overdrive' : a}`);
@@ -13039,25 +13591,23 @@ const WorldForgeBattle3D = {
     },
 
     // --------------------------------------------------------------------------
-    // Pointer & Keyboard Interaction (Marquee Selection, Click, Contextmenu)
+    // Pointer & Keyboard Interaction
     // --------------------------------------------------------------------------
     handlePointerDown(e, canvas) {
         this.initAudio();
+        this.closeRadialMenu();
         const rect = canvas.getBoundingClientRect();
         const px = e.clientX - rect.left;
         const py = e.clientY - rect.top;
 
         if (e.button === 0) {
-            // Left click: start orbit or marquee selection
             if (e.shiftKey || e.altKey) {
-                // Camera orbit
                 this.camera.isOrbiting = true;
                 this.camera.dragStartX = px;
                 this.camera.dragStartY = py;
                 this.camera.startYaw = this.camera.targetYaw;
                 this.camera.startPitch = this.camera.targetPitch;
             } else {
-                // Marquee box drag
                 this.marquee.active = true;
                 this.marquee.startX = px;
                 this.marquee.startY = py;
@@ -13066,7 +13616,6 @@ const WorldForgeBattle3D = {
             }
             canvas.setPointerCapture(e.pointerId);
         } else if (e.button === 1) {
-            // Middle click: pan
             this.camera.isPanning = true;
             this.camera.dragStartX = px;
             this.camera.dragStartY = py;
@@ -13114,7 +13663,6 @@ const WorldForgeBattle3D = {
             const y0 = Math.min(this.marquee.startY, this.marquee.curY);
             const y1 = Math.max(this.marquee.startY, this.marquee.curY);
 
-            // If dragged more than 6 pixels, perform box selection
             if (x1 - x0 > 6 || y1 - y0 > 6) {
                 const friendlyLiving = this.units.filter(u => u.team === 'friendly' && u.hp > 0);
                 const selected = [];
@@ -13129,7 +13677,7 @@ const WorldForgeBattle3D = {
                     this.selectedUnits = selected;
                     this.focusedUnit = selected[0];
                     this.soundOrderAck();
-                    this.setTicker(`Selected ${selected.length} Sanctuary Vanguard combatants`);
+                    this.setTicker(`Selected ${selected.length} Sanctuary combatants`);
                     this.updateHUD();
                 }
             }
@@ -13141,7 +13689,6 @@ const WorldForgeBattle3D = {
         const px = e.clientX - rect.left;
         const py = e.clientY - rect.top;
 
-        // Check if single clicked on any unit
         let clickedUnit = null;
         let bestDist = 28;
 
@@ -13164,7 +13711,6 @@ const WorldForgeBattle3D = {
                 this.soundOrderAck();
                 this.setTicker(`Selected: ${clickedUnit.name} [${clickedUnit.role}]`);
             } else {
-                // Clicked an enemy -> set as focus fire target
                 this.targetedEnemy = clickedUnit;
                 this.soundOrderAck();
                 this.setTicker(`Focus Fire Target Locked: ${clickedUnit.name}!`);
@@ -13178,7 +13724,7 @@ const WorldForgeBattle3D = {
         const px = e.clientX - rect.left;
         const py = e.clientY - rect.top;
 
-        // Check if clicked an enemy
+        // Check if an enemy was right-clicked directly
         let clickedEnemy = null;
         let bestDist = 32;
 
@@ -13204,11 +13750,9 @@ const WorldForgeBattle3D = {
             this.soundOrderAck();
             this.setTicker(`All selected units ordered to ASSAULT ${clickedEnemy.name}!`);
         } else {
-            // Unproject click onto ground
+            // Open Floating Contextual Radial Command Wheel at cursor!
             const ground = this.unprojectGround(px, py, this.width, this.height);
-            this.targetedEnemy = null;
-            this.issueFormationOrder(ground.wx, ground.wz);
-            this.setTicker(`March order issued: Formation ${this.activeFormation.toUpperCase()} to (${Math.round(ground.wx)}, ${Math.round(ground.wz)})`);
+            this.openRadialMenu(px, py, ground.wx, ground.wz);
         }
         this.updateHUD();
     },
@@ -13254,8 +13798,42 @@ const WorldForgeBattle3D = {
             this.resetWave();
             return true;
         }
+        if (key === 'h') {
+            e.preventDefault();
+            this.toggleHeatmap();
+            return true;
+        }
+        if (key === 'c') {
+            e.preventDefault();
+            this.toggleCover();
+            return true;
+        }
+        if (key === 'k') {
+            e.preventDefault();
+            this.toggleActionCam();
+            return true;
+        }
+        if (key === 'm') {
+            e.preventDefault();
+            this.toggleAudioSymphony();
+            return true;
+        }
+        if (key === 'b') {
+            e.preventDefault();
+            this.cycleBiome();
+            return true;
+        }
+        if (key === 'w') {
+            e.preventDefault();
+            this.cycleWeather();
+            return true;
+        }
         if (key === 'escape') {
             e.preventDefault();
+            if (this.radialMenu.active) {
+                this.closeRadialMenu();
+                return true;
+            }
             WorldForgeCG.setViewMode('realm');
             return true;
         }
@@ -13263,7 +13841,7 @@ const WorldForgeBattle3D = {
     },
 
     // --------------------------------------------------------------------------
-    // 3D Rendering Pipeline (Software Projection & Painter's Algorithm Depth Sort)
+    // 3D Rendering Pipeline (Software Projection & Depth Sort)
     // --------------------------------------------------------------------------
     render(ctx, w, h, now) {
         this.width = w;
@@ -13273,25 +13851,24 @@ const WorldForgeBattle3D = {
         this.lastTime = now;
         this.updatePhysics(dt);
 
-        // 1. Draw Sci-Fi Sky & Fog Gradient
-        const skyGrad = ctx.createLinearGradient(0, 0, 0, h);
-        skyGrad.addColorStop(0, '#040711');
-        skyGrad.addColorStop(0.45, '#081120');
-        skyGrad.addColorStop(0.75, '#0d1d33');
-        skyGrad.addColorStop(1, '#060a12');
-        ctx.fillStyle = skyGrad;
-        ctx.fillRect(0, 0, w, h);
+        // 1. Draw Biome-Themed Sky & Fog Gradient
+        this.renderSkyAndAtmosphere(ctx, w, h);
 
-        // 2. Draw 3D Ground Contour & Perspective Tactical Grid
+        // 2. Draw 3D Ground Perspective Grid & Radar Rings
         this.renderGroundGrid(ctx, w, h);
 
-        // 3. Draw Ground Waypoints, Scorch Craters & Decals
+        // 3. Draw Tactical Heatmap Threat Cones (if enabled)
+        if (this.showHeatmap) {
+            this.renderThreatHeatmap(ctx, w, h);
+        }
+
+        // 4. Draw Ground Decals (Scorch Craters & Waypoint Rings)
         this.renderGroundDecals(ctx, w, h);
 
-        // 4. Draw Dynamic Ground Shadows under all 3D Objects
+        // 5. Draw Dynamic Ground Shadows under all 3D Entities
         this.renderGroundShadows(ctx, w, h);
 
-        // 5. Collect All 3D Renderables and Sort by Distance (Painter's Algorithm)
+        // 6. Collect All 3D Renderables and Sort by Distance (Painter's Algorithm)
         const renderables = [];
 
         // Units
@@ -13300,6 +13877,15 @@ const WorldForgeBattle3D = {
             const pt = this.project(u.x, u.y, u.z, w, h);
             if (pt) {
                 renderables.push({ type: 'unit', unit: u, z: pt.z, pt });
+            }
+        });
+
+        // Destructible Physical Covers
+        this.covers.forEach(c => {
+            if (c.hp <= 0) return;
+            const pt = this.project(c.x, 0, c.z, w, h);
+            if (pt) {
+                renderables.push({ type: 'cover', cover: c, z: pt.z, pt });
             }
         });
 
@@ -13342,15 +13928,19 @@ const WorldForgeBattle3D = {
         renderables.forEach(item => {
             if (item.type === 'barrier') this.renderBarrierDome(ctx, item.dome, w, h);
             else if (item.type === 'shockwave') this.renderShockwave(ctx, item.sw, w, h);
+            else if (item.type === 'cover') this.renderCover(ctx, item.cover, item.pt, w, h);
             else if (item.type === 'debris') this.renderDebris(ctx, item.deb, item.pt);
             else if (item.type === 'projectile') this.renderProjectile(ctx, item.proj, item.pt);
             else if (item.type === 'unit') this.renderUnit(ctx, item.unit, item.pt, w, h);
         });
 
-        // 6. Draw 3D Floating Combat Floaties (Damage & Alerts)
+        // 7. Draw Weather Simulation Layer (Sandstorm / Acid Rain / Lightning)
+        this.renderWeatherLayer(ctx, w, h);
+
+        // 8. Draw 3D Floating Combat Floaties
         this.renderFloaties(ctx, w, h);
 
-        // 7. Draw Marquee Selection Rectangle
+        // 9. Draw Marquee Selection Rectangle
         if (this.marquee.active) {
             const x0 = Math.min(this.marquee.startX, this.marquee.curX);
             const y0 = Math.min(this.marquee.startY, this.marquee.curY);
@@ -13371,14 +13961,70 @@ const WorldForgeBattle3D = {
     // --------------------------------------------------------------------------
     // 3D Geometry Rendering Subroutines
     // --------------------------------------------------------------------------
+    renderSkyAndAtmosphere(ctx, w, h) {
+        const skyGrad = ctx.createLinearGradient(0, 0, 0, h);
+        if (this.currentBiome === 'dunes') {
+            skyGrad.addColorStop(0, '#1c1309');
+            skyGrad.addColorStop(0.45, '#291b0f');
+            skyGrad.addColorStop(0.75, '#3b2514');
+            skyGrad.addColorStop(1, '#170f08');
+        } else if (this.currentBiome === 'cyber') {
+            skyGrad.addColorStop(0, '#030712');
+            skyGrad.addColorStop(0.45, '#0b0f19');
+            skyGrad.addColorStop(0.75, '#1e112a');
+            skyGrad.addColorStop(1, '#070a13');
+        } else if (this.currentBiome === 'arctic') {
+            skyGrad.addColorStop(0, '#040d1a');
+            skyGrad.addColorStop(0.45, '#081729');
+            skyGrad.addColorStop(0.75, '#0e2338');
+            skyGrad.addColorStop(1, '#060f1c');
+        } else if (this.currentBiome === 'volcanic') {
+            skyGrad.addColorStop(0, '#140505');
+            skyGrad.addColorStop(0.45, '#240808');
+            skyGrad.addColorStop(0.75, '#3b0d0d');
+            skyGrad.addColorStop(1, '#120404');
+        }
+
+        ctx.fillStyle = skyGrad;
+        ctx.fillRect(0, 0, w, h);
+
+        // Lightning flash overlay
+        if (this.lightningFlash > 0) {
+            ctx.fillStyle = `rgba(186, 230, 253, ${this.lightningFlash * 0.35})`;
+            ctx.fillRect(0, 0, w, h);
+        }
+    },
+
     renderGroundGrid(ctx, w, h) {
         ctx.save();
         ctx.lineWidth = 1;
 
+        let ringColor = 'rgba(56, 189, 248, 0.12)';
+        let gridColor = 'rgba(56, 189, 248, 0.07)';
+        let centerColor = 'rgba(56, 189, 248, 0.55)';
+
+        if (this.currentBiome === 'dunes') {
+            ringColor = 'rgba(245, 158, 11, 0.15)';
+            gridColor = 'rgba(245, 158, 11, 0.08)';
+            centerColor = 'rgba(245, 158, 11, 0.6)';
+        } else if (this.currentBiome === 'cyber') {
+            ringColor = 'rgba(236, 72, 153, 0.16)';
+            gridColor = 'rgba(6, 182, 212, 0.09)';
+            centerColor = 'rgba(6, 182, 212, 0.65)';
+        } else if (this.currentBiome === 'arctic') {
+            ringColor = 'rgba(186, 230, 253, 0.2)';
+            gridColor = 'rgba(186, 230, 253, 0.09)';
+            centerColor = 'rgba(186, 230, 253, 0.65)';
+        } else if (this.currentBiome === 'volcanic') {
+            ringColor = 'rgba(239, 68, 68, 0.18)';
+            gridColor = 'rgba(239, 68, 68, 0.08)';
+            centerColor = 'rgba(249, 115, 22, 0.65)';
+        }
+
         // Concentric circular radar lines on the ground
         const radarRadii = [40, 80, 140, 200, 280, 360];
         radarRadii.forEach(r => {
-            ctx.strokeStyle = r === 140 ? 'rgba(56, 189, 248, 0.42)' : (r === 280 ? 'rgba(56, 189, 248, 0.22)' : 'rgba(56, 189, 248, 0.12)');
+            ctx.strokeStyle = ringColor;
             ctx.beginPath();
             let first = true;
             for (let a = 0; a <= Math.PI * 2 + 0.1; a += Math.PI / 24) {
@@ -13396,7 +14042,7 @@ const WorldForgeBattle3D = {
         // Rectilinear ground perspective grid lines
         const step = 25;
         const bound = 250;
-        ctx.strokeStyle = 'rgba(56, 189, 248, 0.07)';
+        ctx.strokeStyle = gridColor;
 
         for (let gx = -bound; gx <= bound; gx += step) {
             ctx.beginPath();
@@ -13427,7 +14073,7 @@ const WorldForgeBattle3D = {
         // Center origin marker
         const centerPt = this.project(0, 0, 0, w, h);
         if (centerPt) {
-            ctx.strokeStyle = 'rgba(56, 189, 248, 0.55)';
+            ctx.strokeStyle = centerColor;
             ctx.lineWidth = 1.5;
             ctx.beginPath();
             ctx.arc(centerPt.sx, centerPt.sy, 8 * centerPt.scale, 0, Math.PI * 2);
@@ -13437,10 +14083,43 @@ const WorldForgeBattle3D = {
         ctx.restore();
     },
 
+    renderThreatHeatmap(ctx, w, h) {
+        ctx.save();
+        const hostiles = this.units.filter(u => u.team === 'hostile' && u.hp > 0);
+        hostiles.forEach(u => {
+            const pt = this.project(u.x, 0, u.z, w, h);
+            if (!pt) return;
+
+            const fovAngle = Math.PI * 0.45;
+            const startA = u.turretAngle - fovAngle / 2;
+            const endA = u.turretAngle + fovAngle / 2;
+
+            ctx.beginPath();
+            ctx.moveTo(pt.sx, pt.sy);
+            for (let a = startA; a <= endA + 0.05; a += 0.08) {
+                const tx = u.x + Math.cos(a) * u.range;
+                const tz = u.z + Math.sin(a) * u.range;
+                const p = this.project(tx, 0, tz, w, h);
+                if (p) ctx.lineTo(p.sx, p.sy);
+            }
+            ctx.closePath();
+
+            const grad = ctx.createRadialGradient(pt.sx, pt.sy, 6, pt.sx, pt.sy, u.range * pt.scale);
+            grad.addColorStop(0, 'rgba(239, 68, 68, 0.28)');
+            grad.addColorStop(0.7, 'rgba(249, 115, 22, 0.12)');
+            grad.addColorStop(1, 'rgba(239, 68, 68, 0.0)');
+            ctx.fillStyle = grad;
+            ctx.fill();
+
+            ctx.strokeStyle = 'rgba(244, 63, 94, 0.35)';
+            ctx.lineWidth = 1.2;
+            ctx.stroke();
+        });
+        ctx.restore();
+    },
+
     renderGroundDecals(ctx, w, h) {
         ctx.save();
-
-        // 1. Scorch Craters
         this.craters.forEach(c => {
             const pt = this.project(c.x, 0, c.z, w, h);
             if (pt) {
@@ -13454,7 +14133,6 @@ const WorldForgeBattle3D = {
             }
         });
 
-        // 2. Waypoint Rings
         this.waypointMarkers.forEach(m => {
             const pt = this.project(m.x, 0, m.z, w, h);
             if (pt) {
@@ -13465,7 +14143,6 @@ const WorldForgeBattle3D = {
                 ctx.stroke();
             }
         });
-
         ctx.restore();
     },
 
@@ -13473,7 +14150,6 @@ const WorldForgeBattle3D = {
         ctx.save();
         ctx.fillStyle = 'rgba(0, 0, 0, 0.45)';
 
-        // Unit shadows
         this.units.filter(u => u.hp > 0).forEach(u => {
             const pt = this.project(u.x, 0, u.z, w, h);
             if (pt) {
@@ -13486,7 +14162,17 @@ const WorldForgeBattle3D = {
             }
         });
 
-        // Projectile shadows
+        this.covers.filter(c => c.hp > 0).forEach(c => {
+            const pt = this.project(c.x, 0, c.z, w, h);
+            if (pt) {
+                const rx = ((c.w + c.l) / 2) * pt.scale * 0.85;
+                const ry = rx * 0.55;
+                ctx.beginPath();
+                ctx.ellipse(pt.sx, pt.sy, rx, ry, 0, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        });
+
         this.projectiles.forEach(p => {
             const pt = this.project(p.x, 0, p.z, w, h);
             if (pt) {
@@ -13497,7 +14183,125 @@ const WorldForgeBattle3D = {
                 ctx.fill();
             }
         });
+        ctx.restore();
+    },
 
+    renderCover(ctx, c, pt, w, h) {
+        ctx.save();
+        const sc = pt.scale;
+        const sx = pt.sx;
+        const sy = pt.sy;
+
+        const cw = c.w * sc;
+        const ch = c.h * sc;
+        const cl = c.l * sc;
+
+        if (c.type === 'bunker') {
+            // Concrete Bunker Pillbox
+            ctx.fillStyle = '#334155';
+            ctx.strokeStyle = '#64748b';
+            ctx.lineWidth = 1.8;
+            ctx.fillRect(sx - cw / 2, sy - ch, cw, ch);
+            ctx.strokeRect(sx - cw / 2, sy - ch, cw, ch);
+
+            // Bunker Firing Slit
+            ctx.fillStyle = '#0f172a';
+            ctx.fillRect(sx - cw * 0.35, sy - ch * 0.65, cw * 0.7, ch * 0.25);
+
+            // Reinforced Roof Beams
+            ctx.strokeStyle = '#94a3b8';
+            ctx.lineWidth = 1.2;
+            ctx.beginPath();
+            ctx.moveTo(sx - cw / 2, sy - ch);
+            ctx.lineTo(sx, sy - ch - 3 * sc);
+            ctx.lineTo(sx + cw / 2, sy - ch);
+            ctx.stroke();
+        } else if (c.type === 'trench') {
+            // Fortified Sandbag Trench Parapet
+            ctx.fillStyle = '#78350f';
+            ctx.strokeStyle = '#b45309';
+            ctx.lineWidth = 1.5;
+            ctx.fillRect(sx - cw / 2, sy - ch, cw, ch * 0.8);
+            ctx.strokeRect(sx - cw / 2, sy - ch, cw, ch * 0.8);
+
+            // Sandbag segmentation lines
+            ctx.strokeStyle = '#d97706';
+            ctx.lineWidth = 1.0;
+            const segments = 4;
+            for (let s = 1; s < segments; s++) {
+                const segX = sx - cw / 2 + (cw / segments) * s;
+                ctx.beginPath();
+                ctx.moveTo(segX, sy - ch);
+                ctx.lineTo(segX, sy);
+                ctx.stroke();
+            }
+        } else if (c.type === 'wreck') {
+            // Metallic Titan Wreckage
+            ctx.fillStyle = '#1e293b';
+            ctx.strokeStyle = '#475569';
+            ctx.lineWidth = 1.8;
+            ctx.beginPath();
+            ctx.moveTo(sx - cw / 2, sy);
+            ctx.lineTo(sx - cw * 0.3, sy - ch);
+            ctx.lineTo(sx + cw * 0.2, sy - ch * 0.8);
+            ctx.lineTo(sx + cw / 2, sy);
+            ctx.closePath();
+            ctx.fill();
+            ctx.stroke();
+
+            // Flickering embers from wreck
+            ctx.fillStyle = '#f97316';
+            ctx.beginPath();
+            ctx.arc(sx + Math.sin(performance.now() * 0.01) * 3 * sc, sy - ch * 0.6, 2.5 * sc, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        // Structural Integrity Bar & Cover Badge
+        if (this.showCover) {
+            const barW = Math.max(22, cw * 1.1);
+            const barH = 3.0 * sc;
+            const barY = sy - ch - 8;
+
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.75)';
+            ctx.fillRect(sx - barW / 2, barY, barW, barH);
+
+            const hpPct = Math.max(0, Math.min(1.0, c.hp / c.maxHp));
+            ctx.fillStyle = hpPct > 0.4 ? '#10b981' : '#ef4444';
+            ctx.fillRect(sx - barW / 2, barY, barW * hpPct, barH);
+
+            ctx.font = `bold ${Math.max(9, Math.round(9 * sc))}px ${FONT_SANS}`;
+            ctx.textAlign = 'center';
+            ctx.fillStyle = '#cbd5e1';
+            ctx.fillText(`🛡️ ${c.type.toUpperCase()} [${Math.round(c.hp)}/${c.maxHp}]`, sx, barY - 4);
+        }
+        ctx.restore();
+    },
+
+    renderWeatherLayer(ctx, w, h) {
+        if (this.currentWeather === 'clear') return;
+        ctx.save();
+
+        if (this.currentWeather === 'sandstorm') {
+            ctx.fillStyle = 'rgba(217, 119, 6, 0.12)';
+            ctx.fillRect(0, 0, w, h);
+        } else if (this.currentWeather === 'acid_rain') {
+            ctx.fillStyle = 'rgba(5, 150, 105, 0.06)';
+            ctx.fillRect(0, 0, w, h);
+        }
+
+        this.weatherParticles.forEach(p => {
+            const pt = this.project(p.x, p.y, p.z, w, h);
+            if (pt) {
+                ctx.fillStyle = p.color;
+                if (this.currentWeather === 'acid_rain') {
+                    ctx.fillRect(pt.sx, pt.sy, 1.2 * pt.scale, 7 * pt.scale);
+                } else {
+                    ctx.beginPath();
+                    ctx.arc(pt.sx, pt.sy, p.size * pt.scale, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+            }
+        });
         ctx.restore();
     },
 
@@ -13520,7 +14324,6 @@ const WorldForgeBattle3D = {
             ctx.ellipse(sx, sy, (u.radius + 3) * sc, ((u.radius + 3) * sc) * 0.55, 0, 0, Math.PI * 2);
             ctx.stroke();
 
-            // Animated pulsing bracket
             const pulse = (Math.sin(performance.now() * 0.006) + 1) * 2;
             ctx.strokeStyle = isSelected ? 'rgba(56, 189, 248, 0.45)' : 'rgba(244, 63, 94, 0.45)';
             ctx.beginPath();
@@ -13531,19 +14334,17 @@ const WorldForgeBattle3D = {
 
         // 2. Unit 3D Body Mesh
         if (u.weaponType === 'railgun') {
-            // Titan Siege Mech MK-IV (Articulated Bipedal Mech)
+            // Titan Siege Mech MK-IV or Imperial Dreadnought Walker
             const mechHeight = 16 * sc;
             const legOffset = Math.sin(u.walkCycle) * 3.5 * sc;
 
-            // Bipedal Legs
+            // Bipedal / Walker Legs
             ctx.strokeStyle = isFriendly ? '#1e293b' : '#3f1515';
             ctx.lineWidth = 3.5 * sc;
-            // Left Leg
             ctx.beginPath();
             ctx.moveTo(sx - 4 * sc, sy - 8 * sc);
             ctx.lineTo(sx - 6 * sc, sy - legOffset);
             ctx.stroke();
-            // Right Leg
             ctx.beginPath();
             ctx.moveTo(sx + 4 * sc, sy - 8 * sc);
             ctx.lineTo(sx + 6 * sc, sy + legOffset);
@@ -13560,7 +14361,7 @@ const WorldForgeBattle3D = {
             ctx.fillStyle = isFriendly ? '#38bdf8' : '#fbbf24';
             ctx.fillRect(sx - 4 * sc, sy - mechHeight + 2 * sc, 8 * sc, 2.5 * sc);
 
-            // Dual Railgun Cannons (Tracking Turret Angle)
+            // Dual Cannons (Tracking Turret Angle)
             const tCos = Math.cos(u.turretAngle - this.camera.yaw);
             const tSin = Math.sin(u.turretAngle - this.camera.yaw);
             ctx.strokeStyle = '#94a3b8';
@@ -13572,19 +14373,17 @@ const WorldForgeBattle3D = {
             ctx.lineTo(sx + 5 * sc + tCos * 14 * sc, sy - mechHeight + 4 * sc + tSin * 8 * sc);
             ctx.stroke();
         } else if (u.weaponType === 'ion_slug') {
-            // Hover Rail-Tank (Angular Hovercraft with Blue Plasma Skirt)
+            // Hover Rail-Tank / Centurion Battle Tank / League Skimmer
             const hullW = 15 * sc;
             const hullH = 6 * sc;
 
-            // Anti-gravity skirt glow
-            ctx.fillStyle = 'rgba(6, 182, 212, 0.4)';
+            ctx.fillStyle = isFriendly ? 'rgba(6, 182, 212, 0.4)' : 'rgba(249, 115, 22, 0.35)';
             ctx.beginPath();
             ctx.ellipse(sx, sy - 2 * sc, hullW * 0.9, hullH * 0.8, 0, 0, Math.PI * 2);
             ctx.fill();
 
-            // Angular Hovercraft Hull
-            ctx.fillStyle = '#0f766e';
-            ctx.strokeStyle = '#2dd4bf';
+            ctx.fillStyle = isFriendly ? '#0f766e' : '#431407';
+            ctx.strokeStyle = isFriendly ? '#2dd4bf' : '#f97316';
             ctx.lineWidth = 1.6;
             ctx.beginPath();
             ctx.moveTo(sx - hullW / 2, sy - 4 * sc);
@@ -13596,7 +14395,6 @@ const WorldForgeBattle3D = {
             ctx.fill();
             ctx.stroke();
 
-            // Turret Cannon
             const tCos = Math.cos(u.turretAngle - this.camera.yaw);
             const tSin = Math.sin(u.turretAngle - this.camera.yaw);
             ctx.strokeStyle = '#e2e8f0';
@@ -13606,18 +14404,16 @@ const WorldForgeBattle3D = {
             ctx.lineTo(sx + tCos * 16 * sc, sy - 7 * sc + tSin * 9 * sc);
             ctx.stroke();
         } else if (u.weaponType === 'mortar') {
-            // Raider Heavy War-Rig (Spiked Ramming Machine)
+            // Raider Heavy War-Rig
             const rigW = 16 * sc;
             const rigH = 11 * sc;
 
-            // Chassis
             ctx.fillStyle = '#7c2d12';
             ctx.strokeStyle = '#ea580c';
             ctx.lineWidth = 2.0;
             ctx.fillRect(sx - rigW / 2, sy - rigH, rigW, rigH * 0.85);
             ctx.strokeRect(sx - rigW / 2, sy - rigH, rigW, rigH * 0.85);
 
-            // Front Ramming Spikes
             ctx.fillStyle = '#d97706';
             ctx.beginPath();
             ctx.moveTo(sx - 6 * sc, sy - 2 * sc);
@@ -13627,7 +14423,6 @@ const WorldForgeBattle3D = {
             ctx.closePath();
             ctx.fill();
 
-            // Dual Heavy Flak Barrels
             const tCos = Math.cos(u.turretAngle - this.camera.yaw);
             const tSin = Math.sin(u.turretAngle - this.camera.yaw);
             ctx.strokeStyle = '#f97316';
@@ -13637,13 +14432,12 @@ const WorldForgeBattle3D = {
             ctx.lineTo(sx + tCos * 15 * sc, sy - rigH + tSin * 8 * sc);
             ctx.stroke();
         } else if (u.weaponType === 'melee') {
-            // Raider Berzerkers (Fast shock infantry with raised axes)
+            // Raider Berzerkers
             ctx.fillStyle = '#991b1b';
             ctx.fillRect(sx - 3 * sc, sy - 9 * sc, 6 * sc, 6 * sc);
             ctx.fillStyle = '#f87171';
             ctx.fillRect(sx - 2 * sc, sy - 12 * sc, 4 * sc, 3 * sc);
 
-            // Raised Cyber-Axe
             ctx.strokeStyle = '#fbbf24';
             ctx.lineWidth = 1.8 * sc;
             ctx.beginPath();
@@ -13651,8 +14445,8 @@ const WorldForgeBattle3D = {
             ctx.lineTo(sx + 6 * sc, sy - 13 * sc);
             ctx.stroke();
         } else {
-            // General Exosuit Infantry & Scav-Buggies
-            ctx.fillStyle = isFriendly ? '#38bdf8' : '#f87171';
+            // General Exosuit Squads / Enforcers / Turrets
+            ctx.fillStyle = isFriendly ? '#38bdf8' : (u.team === 'hostile' && this.currentHostileFaction === 'mandate' ? '#dc2626' : '#f87171');
             ctx.beginPath();
             ctx.arc(sx, sy - 7 * sc, 4 * sc, 0, Math.PI * 2);
             ctx.fill();
@@ -13662,7 +14456,15 @@ const WorldForgeBattle3D = {
             ctx.stroke();
         }
 
-        // 3. Overhead Health Bar
+        // Pinned Status Badge above Unit
+        if (u.pinned) {
+            ctx.font = `bold ${Math.max(9, Math.round(9 * sc))}px ${FONT_SANS}`;
+            ctx.textAlign = 'center';
+            ctx.fillStyle = '#fbbf24';
+            ctx.fillText('⚠️ PINNED', sx, sy - (u.radius * 2.5 * sc + 22));
+        }
+
+        // 3. Overhead Health Bar & Shield
         const barW = Math.max(16, u.radius * 3.2 * sc);
         const barH = 3.2 * sc;
         const barY = sy - (u.radius * 2.2 * sc + 14);
@@ -13680,7 +14482,7 @@ const WorldForgeBattle3D = {
             ctx.fillRect(sx - barW / 2, barY - 2.5 * sc, barW * shPct, 1.8 * sc);
         }
 
-        // Unit Name & Role Tag (only when selected, targeted, or focused)
+        // Unit Name & Role Tag
         if (isSelected || isTargeted || (this.focusedUnit && this.focusedUnit.id === u.id)) {
             ctx.font = `bold ${Math.max(9, Math.round(10 * sc))}px ${FONT_SANS}`;
             ctx.textAlign = 'center';
@@ -13702,13 +14504,10 @@ const WorldForgeBattle3D = {
         ctx.shadowBlur = 8;
 
         if (p.explosive) {
-            // Artillery mortar shell
             ctx.beginPath();
             ctx.arc(sx, sy, 3.8 * sc, 0, Math.PI * 2);
             ctx.fill();
         } else {
-            // High-speed kinetic slug or plasma bolt
-            const len = 9 * sc;
             ctx.strokeStyle = p.color || '#38bdf8';
             ctx.lineWidth = 2.4 * sc;
             ctx.beginPath();
@@ -13765,7 +14564,6 @@ const WorldForgeBattle3D = {
             ctx.fill();
             ctx.stroke();
 
-            // Hexagonal energy grid ripples
             ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
             ctx.lineWidth = 1.0;
             ctx.beginPath();
