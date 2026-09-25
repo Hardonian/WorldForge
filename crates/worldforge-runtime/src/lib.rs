@@ -4464,7 +4464,8 @@ const CIVILIZATION_TIERS: [CivilizationTier; 5] = [
         level: 2,
         era: "ERA II",
         name: "Thriving Settlement",
-        description: "Dense neighborhoods, civic institutions, and maker industry reinforce one another.",
+        description:
+            "Dense neighborhoods, civic institutions, and maker industry reinforce one another.",
         minimum: 300.0,
         next: Some(800.0),
     },
@@ -4480,7 +4481,8 @@ const CIVILIZATION_TIERS: [CivilizationTier; 5] = [
         level: 4,
         era: "ERA IV",
         name: "Cybernetic Metropolis",
-        description: "Autonomous logistics, clean power, and advanced intelligence reshape governance.",
+        description:
+            "Autonomous logistics, clean power, and advanced intelligence reshape governance.",
         minimum: 1_800.0,
         next: Some(3_500.0),
     },
@@ -4539,9 +4541,7 @@ fn build_civilization_progress(
     let researched = state.unlocked_technologies.len() as f64;
     let has_clean_energy = state.unlocked_technologies.contains("solar-weave")
         || state.unlocked_technologies.contains("fusion-core");
-    let has_transcended = state
-        .unlocked_technologies
-        .contains("arcology-singularity");
+    let has_transcended = state.unlocked_technologies.contains("arcology-singularity");
     let has_zenith = state.building_levels.values().any(|level| *level >= 3);
     let diplomatic_security = state.defense_posture == "fortified"
         || state
@@ -4549,17 +4549,14 @@ fn build_civilization_progress(
             .values()
             .any(|stance| stance == "coalition");
 
-    let achievement = |id: &str,
-                       title: &str,
-                       description: &str,
-                       value: f64,
-                       target: f64| AchievementProgress {
-        id: id.to_string(),
-        title: title.to_string(),
-        description: description.to_string(),
-        unlocked: value >= target,
-        progress: (value / target).clamp(0.0, 1.0),
-    };
+    let achievement =
+        |id: &str, title: &str, description: &str, value: f64, target: f64| AchievementProgress {
+            id: id.to_string(),
+            title: title.to_string(),
+            description: description.to_string(),
+            unlocked: value >= target,
+            progress: (value / target).clamp(0.0, 1.0),
+        };
     let achievements = vec![
         achievement(
             "first-spark",

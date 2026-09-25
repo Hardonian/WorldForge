@@ -840,9 +840,12 @@ fn simulation_export_with_event_limit(
                     resource,
                     amount,
                 } => ("logistics", source.clone(), resource.clone(), *amount),
-                EventType::CivilizationEraAdvanced { era, score, .. } => {
-                    ("civilization", era.clone(), "era".to_string(), score.to_f64_lossy())
-                }
+                EventType::CivilizationEraAdvanced { era, score, .. } => (
+                    "civilization",
+                    era.clone(),
+                    "era".to_string(),
+                    score.to_f64_lossy(),
+                ),
             };
             serde_json::json!({
                 "tick": event.tick.value(),

@@ -1950,9 +1950,12 @@ fn event_document(event: &SimulationEvent) -> Value {
             resource,
             amount,
         } => ("logistics", source.clone(), resource.clone(), *amount),
-        EventType::CivilizationEraAdvanced { era, score, .. } => {
-            ("civilization", era.clone(), "era".to_string(), score.to_f64_lossy())
-        }
+        EventType::CivilizationEraAdvanced { era, score, .. } => (
+            "civilization",
+            era.clone(),
+            "era".to_string(),
+            score.to_f64_lossy(),
+        ),
     };
     json!({
         "tick": event.tick.value(),
