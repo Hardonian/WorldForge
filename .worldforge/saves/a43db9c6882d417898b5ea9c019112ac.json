@@ -1,0 +1,17 @@
+{
+  "formatVersion": 2,
+  "engineVersion": "0.2.0",
+  "profileId": "local",
+  "kind": "autosave",
+  "id": "a43db9c6882d417898b5ea9c019112ac",
+  "name": "Autosave · micro-city",
+  "world": "micro-city",
+  "worldFingerprint": "7b7b34f3b6baf2c53ef5a21e2af0fefb4753f71b2fe22b0f73243fb835eb2eef",
+  "seed": 42,
+  "totalTicks": 1000,
+  "currentTick": 1000,
+  "checkpointFingerprint": "35e880436a9fe4eef6e3a7cfb829000d3f1038f100cfd68ffd501bdf6146eb8f",
+  "interventions": [],
+  "createdAt": 1790302359,
+  "updatedAt": 1790302373
+}

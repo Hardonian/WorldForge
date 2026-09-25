@@ -727,104 +727,88 @@ button, input, select, a { -webkit-tap-highlight-color: transparent; }
 .progress-track { height: 4px; overflow: hidden; border-radius: 99px; background: rgba(163,184,214,.1); }
 .progress-track span { display: block; width: 0; height: 100%; border-radius: inherit; background: linear-gradient(90deg, var(--blue), var(--cyan)); box-shadow: 0 0 10px rgba(66,211,234,.45); transition: width .25s var(--ease); }
 
-.play-body {
+/* Floating Tactical Sidebar Drawer (Civilization / AoE Style) */
+.sidebar-toggle-tab {
     position: absolute;
-    inset: 0;
-    width: 100%;
-    height: 100%;
-    overflow: hidden;
-    background: #020611;
-    margin: 0;
-    padding: 0;
-}
-.play-intro { position: absolute; z-index: 55; inset: 0; display: grid; place-items: center; align-content: center; gap: 9px; padding: 30px; background: radial-gradient(circle at center, rgba(25,43,62,.85), rgba(7,10,16,.98) 60%); text-align: center; }
-.play-intro.hidden { display: none; }
-.play-intro h3 { max-width: 620px; margin: 7px 0 0; font-size: clamp(1.7rem,4vw,3rem); font-weight: 680; line-height: 1.05; letter-spacing: -.05em; }
-.play-intro > p { max-width: 650px; margin: 2px 0 12px; color: var(--text-soft); font-size: .78rem; line-height: 1.65; }
-.intro-core { position: relative; width: 90px; height: 90px; margin-bottom: 12px; animation: slow-spin 14s linear infinite; }
-.intro-core span { position: absolute; inset: 0; border: 1px solid rgba(103,169,255,.25); transform: rotate(30deg); }
-.intro-core span:nth-child(2) { inset: 15px; border-color: rgba(66,211,234,.45); transform: rotate(60deg); }
-.intro-core span:nth-child(3) { inset: 33px; border: 0; border-radius: 3px; background: var(--cyan); box-shadow: 0 0 30px rgba(66,211,234,.6); transform: none; }
-.play-rules { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin-bottom: 13px; }
-.play-rules span { padding: 8px 11px; border: 1px solid var(--line); border-radius: 9px; background: rgba(255,255,255,.025); color: var(--text-muted); font-size: .63rem; }
-.play-rules strong { color: var(--text); }
-
-.play-grid {
-    position: absolute;
-    inset: 0;
-    width: 100%;
-    height: 100%;
-    margin: 0;
-    padding: 0;
-    display: block;
-    overflow: hidden;
-}
-.play-grid[aria-hidden="true"] { visibility: hidden; }
-
-.play-stage {
-    position: absolute;
-    inset: 0;
-    width: 100%;
-    height: 100%;
-    min-height: 100%;
-    margin: 0;
-    padding: 0;
-    border: none;
-    border-radius: 0;
-    background: transparent;
-    box-shadow: none;
-    overflow: hidden;
-}
-.play-card { overflow: hidden; border: 1px solid var(--line); border-radius: 13px; background: rgba(15,20,31,.86); box-shadow: inset 0 1px rgba(255,255,255,.03); }
-
-.play-panel-heading {
-    position: absolute;
-    top: 6px;
-    right: 56px;
-    z-index: 52;
+    top: 52px;
+    right: 16px;
+    z-index: 55;
     display: flex;
     align-items: center;
-    gap: 8px;
-    min-height: 0;
-    padding: 0;
-    border: none;
-    background: transparent;
+    gap: 6px;
+    padding: 6px 12px;
+    border-radius: 8px;
+    background: rgba(15, 23, 42, 0.88);
+    backdrop-filter: blur(8px);
+    border: 1px solid rgba(56, 189, 248, 0.35);
+    color: #38bdf8;
+    font-family: var(--font-mono);
+    font-size: 0.68rem;
+    font-weight: 700;
+    cursor: pointer;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4);
+    transition: all 0.2s ease;
 }
-.play-panel-heading > div:first-child {
-    display: none;
+.sidebar-toggle-tab:hover {
+    background: rgba(56, 189, 248, 0.22);
+    color: #ffffff;
+    border-color: #38bdf8;
 }
-.play-stage-actions { display: inline-flex; align-items: center; gap: 8px; flex-wrap: nowrap; }
-.view-mode-toggle { display: inline-flex; align-items: center; background: rgba(5,8,14,.78); backdrop-filter: blur(8px); border: 1px solid rgba(56, 189, 248, 0.25); border-radius: 8px; padding: 2px; }
-.view-toggle-btn { display: inline-flex; align-items: center; gap: 6px; padding: 4px 9px; font-size: .63rem; font-weight: 600; border: none; background: transparent; color: var(--text-muted); cursor: pointer; border-radius: 6px; transition: all .16s ease; }
-.view-toggle-btn svg { width: 12px; height: 12px; stroke: currentColor; fill: none; stroke-width: 1.8; }
-.view-toggle-btn:hover { color: var(--text); }
-.view-toggle-btn.active { background: rgba(56, 189, 248, 0.22); color: #38bdf8; box-shadow: 0 0 10px rgba(56, 189, 248, 0.35); }
-.cg-toolbar { display: inline-flex; align-items: center; gap: 3px; background: rgba(5,8,14,.78); backdrop-filter: blur(8px); border: 1px solid rgba(56, 189, 248, 0.25); border-radius: 8px; padding: 2px 4px; }
-.cg-tool-btn { width: 26px; height: 26px; display: inline-grid; place-items: center; border: none; background: transparent; color: var(--text-muted); border-radius: 6px; cursor: pointer; transition: all .15s ease; }
-.cg-tool-btn svg { width: 13px; height: 13px; stroke: currentColor; fill: none; stroke-width: 1.8; }
-.cg-tool-btn:hover { background: rgba(255,255,255,.07); color: var(--text); }
-.cg-tool-btn.active { color: var(--amber); text-shadow: 0 0 8px rgba(241,185,107,.6); }
-.cg-tool-btn.audio-active { color: var(--cyan); text-shadow: 0 0 8px rgba(66,211,234,.7); }
-.live-indicator { display: inline-flex; align-items: center; gap: 6px; }
-.live-indicator i { width: 5px; height: 5px; border-radius: 50%; background: var(--green); box-shadow: 0 0 7px var(--green); }
 
-.play-network-wrap {
+.play-sidebar {
     position: absolute;
-    inset: 0;
-    width: 100%;
-    height: 100%;
-    min-height: 100%;
-    border-radius: 0;
-    background: #020611;
-    overflow: hidden;
+    top: 52px;
+    right: 16px;
+    bottom: 20px;
+    width: 340px;
+    max-width: calc(100vw - 32px);
+    z-index: 54;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    transition: transform 0.28s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.22s ease;
+    transform: translateX(calc(100% + 28px));
+    opacity: 0;
+    pointer-events: none;
 }
-.play-network-wrap:fullscreen,
-.play-network-wrap.fullscreen-active { position: fixed; inset: 0; width: 100vw; height: 100vh; min-height: 100vh; z-index: 99999; border-radius: 0; }
-.play-network-wrap::before,
-.play-network-wrap::after { display: none !important; }
-#play-cg-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; z-index: 1; cursor: grab; }
-#play-cg-canvas:active { cursor: grabbing; }
-#play-network { position: relative; z-index: 2; display: block; width: 100%; height: 100%; overflow: visible; }
+.play-sidebar.drawer-open {
+    transform: translateX(0);
+    opacity: 1;
+    pointer-events: auto;
+}
+.play-sidebar .play-card {
+    background: rgba(8, 14, 26, 0.94);
+    backdrop-filter: blur(14px);
+    border: 1px solid rgba(56, 189, 248, 0.25);
+    box-shadow: 0 12px 36px rgba(0, 0, 0, 0.6);
+}
+
+/* Realm Lens Fullscreen Rules — Age of Empires / Civilization Clean Horizon */
+.play-dialog.lens-realm .commander-powers-dock,
+.play-dialog.lens-realm #city-hardship-hud,
+.play-dialog.lens-realm .city-build-dock,
+.play-dialog.lens-realm .cg-view-legend {
+    display: none !important;
+}
+
+/* Floating Commander Powers Dock */
+.commander-powers-dock {
+    position: absolute;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 40;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 6px 14px;
+    border: 1px solid rgba(56, 189, 248, 0.25);
+    border-radius: 14px;
+    background: rgba(8, 14, 26, 0.92);
+    backdrop-filter: blur(12px);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
+}
 .immersion-hud { position: absolute; z-index: 12; inset: 0; pointer-events: none; }
 .immersion-hud.hidden { display: none; }
 .immersion-status { position: absolute; top: 14px; left: 14px; display: grid; gap: 2px; max-width: 290px; padding: 9px 11px; border-left: 2px solid var(--cyan); background: linear-gradient(90deg,rgba(4,11,20,.84),rgba(4,11,20,.12)); text-shadow: 0 1px 3px #000; }

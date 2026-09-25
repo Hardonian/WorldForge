@@ -923,6 +923,10 @@ function openPlayMode() {
     }
     WorldForgeCG.start();
     dom.playDialog.showModal();
+    setTimeout(() => {
+        WorldForgeCG.setViewMode(WorldForgeCG.worldLens || 'city');
+        WorldForgeCG.fitView(true);
+    }, 60);
 }
 
 function closePlayMode() {
@@ -4185,6 +4189,13 @@ const WorldForgeCG = {
             setPlayRunning(false);
             showToast('Intervention window', 'Simulation paused. Adjust capacity, construction, research, governance, or covert operations.');
         });
+        el('btn-toggle-sidebar')?.addEventListener('click', () => {
+            const sb = el('play-sidebar');
+            if (sb) {
+                const open = sb.classList.toggle('drawer-open');
+                this.audio?.playBlip?.(open ? 740 : 540, 0.04);
+            }
+        });
         this.syncAudioBtn(this.audio.enabled);
         this.bindKeyboard();
     },
@@ -4554,11 +4565,14 @@ const WorldForgeCG = {
             el('immersion-hud')?.classList.toggle('hidden', this.perspectiveMode === 'strategic');
             el('city-build-dock')?.classList.toggle('hidden', this.worldLens !== 'city');
             el('play-network-container')?.setAttribute('data-perspective', this.perspectiveMode);
-            if (this.perspectiveMode !== 'strategic') this.enterImmersiveMode();
+            const playModal = el('play-modal');
+            playModal?.classList.toggle('lens-realm', this.worldLens === 'realm');
+            el('play-network-container')?.setAttribute('data-lens', this.worldLens);
             if (mode === 'realm') {
+                el('play-sidebar')?.classList.remove('drawer-open');
                 this.camera.targetX = 0;
                 this.camera.targetY = 0;
-                this.camera.targetZoom = 0.72;
+                this.camera.targetZoom = 0.82;
                 this.camera.hasInteracted = false;
                 this.realmMapLens = this.realmMapLens || 'geopolitics';
             } else if (mode === 'city') {
@@ -8320,8 +8334,8 @@ const WorldForgeCG = {
         if (!this.canvas || !this.ctx) return;
         const ctx = this.ctx;
         const dpr = window.devicePixelRatio || 1;
-        const w = this.canvas.clientWidth;
-        const h = this.canvas.clientHeight;
+        const w = this.canvas.clientWidth || window.innerWidth;
+        const h = this.canvas.clientHeight || window.innerHeight;
 
         if (this.canvas.width !== Math.floor(w * dpr) || this.canvas.height !== Math.floor(h * dpr)) {
             this.canvas.width = Math.floor(w * dpr);
