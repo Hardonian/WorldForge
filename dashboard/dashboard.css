@@ -744,12 +744,16 @@ button, input, select, a { -webkit-tap-highlight-color: transparent; }
     height: 100%;
     overflow: hidden;
 }
-#play-cg-canvas {
+#play-cg-canvas,
+#play-gpu-canvas {
     position: absolute;
     inset: 0;
     width: 100%;
     height: 100%;
     display: block;
+}
+#play-gpu-canvas.hidden {
+    display: none !important;
 }
 .play-header {
     position: absolute;
@@ -1609,6 +1613,12 @@ button, input, select, a { -webkit-tap-highlight-color: transparent; }
     border-color: #f59e0b;
     color: #ffffff;
     box-shadow: 0 0 10px rgba(245, 158, 11, 0.5);
+}
+.battle-ctrl-btn.pbr-toggle.active {
+    background: linear-gradient(135deg, rgba(14, 165, 233, 0.38), rgba(99, 102, 241, 0.48));
+    border-color: #38bdf8;
+    color: #ffffff;
+    box-shadow: 0 0 14px rgba(56, 189, 248, 0.6);
 }
 .battle-ctrl-btn.exit:hover {
     background: rgba(239, 68, 68, 0.2);
@@ -4861,3 +4871,312 @@ body.ui-scale-130 {
         .status-dot, .verified-chip span, .recent-run-dot { forced-color-adjust: none; }
     }
 }
+
+/* ==========================================================================
+   Milestones 2 - 5 Advanced Combat & Strategic Dialogs
+   ========================================================================== */
+
+/* Spectator Casting Drone HUD */
+.spectator-casting-hud {
+    position: absolute;
+    top: 12px;
+    left: 14px;
+    right: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    pointer-events: none;
+    z-index: 50;
+}
+.spectator-casting-hud.hidden { display: none; }
+.casting-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: rgba(15, 23, 42, 0.85);
+    border: 1px solid rgba(56, 189, 248, 0.35);
+    backdrop-filter: blur(8px);
+    border-radius: 6px;
+    padding: 6px 12px;
+    pointer-events: auto;
+}
+.casting-badge {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.72rem;
+    font-weight: 800;
+    color: #38bdf8;
+    letter-spacing: 0.06em;
+}
+.rec-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #ef4444;
+    box-shadow: 0 0 8px #ef4444;
+    animation: blink 1.2s infinite;
+}
+.casting-cam-controls {
+    display: flex;
+    gap: 6px;
+}
+.casting-pill {
+    background: rgba(30, 41, 59, 0.7);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    color: #cbd5e1;
+    font-size: 0.65rem;
+    padding: 3px 8px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+.casting-pill:hover { border-color: #38bdf8; }
+.casting-pill.active { background: rgba(56, 189, 248, 0.25); border-color: #38bdf8; color: #38bdf8; font-weight: 700; }
+.casting-pill.close { background: rgba(239, 68, 68, 0.2); border-color: rgba(239, 68, 68, 0.5); color: #f87171; }
+
+.casting-scoreboard {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+}
+.cast-team {
+    background: rgba(15, 23, 42, 0.85);
+    border-radius: 6px;
+    padding: 8px 12px;
+    backdrop-filter: blur(8px);
+    min-width: 220px;
+    pointer-events: auto;
+}
+.team-vanguard { border-left: 4px solid #38bdf8; border: 1px solid rgba(56, 189, 248, 0.25); }
+.team-hostile { border-right: 4px solid #f43f5e; border: 1px solid rgba(244, 63, 94, 0.25); }
+.team-meta {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.70rem;
+    margin-bottom: 4px;
+}
+.team-vanguard strong { color: #38bdf8; }
+.team-hostile strong { color: #f43f5e; }
+.team-bars {
+    display: flex;
+    gap: 10px;
+    font-size: 0.68rem;
+}
+.cast-stat { display: flex; gap: 4px; color: #94a3b8; }
+.cast-stat strong { color: #f1f5f9; font-family: var(--font-mono); }
+.cast-vs-badge {
+    background: rgba(30, 41, 59, 0.9);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 50%;
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.65rem;
+    font-weight: 900;
+    color: #fbbf24;
+}
+
+/* Dynamic Mercenary Warband Auction Banner */
+.mercenary-auction-banner {
+    position: absolute;
+    bottom: 90px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 45;
+    pointer-events: auto;
+    animation: slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.mercenary-auction-banner.hidden { display: none; }
+.auction-card {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    background: linear-gradient(135deg, rgba(30, 27, 75, 0.95), rgba(15, 23, 42, 0.95));
+    border: 1px solid rgba(168, 85, 247, 0.5);
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5), 0 0 20px rgba(168, 85, 247, 0.25);
+    border-radius: 8px;
+    padding: 10px 18px;
+}
+.auction-icon { font-size: 1.8rem; }
+.auction-info { min-width: 240px; }
+.auction-kicker { font-size: 0.60rem; font-weight: 800; color: #c084fc; letter-spacing: 0.08em; }
+.auction-info h4 { margin: 2px 0; font-size: 0.85rem; color: #f1f5f9; }
+.auction-info p { margin: 0; font-size: 0.70rem; color: #94a3b8; }
+.auction-bid-box {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 4px;
+}
+.auction-timer { font-size: 0.72rem; font-weight: 800; color: #f59e0b; }
+.auction-cur-bid { font-size: 0.70rem; color: #cbd5e1; }
+.auction-actions { display: flex; gap: 6px; }
+
+/* WebRTC Multiplayer Dialog */
+.multiplayer-shell { max-width: 820px; width: 90vw; }
+.multiplayer-layout { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.mp-card {
+    background: rgba(15, 23, 42, 0.75);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 8px;
+    padding: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+.mp-card-title { font-size: 0.75rem; font-weight: 800; color: #38bdf8; text-transform: uppercase; }
+.mp-mode-toggle { display: flex; gap: 8px; }
+.mp-mode-btn {
+    flex: 1;
+    background: rgba(30, 41, 59, 0.6);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: #cbd5e1;
+    padding: 8px;
+    border-radius: 5px;
+    font-size: 0.72rem;
+    font-weight: 700;
+    cursor: pointer;
+}
+.mp-mode-btn.active { background: rgba(56, 189, 248, 0.2); border-color: #38bdf8; color: #38bdf8; }
+.mp-telemetry-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    font-size: 0.70rem;
+}
+.mp-stat {
+    display: flex;
+    flex-direction: column;
+    background: rgba(30, 41, 59, 0.4);
+    padding: 6px 10px;
+    border-radius: 4px;
+    border: 1px solid rgba(255, 255, 255, 0.05);
+}
+.mp-stat.full { grid-column: span 2; }
+.mp-stat span { color: #64748b; font-size: 0.65rem; }
+.mp-stat strong { color: #f1f5f9; font-family: var(--font-mono); }
+.mp-actions { display: flex; flex-direction: column; gap: 8px; margin-top: 6px; }
+
+/* Visual Node Graph Trigger Studio Dialog */
+.nodegraph-shell { max-width: 1040px; width: 95vw; }
+.nodegraph-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    background: rgba(15, 23, 42, 0.6);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    padding: 8px 16px;
+}
+.nodegraph-body { display: flex; gap: 14px; padding: 12px 16px; height: 500px; }
+.nodegraph-canvas-wrap {
+    flex: 1;
+    position: relative;
+    background: #090d16;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 6px;
+    overflow: hidden;
+}
+#nodegraph-canvas { width: 100%; height: 100%; display: block; cursor: grab; }
+#nodegraph-canvas:active { cursor: grabbing; }
+.nodegraph-hint {
+    position: absolute;
+    bottom: 8px;
+    left: 12px;
+    font-size: 0.65rem;
+    color: #64748b;
+    pointer-events: none;
+}
+.nodegraph-inspector {
+    width: 260px;
+    background: rgba(15, 23, 42, 0.85);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 6px;
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+.inspector-kicker { font-size: 0.60rem; font-weight: 800; color: #a855f7; letter-spacing: 0.08em; }
+.nodegraph-inspector h4 { margin: 0; font-size: 0.82rem; color: #f1f5f9; }
+
+/* Dynamic Nemesis & Mercenary Warband Dialog */
+.nemesis-shell { max-width: 900px; width: 92vw; }
+.nemesis-layout { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.nemesis-column { display: flex; flex-direction: column; gap: 12px; }
+.nemesis-profile-card {
+    display: flex;
+    gap: 14px;
+    background: rgba(15, 23, 42, 0.85);
+    border: 1px solid rgba(244, 63, 94, 0.3);
+    border-radius: 8px;
+    padding: 14px;
+}
+.nemesis-avatar-box {
+    position: relative;
+    width: 90px;
+    height: 90px;
+    border-radius: 6px;
+    border: 1px solid rgba(244, 63, 94, 0.4);
+    background: #0b0f19;
+    overflow: hidden;
+    flex-shrink: 0;
+}
+#nemesis-portrait-canvas { width: 100%; height: 100%; display: block; }
+.nemesis-avatar-badge {
+    position: absolute;
+    top: 4px;
+    left: 4px;
+    font-size: 0.52rem;
+    font-weight: 800;
+    color: #f43f5e;
+    background: rgba(11, 15, 25, 0.85);
+    padding: 1px 4px;
+    border-radius: 3px;
+    border: 1px solid rgba(244, 63, 94, 0.4);
+}
+.nemesis-identity h3 { margin: 0 0 4px 0; font-size: 0.88rem; color: #f1f5f9; }
+.nemesis-rank { font-size: 0.65rem; font-weight: 800; color: #f43f5e; letter-spacing: 0.06em; display: block; margin-bottom: 6px; }
+.nemesis-identity p { margin: 0; font-size: 0.70rem; color: #94a3b8; line-height: 1.35; }
+
+.nemesis-scars-card, .nemesis-doctrine-card, .mercenary-contracts-card {
+    background: rgba(15, 23, 42, 0.75);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 8px;
+    padding: 12px;
+}
+.nemesis-card-title { display: block; font-size: 0.72rem; font-weight: 800; color: #38bdf8; margin-bottom: 8px; }
+.scars-list { display: flex; flex-direction: column; gap: 6px; }
+.scar-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: rgba(30, 41, 59, 0.5);
+    padding: 6px 10px;
+    border-radius: 4px;
+    border-left: 3px solid #f59e0b;
+}
+.scar-item strong { display: block; font-size: 0.70rem; color: #f1f5f9; }
+.scar-item small { font-size: 0.62rem; color: #94a3b8; }
+.nemesis-doctrine-card p { font-size: 0.70rem; color: #cbd5e1; margin: 0; line-height: 1.4; }
+
+.mercenary-desc { font-size: 0.70rem; color: #94a3b8; margin: 0 0 10px 0; }
+.warband-grid { display: flex; flex-direction: column; gap: 8px; }
+.warband-item {
+    background: rgba(30, 41, 59, 0.5);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 6px;
+    padding: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+.warband-head { display: flex; justify-content: space-between; align-items: center; }
+.warband-head strong { font-size: 0.78rem; color: #f1f5f9; }
+.warband-cost { font-size: 0.72rem; font-weight: 800; color: #fbbf24; font-family: var(--font-mono); }
+.warband-item small { font-size: 0.68rem; color: #94a3b8; }
+.warband-item button { font-size: 0.72rem; font-weight: 700; width: 100%; margin-top: 2px; }
+

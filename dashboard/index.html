@@ -674,6 +674,7 @@
                             </div>
 
                             <canvas id="play-cg-canvas" role="img" aria-label="Tactical CG simulation game view with real-time animations"></canvas>
+                            <canvas id="play-gpu-canvas" class="hidden" role="img" aria-label="Hardware-Accelerated WebGL2 PBR Viewport"></canvas>
                             <svg id="play-network" class="hidden" viewBox="0 0 800 420" role="img" aria-label="Live entity and resource network"></svg>
                             <div class="immersion-hud hidden" id="immersion-hud">
                                 <div class="immersion-status"><small id="immersion-mode">THIRD-PERSON FOLLOW</small><strong id="immersion-focus">Free camera</strong><span id="immersion-signal">World telemetry linked</span></div>
@@ -1029,6 +1030,11 @@
                                             <span class="ability-info"><strong>Chaff Screen</strong><small>Deflect/Jam</small></span>
                                             <span class="ability-hotkey">[5]</span>
                                         </button>
+                                        <button type="button" class="battle-ability-btn" id="btn-power-napalm" title="Napalm Firewall [6]: Rupture combustible fuel pipeline and deploy spreading incendiary barrier that damages and blocks vehicles">
+                                            <span class="ability-icon">🔥</span>
+                                            <span class="ability-info"><strong>Napalm Wall</strong><small>Fire Barrier</small></span>
+                                            <span class="ability-hotkey">[6]</span>
+                                        </button>
                                     </div>
 
                                     <!-- Tactical Battle Controls & Hotkeys -->
@@ -1042,8 +1048,23 @@
                                         <button type="button" class="battle-ctrl-btn" id="btn-battle-follow" title="Toggle Cinematic Chase Camera behind selected unit [F]">
                                             <span>🎥 Chase Cam [F]</span>
                                         </button>
+                                        <button type="button" class="battle-ctrl-btn pbr-toggle" id="btn-battle-pbr" title="Toggle Hardware-Accelerated WebGL2 PBR Shading, Metallic Reflections &amp; Dynamic Shadows">
+                                            <span>⚡ PBR Shading [GPU]</span>
+                                        </button>
                                         <button type="button" class="battle-ctrl-btn" id="btn-battle-reset" title="Reinforce battlefield with new combat wave [R]">
                                             <span>🔄 Reinforce [R]</span>
+                                        </button>
+                                        <button type="button" class="battle-ctrl-btn highlight" id="btn-battle-multiplayer" title="Deterministic WebRTC Rollback Multiplayer Lobby &amp; P2P Lockstep [M]">
+                                            <span>🌐 Multiplayer [M]</span>
+                                        </button>
+                                        <button type="button" class="battle-ctrl-btn" id="btn-battle-spectator" title="Toggle Spectator Casting Drone Camera &amp; Live Telemetry [C]">
+                                            <span>🎥 Drone [C]</span>
+                                        </button>
+                                        <button type="button" class="battle-ctrl-btn" id="btn-battle-nodegraph" title="Open Visual Mission Node-Graph Trigger Editor &amp; Scenario Studio [N]">
+                                            <span>🔀 Triggers [N]</span>
+                                        </button>
+                                        <button type="button" class="battle-ctrl-btn highlight" id="btn-battle-nemesis" title="Open Dynamic Nemesis Warlord Dossier &amp; Mercenary Auctions [K]">
+                                            <span>⚔️ Nemesis [K]</span>
                                         </button>
                                         <button type="button" class="battle-ctrl-btn highlight" id="btn-battle-aar" title="Open After-Action Report, Battle Telemetry &amp; Replay Studio [P]">
                                             <span>📊 AAR / Replay [P]</span>
@@ -1086,6 +1107,59 @@
                                     <div class="radial-slice right" id="radial-cmd-defend" title="Defensive Fortify Stance"><span>🛡️</span><small>Defend</small></div>
                                     <div class="radial-slice bottom" id="radial-cmd-retreat" title="Tactical Fallback &amp; Regroup"><span>🏃</span><small>Retreat</small></div>
                                     <div class="radial-slice left" id="radial-cmd-flank" title="Flank Hostile Rear Armor"><span>⚡</span><small>Flank</small></div>
+                                </div>
+
+                                <!-- Spectator Casting Drone HUD Overlay (Milestone 3) -->
+                                <div class="spectator-casting-hud hidden" id="spectator-casting-hud">
+                                    <div class="casting-header">
+                                        <div class="casting-badge"><span class="rec-dot"></span> LIVE CASTING DRONE 01 · 60 FPS</div>
+                                        <div class="casting-cam-controls">
+                                            <button type="button" class="casting-pill active" id="btn-drone-speed-1">1x Drone</button>
+                                            <button type="button" class="casting-pill" id="btn-drone-speed-2">2x Speed</button>
+                                            <button type="button" class="casting-pill" id="btn-drone-slowmo">Slow-Mo</button>
+                                            <button type="button" class="casting-pill" id="btn-drone-freeze">Freeze</button>
+                                            <button type="button" class="casting-pill close" id="btn-drone-close">Close [C]</button>
+                                        </div>
+                                    </div>
+                                    <div class="casting-scoreboard">
+                                        <div class="cast-team team-vanguard">
+                                            <div class="team-meta"><strong>COMMANDER (VANGUARD)</strong><span id="cast-apm-p1">142 APM</span></div>
+                                            <div class="team-bars">
+                                                <div class="cast-stat"><span>DPS:</span><strong id="cast-dps-p1">280</strong></div>
+                                                <div class="cast-stat"><span>Army:</span><strong id="cast-army-p1">8 / 10</strong></div>
+                                                <div class="cast-stat"><span>Kills:</span><strong id="cast-kills-p1">14</strong></div>
+                                            </div>
+                                        </div>
+                                        <div class="cast-vs-badge">VS</div>
+                                        <div class="cast-team team-hostile">
+                                            <div class="team-meta"><strong>HOSTILE (RIVAL WARLORD)</strong><span id="cast-apm-p2">118 APM</span></div>
+                                            <div class="team-bars">
+                                                <div class="cast-stat"><span>DPS:</span><strong id="cast-dps-p2">240</strong></div>
+                                                <div class="cast-stat"><span>Army:</span><strong id="cast-army-p2">12 / 15</strong></div>
+                                                <div class="cast-stat"><span>Kills:</span><strong id="cast-kills-p2">6</strong></div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Dynamic Mercenary Warband Auction Banner (Milestone 5) -->
+                                <div class="mercenary-auction-banner hidden" id="mercenary-auction-banner">
+                                    <div class="auction-card">
+                                        <div class="auction-icon">⚔️</div>
+                                        <div class="auction-info">
+                                            <span class="auction-kicker">MERCENARY WARBAND INBOUND</span>
+                                            <h4 id="auction-warband-name">The Obsidian Corsairs Gunship Wing</h4>
+                                            <p id="auction-warband-desc">Heavy aerial skimmers ready to deploy in support of the highest bidder!</p>
+                                        </div>
+                                        <div class="auction-bid-box">
+                                            <div class="auction-timer"><span id="auction-timer-secs">15</span>s REMAINING</div>
+                                            <div class="auction-cur-bid">Highest: <strong id="auction-high-bidder">Player (350 CR)</strong></div>
+                                            <div class="auction-actions">
+                                                <button type="button" class="button button-accent" id="btn-auction-bid">Bid +50 Credits</button>
+                                                <button type="button" class="button button-secondary" id="btn-auction-pass">Pass</button>
+                                            </div>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
 
@@ -2109,6 +2183,196 @@
         </div>
     </dialog>
 
+    <!-- WebRTC Deterministic Rollback Multiplayer Dialog (Milestone 3) -->
+    <dialog class="tool-dialog webrtc-multiplayer-dialog" id="webrtc-multiplayer-dialog" aria-labelledby="multiplayer-title">
+        <div class="dialog-shell multiplayer-shell">
+            <header class="dialog-header multiplayer-header">
+                <div>
+                    <div class="panel-kicker">Live P2P Lockstep Netcode · BLAKE3 Verified</div>
+                    <h2 id="multiplayer-title">Deterministic WebRTC Rollback Multiplayer</h2>
+                    <p>Real-time peer-to-peer combat with 64-frame input rollback buffer, client-side prediction, and cryptographic state hashing.</p>
+                </div>
+                <button class="icon-button dialog-close" id="multiplayer-close" type="button" aria-label="Close Multiplayer"><svg viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></svg></button>
+            </header>
+            <div class="dialog-body multiplayer-body">
+                <div class="multiplayer-layout">
+                    <div class="mp-column">
+                        <div class="mp-card">
+                            <span class="mp-card-title">1. Match Mode &amp; Faction Doctrine</span>
+                            <div class="mp-mode-toggle">
+                                <button type="button" class="mp-mode-btn active" id="btn-mp-1v1">1v1 Tactical Duel</button>
+                                <button type="button" class="mp-mode-btn" id="btn-mp-2v2">2v2 Allied Skirmish</button>
+                            </div>
+                            <div class="mp-faction-select">
+                                <label class="field">
+                                    <span>Player Faction:</span>
+                                    <select id="mp-player-faction">
+                                        <option value="vanguard">Vanguard Mech Division</option>
+                                        <option value="ironclad">Ironclad Siege Walkers</option>
+                                        <option value="cybernet">Cybernet Repulsor Flankers</option>
+                                    </select>
+                                </label>
+                            </div>
+                        </div>
+
+                        <div class="mp-card">
+                            <span class="mp-card-title">2. P2P Direct Signaling Ticket</span>
+                            <div class="mp-signaling-box">
+                                <button type="button" class="button button-accent" id="btn-mp-host">Host Match (Create Ticket)</button>
+                                <label class="field" style="margin-top: 8px;">
+                                    <span>Paste Remote Peer Ticket:</span>
+                                    <textarea id="mp-remote-ticket" rows="3" placeholder="Paste remote player offer/answer JSON ticket here..."></textarea>
+                                </label>
+                                <button type="button" class="button button-primary" id="btn-mp-join">Connect Peer DataChannel</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="mp-column">
+                        <div class="mp-card">
+                            <span class="mp-card-title">3. Netcode Telemetry &amp; BLAKE3 Sync</span>
+                            <div class="mp-telemetry-grid">
+                                <div class="mp-stat"><span>P2P Ping:</span><strong id="mp-ping">0 ms (Host Loopback)</strong></div>
+                                <div class="mp-stat"><span>Rollback Buffer:</span><strong id="mp-buffer">64 Frames</strong></div>
+                                <div class="mp-stat"><span>Input Delay:</span><strong id="mp-delay">0 Frames (Instant)</strong></div>
+                                <div class="mp-stat"><span>Simulation State:</span><strong class="highlight" id="mp-status">READY TO ENGAGE</strong></div>
+                                <div class="mp-stat full"><span>BLAKE3 State Hash:</span><code id="mp-blake3-hash">0x7f4c9a823e1b04d6</code></div>
+                            </div>
+                            <div class="mp-actions">
+                                <button type="button" class="button button-accent" id="btn-mp-launch">⚡ Launch Synchronized Battle</button>
+                                <button type="button" class="button button-secondary" id="btn-mp-spectate">🎥 Launch as Spectator Drone</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </dialog>
+
+    <!-- Visual Mission Node-Graph Trigger Editor & UGC Packager Dialog (Milestone 4) -->
+    <dialog class="tool-dialog nodegraph-studio-dialog" id="nodegraph-studio-dialog" aria-labelledby="nodegraph-title">
+        <div class="dialog-shell nodegraph-shell">
+            <header class="dialog-header nodegraph-header">
+                <div>
+                    <div class="panel-kicker">Campaign Scripting &amp; UGC Mission Packager</div>
+                    <h2 id="nodegraph-title">Visual Mission Trigger Node Graph</h2>
+                    <p>Script branching tactical objectives, radio dialogue cues, dynamic drop-pod reinforcements, and package scenarios into portable .wfscenario files.</p>
+                </div>
+                <button class="icon-button dialog-close" id="nodegraph-close" type="button" aria-label="Close Trigger Studio"><svg viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></svg></button>
+            </header>
+            <div class="nodegraph-toolbar">
+                <button type="button" class="button button-secondary" id="btn-ng-add-event">⚡ + Event Trigger</button>
+                <button type="button" class="button button-secondary" id="btn-ng-add-condition">⚖️ + Condition</button>
+                <button type="button" class="button button-secondary" id="btn-ng-add-action">🎯 + Action</button>
+                <button type="button" class="button button-secondary" id="btn-ng-clear">🗑️ Clear Graph</button>
+                <button type="button" class="button button-accent" id="btn-ng-test">▶️ Test in 3D Simulator</button>
+                <button type="button" class="button button-primary" id="btn-ng-export">💾 Export .wfscenario</button>
+                <button type="button" class="button button-secondary" id="btn-ng-import-btn">📂 Import .wfscenario</button>
+                <input type="file" id="file-import-scenario" accept=".wfscenario,.json" style="display:none;">
+            </div>
+            <div class="dialog-body nodegraph-body">
+                <div class="nodegraph-canvas-wrap">
+                    <canvas id="nodegraph-canvas" width="840" height="460"></canvas>
+                    <div class="nodegraph-hint">Drag nodes to position · Click &amp; drag between output/input ports to link wires · Right-click node to delete</div>
+                </div>
+                <div class="nodegraph-inspector" id="nodegraph-inspector">
+                    <span class="inspector-kicker">TRIGGER NODE PROPERTIES</span>
+                    <h4 id="ng-node-title">Select a Node</h4>
+                    <div id="ng-node-props-form">
+                        <label class="field"><span>Label:</span><input type="text" id="ng-prop-label" value="Wave Start"></label>
+                        <label class="field"><span>Type:</span><select id="ng-prop-type"><option value="event">Event: On Wave Start</option><option value="event_unit">Event: On Unit Destroyed</option><option value="condition">Condition: Enemy Count &lt; 3</option><option value="action_spawn">Action: Spawn Drop-Pod Reinforcements</option><option value="action_dialogue">Action: Radio Comms Dialogue</option><option value="action_orbital">Action: Call Orbital Strike</option><option value="action_victory">Action: Victory Objective Met</option></select></label>
+                        <label class="field"><span>Parameter / Text:</span><textarea id="ng-prop-param" rows="2" placeholder="e.g. 'Incoming hostile vanguard detected in Sector 4'"></textarea></label>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </dialog>
+
+    <!-- Dynamic Nemesis Dossier & Mercenary Warband Dialog (Milestone 5) -->
+    <dialog class="tool-dialog nemesis-warband-dialog" id="nemesis-warband-dialog" aria-labelledby="nemesis-title">
+        <div class="dialog-shell nemesis-shell">
+            <header class="dialog-header nemesis-header">
+                <div>
+                    <div class="panel-kicker">Persistent Rival Intelligence &amp; Bidding Auctions</div>
+                    <h2 id="nemesis-title">Dynamic Nemesis Dossier &amp; Mercenary Warbands</h2>
+                    <p>Defeated commanders persist, accumulate permanent physical battle scars, remember player weapon tactics, and alter army compositions.</p>
+                </div>
+                <button class="icon-button dialog-close" id="nemesis-close" type="button" aria-label="Close Nemesis Dossier"><svg viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></svg></button>
+            </header>
+            <div class="dialog-body nemesis-body">
+                <div class="nemesis-layout">
+                    <!-- Left: Nemesis Commander Dossier -->
+                    <div class="nemesis-column">
+                        <div class="nemesis-profile-card">
+                            <div class="nemesis-avatar-box">
+                                <div class="nemesis-avatar-badge">⚔️ NEMESIS</div>
+                                <canvas id="nemesis-portrait-canvas" width="100" height="100"></canvas>
+                            </div>
+                            <div class="nemesis-identity">
+                                <h3 id="nemesis-name">Warlord Malakor the Iron-Scarred</h3>
+                                <span class="nemesis-rank" id="nemesis-rank">RANK IV TITAN COMMANDER</span>
+                                <p id="nemesis-bio">Fought player across 3 previous campaigns. Harboring bitter tactical vendetta.</p>
+                            </div>
+                        </div>
+
+                        <div class="nemesis-scars-card">
+                            <span class="nemesis-card-title">Physical Battle Scars (Acquired from Player Weapons)</span>
+                            <div class="scars-list" id="nemesis-scars-list">
+                                <div class="scar-item">
+                                    <span class="scar-icon">⚡</span>
+                                    <div><strong>Shattered Optic Visor</strong><small>Struck by player Hyper Railgun in Dune Sector (+20% Kinetic Deflection)</small></div>
+                                </div>
+                                <div class="scar-item">
+                                    <span class="scar-icon">🔥</span>
+                                    <div><strong>Scorched Blast Armor</strong><small>Caught in player Napalm Firewall (+25% Flame/Thermal Resistance)</small></div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="nemesis-doctrine-card">
+                            <span class="nemesis-card-title">Adaptive Counter-Build AI Doctrine</span>
+                            <p id="nemesis-adaptive-intel"><strong>Intel Analysis:</strong> Player relies heavily on Titan Railgun Mechs. Malakor has reorganized subsequent hostile waves with high-speed <em>Flanking Skimmers</em> and <em>ECM Chaff Walkers</em> to disrupt long-range target locks.</p>
+                        </div>
+                    </div>
+
+                    <!-- Right: Mercenary Warband Contracts & Auctions -->
+                    <div class="nemesis-column">
+                        <div class="mercenary-contracts-card">
+                            <span class="nemesis-card-title">Neutral Mercenary Warband Contracts</span>
+                            <p class="mercenary-desc">Neutral warbands wander the warzone and offer combat contracts to the highest bidder during tactical operations.</p>
+                            <div class="warband-grid" id="warband-contracts-grid">
+                                <div class="warband-item">
+                                    <div class="warband-head">
+                                        <strong>The Obsidian Corsairs</strong>
+                                        <span class="warband-cost">300 CR</span>
+                                    </div>
+                                    <small>2x Heavy Aerial Skimmers equipped with dual plasma cannons.</small>
+                                    <button type="button" class="button button-accent hire-warband-btn" data-warband="corsairs">Contract for Next Wave (300 CR)</button>
+                                </div>
+                                <div class="warband-item">
+                                    <div class="warband-head">
+                                        <strong>Valkyrie Chaff Flotilla</strong>
+                                        <span class="warband-cost">240 CR</span>
+                                    </div>
+                                    <small>3x High-mobility ECM pods providing area radar jamming and missile decoy screens.</small>
+                                    <button type="button" class="button button-accent hire-warband-btn" data-warband="valkyrie">Contract for Next Wave (240 CR)</button>
+                                </div>
+                                <div class="warband-item">
+                                    <div class="warband-head">
+                                        <strong>Goliath Sledge Walkers</strong>
+                                        <span class="warband-cost">420 CR</span>
+                                    </div>
+                                    <small>1x Armored Juggernaut designed to ram and breach enemy barricades with kinetic force.</small>
+                                    <button type="button" class="button button-accent hire-warband-btn" data-warband="goliath">Contract for Next Wave (420 CR)</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </dialog>
+
     <!-- Live Engine Microsecond Performance Profiler Dock (Pillar X, #100) -->
     <div class="engine-profiler-dock hidden" id="engine-profiler-dock" role="region" aria-label="Live Engine Telemetry">
         <div class="profiler-header">
@@ -2123,6 +2387,8 @@
             <div class="prof-metric"><span>Particle Compute:</span><strong id="prof-particles">1.2 ms</strong></div>
             <div class="prof-metric"><span>Living Combatants:</span><strong id="prof-units">14 Units</strong></div>
             <div class="prof-metric"><span>Physics Debris:</span><strong id="prof-debris">18 Objects</strong></div>
+            <div class="prof-metric"><span>PBR Shading:</span><strong class="highlight" id="prof-pbr-status">WebGL2 PBR</strong></div>
+            <div class="prof-metric"><span>GPU Draw Calls:</span><strong id="prof-drawcalls">28 Calls</strong></div>
             <div class="prof-metric"><span>BLAKE3 Integrity:</span><strong class="highlight" id="prof-hash">VERIFIED</strong></div>
         </div>
     </div>
