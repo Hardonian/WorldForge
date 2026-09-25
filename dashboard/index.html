@@ -1081,6 +1081,21 @@
                                         <button type="button" class="battle-ctrl-btn highlight" id="btn-battle-mod-studio" title="In-Browser WASM Modding SDK &amp; Logic Assembler [W]">
                                             <span>🧩 Mod SDK [W]</span>
                                         </button>
+                                        <button type="button" class="battle-ctrl-btn" id="btn-battle-climate" title="Dynamic Atmospheric Storms &amp; Planetary Climate Engine [L]">
+                                            <span>🌪️ Climate [L]</span>
+                                        </button>
+                                        <button type="button" class="battle-ctrl-btn" id="btn-battle-diplomacy" title="Grand Galactic 4X Diplomacy &amp; Shadow Syndicate War Room [D]">
+                                            <span>🌐 Factions [D]</span>
+                                        </button>
+                                        <button type="button" class="battle-ctrl-btn highlight" id="btn-battle-montecarlo" title="Quantum Multi-Worker Simulation Cluster &amp; Monte-Carlo Predictor [Q]">
+                                            <span>⚛️ Quantum [Q]</span>
+                                        </button>
+                                        <button type="button" class="battle-ctrl-btn" id="btn-battle-megastructure" title="Orbital Megastructures &amp; Dyson Swarm Constructor [O]">
+                                            <span>🛰️ Megastructures [O]</span>
+                                        </button>
+                                        <button type="button" class="battle-ctrl-btn highlight" id="btn-battle-audio-synth" title="Spatial 3D Audio Symphony &amp; Procedural Sound Synthesizer [S]">
+                                            <span>🎵 Symphony [S]</span>
+                                        </button>
                                         <button type="button" class="battle-ctrl-btn highlight" id="btn-battle-aar" title="Open After-Action Report, Battle Telemetry &amp; Replay Studio [P]">
                                             <span>📊 AAR / Replay [P]</span>
                                         </button>
@@ -2898,6 +2913,394 @@
                             <pre class="mod-console-output" id="mod-console-output">[WASM_VM] Initialized sandbox instance with 16MB linear memory buffer.
 [WASM_VM] Fuel counter: 0/50000 consumed.
 [WASM_VM] Ready to compile and link runtime hooks.</pre>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </dialog>
+
+    <!-- Milestone 11: Real-Time Dynamic Climate & Atmospheric Storm Engine -->
+    <dialog class="tool-dialog climate-dialog" id="climate-weather-dialog" aria-labelledby="climate-title">
+        <div class="dialog-shell climate-shell">
+            <header class="dialog-header climate-header">
+                <div>
+                    <div class="panel-kicker">Atmospheric Advection &amp; Volumetric Stormfronts</div>
+                    <h2 id="climate-title">Real-Time Planetary Climate &amp; Volumetric Weather Simulator</h2>
+                    <p>Fluid advection wind vectors, Coriolis cyclonic storms, thermal updrafts, and dynamic environmental terrain hazards.</p>
+                </div>
+                <button class="icon-button dialog-close" id="climate-close" type="button" aria-label="Close Climate Simulator"><svg viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></svg></button>
+            </header>
+            <div class="dialog-body climate-body">
+                <div class="climate-layout">
+                    <!-- Left: Fluid Wind & Storm Vector Canvas -->
+                    <div class="climate-canvas-col">
+                        <div class="climate-viewport-wrap">
+                            <canvas id="climate-canvas" width="560" height="360"></canvas>
+                            <div class="climate-hud-overlay">
+                                <div class="climate-hud-tag"><span class="tag-label">SURFACE TEMP:</span> <strong id="weather-tele-temp">24.5°C</strong></div>
+                                <div class="climate-hud-tag"><span class="tag-label">WIND VECTOR:</span> <strong id="weather-tele-wind">64 km/h (ESE)</strong></div>
+                                <div class="climate-hud-tag"><span class="tag-label">PRESSURE:</span> <strong id="weather-tele-press">984 hPa (Cyclonic)</strong></div>
+                                <div class="climate-hud-tag"><span class="tag-label">PRECIPITATION:</span> <strong id="weather-tele-precip" class="highlight">Heavy Ion Deluge</strong></div>
+                            </div>
+                        </div>
+                        <div class="climate-btn-row">
+                            <button type="button" class="button button-accent" id="btn-climate-deploy">⚡ Ingest Stormfront to 3D Battle</button>
+                            <button type="button" class="button button-quiet" id="btn-climate-vortex">🌪️ Spawn Coriolis Eye in Sector 3</button>
+                        </div>
+                    </div>
+
+                    <!-- Right: Weather Systems & Hazard Parameters -->
+                    <div class="climate-controls-col">
+                        <div class="climate-card">
+                            <span class="nemesis-card-title">Atmospheric Front Presets</span>
+                            <select id="weather-preset-select" class="select" style="width: 100%;">
+                                <option value="supercell">Supercell Lightning Hurricane (EMP Storm)</option>
+                                <option value="blizzard">Cryo-Blizzard Permafrost (Sub-Zero Drift)</option>
+                                <option value="acidrain">Acid Rain Chemical Deluge (Armor Corrosion)</option>
+                                <option value="firestorm">Volcanic Ash Firestorm (Thermal updrafts)</option>
+                                <option value="calm">Clear High-Pressure Ridge (Optimal Range)</option>
+                            </select>
+                        </div>
+
+                        <div class="climate-card">
+                            <span class="nemesis-card-title">Thermodynamic Parameter Controls</span>
+                            <div class="climate-sliders-grid">
+                                <label class="field">
+                                    <span>Atmospheric Temp: <b id="weather-temp-val">24.5°C</b></span>
+                                    <input type="range" id="weather-temp-slider" min="-40" max="60" value="24">
+                                </label>
+                                <label class="field">
+                                    <span>Humidity &amp; Moisture: <b id="weather-moisture-val">82%</b></span>
+                                    <input type="range" id="weather-moisture-slider" min="0" max="100" value="82">
+                                </label>
+                                <label class="field">
+                                    <span>Jetstream Wind Force: <b id="weather-wind-val">64 km/h</b></span>
+                                    <input type="range" id="weather-wind-slider" min="0" max="180" value="64">
+                                </label>
+                                <label class="field">
+                                    <span>Lightning Frequency: <b id="weather-lightning-val">High</b></span>
+                                    <input type="range" id="weather-lightning-slider" min="0" max="10" value="7">
+                                </label>
+                            </div>
+                        </div>
+
+                        <div class="climate-card">
+                            <span class="nemesis-card-title">Battlefield Surface Hazard Impacts</span>
+                            <div class="hazard-impacts-list">
+                                <div class="hazard-item"><span>Wheel/Tread Traction:</span><strong id="haz-traction" class="highlight">72% (Mud Slippage)</strong></div>
+                                <div class="hazard-item"><span>Ballistic Wind Deflection:</span><strong id="haz-deflection">+14% Kinetic Drift</strong></div>
+                                <div class="hazard-item"><span>Shield Recharge Rate:</span><strong id="haz-shields">-25% (Ion Interference)</strong></div>
+                                <div class="hazard-item"><span>Thermal Dissipation:</span><strong id="haz-cooling">+40% (Cryo Cooling)</strong></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </dialog>
+
+    <!-- Milestone 12: Grand Galactic 4X Faction Diplomacy & Shadow Syndicate War Room -->
+    <dialog class="tool-dialog diplomacy-dialog" id="diplomacy-espionage-dialog" aria-labelledby="diplomacy-title">
+        <div class="dialog-shell diplomacy-shell">
+            <header class="dialog-header diplomacy-header">
+                <div>
+                    <div class="panel-kicker">Geopolitical Relational Matrix &amp; Covert Black-Ops</div>
+                    <h2 id="diplomacy-title">Grand Galactic 4X Faction Diplomacy &amp; Shadow Syndicate Suite</h2>
+                    <p>Dynamic AI diplomatic alignments, procedural non-aggression treaties, resource embargoes, and covert espionage operations.</p>
+                </div>
+                <button class="icon-button dialog-close" id="diplomacy-close" type="button" aria-label="Close Diplomacy War Room"><svg viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></svg></button>
+            </header>
+            <div class="dialog-body diplomacy-body">
+                <div class="diplomacy-layout">
+                    <!-- Left: Geopolitical Web & Treaties -->
+                    <div class="diplomacy-col-factions">
+                        <div class="diplomacy-card">
+                            <span class="nemesis-card-title">Galactic Sovereign Power Matrix</span>
+                            <div class="diplomacy-canvas-wrap">
+                                <canvas id="diplomacy-canvas" width="540" height="240"></canvas>
+                            </div>
+                        </div>
+
+                        <div class="diplomacy-card">
+                            <span class="nemesis-card-title">Diplomatic Envoy &amp; Treaty Proposal Desk</span>
+                            <div class="treaty-form-row">
+                                <label class="field" style="flex: 1;">
+                                    <span>Target Sovereign Power:</span>
+                                    <select id="diplo-faction-select" class="select">
+                                        <option value="iron">Iron Dominion (Militaristic - Standing: Hostile -70)</option>
+                                        <option value="solaris">Solaris Technocracy (Scientific - Standing: Friendly +45)</option>
+                                        <option value="vesper">Vesper Mining Guild (Commercial - Standing: Allied +85)</option>
+                                        <option value="aether">Aether Sovereignty (Cybernetic - Standing: Neutral +5)</option>
+                                        <option value="chronos">Chronos Shadow Enclave (Covert - Standing: Cold War -30)</option>
+                                    </select>
+                                </label>
+                                <label class="field" style="flex: 1;">
+                                    <span>Proposed Accord:</span>
+                                    <select id="diplo-treaty-select" class="select">
+                                        <option value="nap">Non-Aggression Accord (100 Ticks)</option>
+                                        <option value="research">Joint Research Coalition (+25% Tech)</option>
+                                        <option value="trade">Exclusive Trade Corridor (+200 CR/min)</option>
+                                        <option value="alliance">Mutual Defense Coalition (Full War Entry)</option>
+                                        <option value="war">Formal Declaration of Planetary War</option>
+                                    </select>
+                                </label>
+                            </div>
+                            <button type="button" class="button button-accent" id="btn-send-envoy" style="width: 100%; margin-top: 8px;">🕊️ Dispatch Sovereign Envoy</button>
+                        </div>
+                    </div>
+
+                    <!-- Right: Covert Black-Ops & Espionage Syndicate -->
+                    <div class="diplomacy-col-ops">
+                        <div class="espionage-card">
+                            <div class="espionage-head">
+                                <span class="nemesis-card-title">Shadow Syndicate Black-Ops</span>
+                                <span class="intel-budget-badge">Intel Budget: <strong id="esp-intel-budget">480 INF</strong></span>
+                            </div>
+                            <div class="black-ops-list">
+                                <div class="black-op-item">
+                                    <div class="op-head">
+                                        <strong>Sabotage Defense Grid</strong>
+                                        <span class="op-cost">120 INF</span>
+                                    </div>
+                                    <small>Temporarily disable target faction automated turrets and shield emitters (Success: 78%).</small>
+                                    <button type="button" class="button button-quiet button-compact op-exec-btn" data-op="sabotage">Execute Operation</button>
+                                </div>
+                                <div class="black-op-item">
+                                    <div class="op-head">
+                                        <strong>Steal Chassis Blueprints</strong>
+                                        <span class="op-cost">240 INF</span>
+                                    </div>
+                                    <small>Infiltrate design vaults to unlock exclusive hostile Titan weapons (Success: 64%).</small>
+                                    <button type="button" class="button button-quiet button-compact op-exec-btn" data-op="steal">Execute Operation</button>
+                                </div>
+                                <div class="black-op-item">
+                                    <div class="op-head">
+                                        <strong>Incite Guerrilla Rebellion</strong>
+                                        <span class="op-cost">320 INF</span>
+                                    </div>
+                                    <small>Fund insurgent militias behind enemy perimeter to draw waves away (Success: 52%).</small>
+                                    <button type="button" class="button button-quiet button-compact op-exec-btn" data-op="rebel">Execute Operation</button>
+                                </div>
+                            </div>
+
+                            <span class="nemesis-card-title" style="margin-top: 10px;">Interception Intelligence Wire</span>
+                            <pre class="intel-wire-log" id="intel-wire-log">[INTEL_FEED] Iron Dominion mobilizing heavy walker vanguard in Sector 7.
+[INTEL_FEED] Solaris Technocracy dispatched diplomatic courier offering hyper-energy pact.
+[INTEL_FEED] Covert operative successfully compromised Vesper transport routing.</pre>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </dialog>
+
+    <!-- Milestone 13: Quantum Compute Cluster & Monte-Carlo Outcome Predictor -->
+    <dialog class="tool-dialog quantum-dialog" id="quantum-cluster-dialog" aria-labelledby="quantum-title">
+        <div class="dialog-shell quantum-shell">
+            <header class="dialog-header quantum-header">
+                <div>
+                    <div class="panel-kicker">Multi-Threaded Headless Simulation &amp; Stochastic Rollouts</div>
+                    <h2 id="quantum-title">Quantum Compute Cluster &amp; Monte-Carlo Outcome Predictor</h2>
+                    <p>Parallel Web Worker simulation cluster evaluating 10,000 future probabilistic trajectory branches in microsecond lockstep.</p>
+                </div>
+                <button class="icon-button dialog-close" id="quantum-close" type="button" aria-label="Close Quantum Predictor"><svg viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></svg></button>
+            </header>
+            <div class="dialog-body quantum-body">
+                <div class="quantum-layout">
+                    <!-- Left: Monte-Carlo Probability Distribution Cloud -->
+                    <div class="quantum-canvas-col">
+                        <div class="monte-carlo-wrap">
+                            <canvas id="montecarlo-canvas" width="560" height="300"></canvas>
+                        </div>
+                        <div class="quantum-gauges-row">
+                            <div class="q-gauge"><small>Projected Win Rate</small><strong id="qc-win-rate" class="highlight">87.4%</strong><span class="ci-span">95% CI: [82%, 91%]</span></div>
+                            <div class="q-gauge"><small>Expected Casualties</small><strong id="qc-casualties">3.2 Units</strong><span class="ci-span">σ = 0.8</span></div>
+                            <div class="q-gauge"><small>Ammo Expenditure</small><strong id="qc-ammo">42,500 MJ</strong><span class="ci-span">Nominal Reserve</span></div>
+                            <div class="q-gauge"><small>Cluster Latency</small><strong id="qc-latency" class="highlight">0.38 ms</strong><span class="ci-span">4 Cores Online</span></div>
+                        </div>
+                    </div>
+
+                    <!-- Right: Cluster Strategy Advisor & Multi-threading -->
+                    <div class="quantum-controls-col">
+                        <div class="quantum-card">
+                            <span class="nemesis-card-title">Parallel Worker Thread Status</span>
+                            <div class="workers-grid">
+                                <div class="worker-badge active"><span>Core 0</span><strong>RUNNING (2,500 sims)</strong></div>
+                                <div class="worker-badge active"><span>Core 1</span><strong>RUNNING (2,500 sims)</strong></div>
+                                <div class="worker-badge active"><span>Core 2</span><strong>RUNNING (2,500 sims)</strong></div>
+                                <div class="worker-badge active"><span>Core 3</span><strong>RUNNING (2,500 sims)</strong></div>
+                            </div>
+                        </div>
+
+                        <div class="quantum-card">
+                            <span class="nemesis-card-title">Tactical Monte-Carlo Advisor</span>
+                            <div class="advisor-box">
+                                <span class="advisor-tag">OPTIMAL TACTICAL BRANCH</span>
+                                <p id="qc-advisor-text"><strong>Recommendation:</strong> Advance Titan Railgun to West Crater Berm (+40% deflection). 91.2% of winning branches execute flanking skimmer maneuvers while enemy focuses long-range fire.</p>
+                            </div>
+                            <label class="field" style="margin-top: 8px;">
+                                <span>Simulation Rollout Depth: <b id="mc-rollouts-val">10,000 Branch Iterations</b></span>
+                                <input type="range" id="mc-rollouts-slider" min="1000" max="25000" step="1000" value="10000">
+                            </label>
+                            <div class="quantum-actions-row">
+                                <button type="button" class="button button-accent" id="btn-quantum-run" style="flex: 1;">⚡ Execute 10,000 Rollouts</button>
+                                <button type="button" class="button button-primary" id="btn-quantum-apply" style="flex: 1;">🎯 Apply Branch Vector</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </dialog>
+
+    <!-- Milestone 14: Orbital Megastructures & Dyson Swarm Construction Simulator -->
+    <dialog class="tool-dialog megastructure-dialog" id="orbital-megastructure-dialog" aria-labelledby="megastructure-title">
+        <div class="dialog-shell megastructure-shell">
+            <header class="dialog-header megastructure-header">
+                <div>
+                    <div class="panel-kicker">Monumental Planetary Engineering &amp; Astro-Engineering</div>
+                    <h2 id="megastructure-title">Orbital Megastructures &amp; Dyson Swarm Construction Simulator</h2>
+                    <p>Construct planetary ring stations, space elevators, Dyson solar swarms, and relativistic kinetic bombardment batteries.</p>
+                </div>
+                <button class="icon-button dialog-close" id="megastructure-close" type="button" aria-label="Close Megastructure Simulator"><svg viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></svg></button>
+            </header>
+            <div class="dialog-body megastructure-body">
+                <div class="megastructure-layout">
+                    <!-- Left: 3D Megastructure Blueprint Canvas -->
+                    <div class="megastructure-canvas-col">
+                        <div class="megastructure-viewport-wrap">
+                            <canvas id="megastructure-canvas" width="560" height="360"></canvas>
+                            <div class="megastructure-hud-overlay">
+                                <div class="ms-hud-tag"><span class="tag-label">PROJECT:</span> <strong id="ms-tele-name">Dyson Swarm Collector Array</strong></div>
+                                <div class="ms-hud-tag"><span class="tag-label">POWER OUTPUT:</span> <strong id="ms-tele-power" class="highlight">+2,500 MW Energy</strong></div>
+                                <div class="ms-hud-tag"><span class="tag-label">COMPLETION:</span> <strong id="ms-tele-stage">Stage 3 / 4 (75%)</strong></div>
+                            </div>
+                            <div class="ms-controls-tip">🖱️ Drag to rotate 3D Megastructure blueprint · Scroll to zoom</div>
+                        </div>
+                    </div>
+
+                    <!-- Right: Construction Catalog & Superweapon Controls -->
+                    <div class="megastructure-controls-col">
+                        <div class="ms-card">
+                            <span class="nemesis-card-title">Orbital Megastructure Catalog</span>
+                            <select id="ms-project-select" class="select" style="width: 100%;">
+                                <option value="dyson">Dyson Swarm Collector (+2,500 MW Power &amp; Stellar Beams)</option>
+                                <option value="elevator">Space Elevator Orbital Tether (+1,200 Trade Logistics)</option>
+                                <option value="shield">Planetary Aegis Defense Grid (100% Bombardment Shield)</option>
+                                <option value="thor">Thor's Hammer (Relativistic Tungsten Rod Cannon)</option>
+                            </select>
+                        </div>
+
+                        <div class="ms-card">
+                            <span class="nemesis-card-title">Construction Materials &amp; Assembly Phase</span>
+                            <div class="ms-progress-box">
+                                <div class="ms-bar-header">
+                                    <span>Structural Assembler Progress:</span>
+                                    <strong id="ms-pct-label">75%</strong>
+                                </div>
+                                <div class="ms-progress-bar"><div class="ms-fill" id="ms-progress-fill" style="width: 75%;"></div></div>
+                            </div>
+                            <div class="ms-cost-grid">
+                                <div class="ms-cost"><span>Hyper-Alloys:</span><strong>450 / 600</strong></div>
+                                <div class="ms-cost"><span>Energy Grid:</span><strong>800 / 1,000 MW</strong></div>
+                                <div class="ms-cost"><span>Fabrication Drones:</span><strong>24 Active</strong></div>
+                                <div class="ms-cost"><span>Assembly ETA:</span><strong>18 Ticks</strong></div>
+                            </div>
+                            <button type="button" class="button button-accent" id="btn-build-megastructure" style="width: 100%; margin-top: 10px;">🏗️ Allocate Resources &amp; Advance Stage</button>
+                        </div>
+
+                        <div class="ms-card">
+                            <span class="nemesis-card-title">Megastructure Superweapon Payload</span>
+                            <p class="superweapon-desc">Thor's Hammer orbital battery drops 10-ton tungsten rods at Mach 25, creating apocalyptic kinetic shockwaves.</p>
+                            <button type="button" class="button button-primary superweapon-btn" id="btn-fire-orbital-rod">⚡ Fire Relativistic Orbital Strike [Mach 25]</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </dialog>
+
+    <!-- Milestone 15: Spatial 3D Audio Symphony & Procedural Sound Synthesis Studio -->
+    <dialog class="tool-dialog audio-synth-dialog" id="audio-symphony-dialog" aria-labelledby="audio-synth-title">
+        <div class="dialog-shell audio-synth-shell">
+            <header class="dialog-header audio-synth-header">
+                <div>
+                    <div class="panel-kicker">Web Audio API Synthesis &amp; Dynamic Acoustic Symphony</div>
+                    <h2 id="audio-synth-title">Spatial 3D Audio Symphony &amp; Procedural Sound Synthesis Studio</h2>
+                    <p>Real-time algorithmic sound synthesis, tension-reactive orchestral stems, 3D Doppler acoustic models, and resonant canyon reverberations.</p>
+                </div>
+                <button class="icon-button dialog-close" id="audio-synth-close" type="button" aria-label="Close Audio Studio"><svg viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></svg></button>
+            </header>
+            <div class="dialog-body audio-synth-body">
+                <div class="audio-synth-layout">
+                    <!-- Left: Oscilloscope & Audio Frequency Spectrum -->
+                    <div class="audio-canvas-col">
+                        <div class="audio-spectrum-wrap">
+                            <canvas id="audio-spectrum-canvas" width="560" height="220"></canvas>
+                        </div>
+                        <div class="stems-orchestrator-card">
+                            <div class="stems-head">
+                                <span class="nemesis-card-title">Dynamic Procedural Symphony Stems</span>
+                                <button type="button" class="button button-accent button-compact" id="btn-audio-toggle-symphony">🎵 Play Symphony</button>
+                            </div>
+                            <div class="stems-sliders-grid">
+                                <label class="field stem-slider">
+                                    <span>Ambient Chord Pad:</span>
+                                    <input type="range" id="stem-pad-vol" min="0" max="100" value="70">
+                                </label>
+                                <label class="field stem-slider">
+                                    <span>Sub-Bass Drone (55Hz):</span>
+                                    <input type="range" id="stem-bass-vol" min="0" max="100" value="85">
+                                </label>
+                                <label class="field stem-slider">
+                                    <span>Arpeggiator Pulse:</span>
+                                    <input type="range" id="stem-arp-vol" min="0" max="100" value="65">
+                                </label>
+                                <label class="field stem-slider">
+                                    <span>Combat War Drums:</span>
+                                    <input type="range" id="stem-drums-vol" min="0" max="100" value="80">
+                                </label>
+                            </div>
+                            <label class="field" style="margin-top: 6px;">
+                                <span>Global Battlefield Tension Curve: <b id="audio-tension-val">0.65 (High Combat)</b></span>
+                                <input type="range" id="audio-tension-slider" min="0" max="100" value="65">
+                            </label>
+                        </div>
+                    </div>
+
+                    <!-- Right: Procedural Soundboard & Spatial Acoustics -->
+                    <div class="audio-controls-col">
+                        <div class="audio-card">
+                            <span class="nemesis-card-title">Procedural SFX Synthesizer Soundboard</span>
+                            <div class="sfx-buttons-grid">
+                                <button type="button" class="sfx-btn" data-sfx="railgun">⚡ Railgun Crack</button>
+                                <button type="button" class="sfx-btn" data-sfx="nuke">💥 Kinetic Shockwave</button>
+                                <button type="button" class="sfx-btn" data-sfx="shield">🛡️ Shield Deflector Ping</button>
+                                <button type="button" class="sfx-btn" data-sfx="warp">🌌 Quantum Warp Jump</button>
+                                <button type="button" class="sfx-btn" data-sfx="servo">🤖 Hydraulic Mech Servo</button>
+                                <button type="button" class="sfx-btn" data-sfx="laser">🔴 Continuous Beam Laser</button>
+                            </div>
+                        </div>
+
+                        <div class="audio-card">
+                            <span class="nemesis-card-title">Spatial Acoustic Room Impulse Models</span>
+                            <select id="audio-reverb-select" class="select" style="width: 100%;">
+                                <option value="canyon">Deep Basalt Canyon (Long Echo, High HF Decay)</option>
+                                <option value="hangar">Reinforced Metal Hangar (Bright Flutters, Metallic)</option>
+                                <option value="dunes">Open Arid Dunes (Minimal Reflection, Air Absorption)</option>
+                                <option value="vault">Subterranean Concrete Vault (Heavy Bass Resonances)</option>
+                            </select>
+                            <div class="spatial-toggles">
+                                <label class="mod-toggle-label" style="margin-top: 8px;">
+                                    <input type="checkbox" checked id="audio-doppler-toggle">
+                                    <span>3D Velocity Doppler Shift Simulation</span>
+                                </label>
+                                <label class="mod-toggle-label">
+                                    <input type="checkbox" checked id="audio-air-absorption-toggle">
+                                    <span>Distance-Based Atmospheric Low-Pass Filtering</span>
+                                </label>
+                            </div>
                         </div>
                     </div>
                 </div>

@@ -4173,6 +4173,8 @@ button, input, select, a { -webkit-tap-highlight-color: transparent; }
 .aar-footer-actions {
     display: flex;
     justify-content: flex-end;
+}
+
 /* ==========================================================================
    AAA Master Roadmap Suite: Radar, Pause, Codex, Skirmish, Studio, Profiler
    ========================================================================== */
@@ -5646,4 +5648,262 @@ body.ui-scale-130 {
     margin: 4px 0 0 0;
     white-space: pre-wrap;
 }
+
+/* ==========================================================================
+   Milestones 11 - 15: Pinnacle Simulation & Grand Sovereign Era CSS
+   ========================================================================== */
+
+.tool-dialog.climate-dialog,
+.tool-dialog.diplomacy-dialog,
+.tool-dialog.quantum-dialog,
+.tool-dialog.megastructure-dialog,
+.tool-dialog.audio-dialog {
+    width: min(1040px, calc(100vw - 32px));
+    max-height: min(860px, calc(100vh - 32px));
+}
+
+/* --- Milestone 11: Real-Time Dynamic Climate & Atmospheric Storms --- */
+.climate-shell { max-width: 1020px; width: 94vw; }
+.climate-layout { display: grid; grid-template-columns: 1.25fr 1fr; gap: 16px; }
+.climate-canvas-col, .climate-controls-col { display: flex; flex-direction: column; gap: 10px; }
+.climate-viewport-wrap {
+    background: radial-gradient(circle at center, #0a1120 0%, #030712 100%);
+    border: 1px solid rgba(56, 189, 248, 0.25);
+    border-radius: 8px;
+    position: relative;
+    overflow: hidden;
+}
+#climate-canvas { width: 100%; height: 360px; display: block; }
+.climate-hud-overlay {
+    position: absolute;
+    top: 8px;
+    left: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    pointer-events: none;
+}
+.climate-hud-tag {
+    background: rgba(11, 15, 25, 0.85);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    padding: 3px 8px;
+    border-radius: 4px;
+    font-size: 0.65rem;
+    color: #e2e8f0;
+    backdrop-filter: blur(4px);
+}
+.climate-btn-row { display: flex; gap: 8px; }
+.climate-btn-row button { flex: 1; font-size: 0.72rem; }
+.climate-card {
+    background: rgba(15, 23, 42, 0.75);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 8px;
+    padding: 12px;
+}
+.climate-sliders-grid { display: flex; flex-direction: column; gap: 8px; margin-top: 6px; }
+.hazard-impacts-list { display: flex; flex-direction: column; gap: 6px; margin-top: 4px; }
+.hazard-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: rgba(30, 41, 59, 0.5);
+    padding: 6px 8px;
+    border-radius: 4px;
+    font-size: 0.68rem;
+    color: #cbd5e1;
+}
+.hazard-item strong { color: #f59e0b; font-family: var(--font-mono); }
+
+/* --- Milestone 12: Grand Galactic 4X Faction Diplomacy & Espionage --- */
+.diplomacy-shell { max-width: 1040px; width: 94vw; }
+.diplomacy-layout { display: grid; grid-template-columns: 1.25fr 1fr; gap: 14px; }
+.diplomacy-col-factions, .diplomacy-col-ops { display: flex; flex-direction: column; gap: 10px; }
+.diplomacy-card {
+    background: rgba(15, 23, 42, 0.75);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 8px;
+    padding: 12px;
+}
+.diplomacy-canvas-wrap { background: #070b14; border-radius: 6px; overflow: hidden; border: 1px solid rgba(255, 255, 255, 0.06); }
+#diplomacy-canvas { width: 100%; height: 240px; display: block; }
+.treaty-form-row { display: flex; flex-direction: column; gap: 8px; margin-top: 6px; }
+.espionage-card {
+    background: rgba(15, 23, 42, 0.75);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 8px;
+    padding: 12px;
+}
+.espionage-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+.intel-budget-badge { font-size: 0.70rem; color: #94a3b8; }
+.intel-budget-badge strong { color: #38bdf8; font-family: var(--font-mono); }
+.black-ops-list { display: flex; flex-direction: column; gap: 6px; max-height: 200px; overflow-y: auto; }
+.black-op-item {
+    background: rgba(30, 41, 59, 0.5);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 6px;
+    padding: 8px 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+.op-head { display: flex; justify-content: space-between; align-items: center; }
+.op-head strong { font-size: 0.72rem; color: #f1f5f9; }
+.op-cost { font-size: 0.65rem; color: #fbbf24; font-family: var(--font-mono); font-weight: 700; }
+.black-op-item small { font-size: 0.62rem; color: #94a3b8; }
+.black-op-item button { margin-top: 2px; }
+.intel-wire-log {
+    background: #060910;
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 4px;
+    padding: 6px 8px;
+    font-size: 0.60rem;
+    font-family: var(--font-mono);
+    color: #94a3b8;
+    max-height: 80px;
+    overflow-y: auto;
+    margin: 4px 0 0 0;
+    white-space: pre-wrap;
+}
+
+/* --- Milestone 13: Quantum Compute Cluster & Monte-Carlo Predictor --- */
+.quantum-shell { max-width: 1040px; width: 94vw; }
+.quantum-layout { display: grid; grid-template-columns: 1.3fr 1fr; gap: 14px; }
+.quantum-canvas-col, .quantum-controls-col { display: flex; flex-direction: column; gap: 10px; }
+.monte-carlo-wrap { background: #070a12; border-radius: 6px; overflow: hidden; border: 1px solid rgba(168, 85, 247, 0.25); }
+#montecarlo-canvas { width: 100%; height: 300px; display: block; }
+.quantum-gauges-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-top: 6px; }
+.q-gauge {
+    background: rgba(30, 41, 59, 0.6);
+    border-radius: 6px;
+    padding: 6px 8px;
+    border-left: 3px solid #a855f7;
+}
+.q-gauge small { display: block; font-size: 0.60rem; color: #94a3b8; }
+.q-gauge strong { font-size: 0.85rem; color: #f1f5f9; display: block; }
+.ci-span { font-size: 0.55rem; color: #64748b; font-family: var(--font-mono); }
+.quantum-card {
+    background: rgba(15, 23, 42, 0.75);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 8px;
+    padding: 12px;
+}
+.workers-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 6px; }
+.worker-badge {
+    background: rgba(30, 41, 59, 0.5);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    padding: 6px 8px;
+    border-radius: 4px;
+}
+.worker-badge span { font-size: 0.62rem; color: #38bdf8; font-weight: 700; display: block; }
+.worker-badge strong { font-size: 0.60rem; color: #34d399; font-family: var(--font-mono); }
+.advisor-box {
+    background: rgba(168, 85, 247, 0.1);
+    border: 1px solid rgba(168, 85, 247, 0.3);
+    padding: 8px 10px;
+    border-radius: 6px;
+    margin-top: 6px;
+}
+.advisor-tag { font-size: 0.60rem; font-weight: 800; color: #c084fc; letter-spacing: 0.05em; display: block; margin-bottom: 4px; }
+.advisor-box p { font-size: 0.68rem; color: #cbd5e1; margin: 0; line-height: 1.35; }
+.quantum-actions-row { display: flex; gap: 8px; margin-top: 10px; }
+
+/* --- Milestone 14: Orbital Megastructures & Dyson Swarm Constructor --- */
+.megastructure-shell { max-width: 1020px; width: 94vw; }
+.megastructure-layout { display: grid; grid-template-columns: 1.25fr 1fr; gap: 14px; }
+.megastructure-canvas-col, .megastructure-controls-col { display: flex; flex-direction: column; gap: 10px; }
+.megastructure-viewport-wrap {
+    background: radial-gradient(circle at center, #0e1526 0%, #03060c 100%);
+    border: 1px solid rgba(245, 158, 11, 0.3);
+    border-radius: 8px;
+    position: relative;
+    overflow: hidden;
+}
+#megastructure-canvas { width: 100%; height: 360px; display: block; cursor: grab; }
+#megastructure-canvas:active { cursor: grabbing; }
+.megastructure-hud-overlay {
+    position: absolute;
+    top: 8px;
+    left: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    pointer-events: none;
+}
+.ms-hud-tag {
+    background: rgba(11, 15, 25, 0.85);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    padding: 3px 8px;
+    border-radius: 4px;
+    font-size: 0.65rem;
+    color: #e2e8f0;
+}
+.ms-controls-tip {
+    position: absolute;
+    bottom: 6px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 0.60rem;
+    color: #94a3b8;
+    background: rgba(0, 0, 0, 0.7);
+    padding: 2px 8px;
+    border-radius: 10px;
+    pointer-events: none;
+    white-space: nowrap;
+}
+.ms-card {
+    background: rgba(15, 23, 42, 0.75);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 8px;
+    padding: 12px;
+}
+.ms-progress-box { margin-top: 6px; }
+.ms-bar-header { display: flex; justify-content: space-between; font-size: 0.68rem; color: #94a3b8; margin-bottom: 4px; }
+.ms-bar-header strong { color: #fbbf24; font-family: var(--font-mono); }
+.ms-progress-bar { height: 8px; background: rgba(255, 255, 255, 0.08); border-radius: 4px; overflow: hidden; }
+.ms-fill { height: 100%; background: linear-gradient(90deg, #d97706, #fbbf24); border-radius: 4px; transition: width 0.3s ease; }
+.ms-cost-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 8px; }
+.ms-cost {
+    background: rgba(30, 41, 59, 0.5);
+    padding: 6px 8px;
+    border-radius: 4px;
+    font-size: 0.65rem;
+    color: #94a3b8;
+}
+.ms-cost strong { display: block; font-size: 0.72rem; color: #f1f5f9; }
+.superweapon-desc { font-size: 0.68rem; color: #94a3b8; margin: 4px 0 8px 0; line-height: 1.35; }
+.superweapon-btn { width: 100%; background: #b91c1c; border-color: #ef4444; font-weight: 700; font-size: 0.72rem; }
+.superweapon-btn:hover { background: #ef4444; }
+
+/* --- Milestone 15: Spatial 3D Audio Symphony & Procedural Sound Studio --- */
+.audio-synth-shell { max-width: 1020px; width: 94vw; }
+.audio-synth-layout { display: grid; grid-template-columns: 1.25fr 1fr; gap: 14px; }
+.audio-canvas-col, .audio-controls-col { display: flex; flex-direction: column; gap: 10px; }
+.audio-spectrum-wrap { background: #05080e; border-radius: 6px; overflow: hidden; border: 1px solid rgba(56, 189, 248, 0.25); }
+#audio-spectrum-canvas { width: 100%; height: 220px; display: block; }
+.stems-orchestrator-card, .audio-card {
+    background: rgba(15, 23, 42, 0.75);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 8px;
+    padding: 12px;
+}
+.stems-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+.stems-sliders-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.stem-slider span { font-size: 0.62rem; color: #94a3b8; display: block; margin-bottom: 2px; }
+.stem-slider input { width: 100%; accent-color: #38bdf8; }
+.sfx-buttons-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 6px; }
+.sfx-btn {
+    background: rgba(30, 41, 59, 0.6);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    color: #e2e8f0;
+    padding: 7px 8px;
+    border-radius: 5px;
+    font-size: 0.68rem;
+    font-weight: 600;
+    cursor: pointer;
+    text-align: left;
+    transition: all 0.15s ease;
+}
+.sfx-btn:hover { background: rgba(56, 189, 248, 0.15); border-color: #38bdf8; color: #ffffff; }
+.spatial-toggles { display: flex; flex-direction: column; gap: 4px; font-size: 0.65rem; color: #cbd5e1; }
+
 

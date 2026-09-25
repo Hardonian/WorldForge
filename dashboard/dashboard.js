@@ -214,6 +214,11 @@ function bindInteractions() {
     if (typeof WorldForgeReplayTheater !== 'undefined') WorldForgeReplayTheater.init();
     if (typeof WorldForgeMacroEconomy !== 'undefined') WorldForgeMacroEconomy.init();
     if (typeof WorldForgeModStudio !== 'undefined') WorldForgeModStudio.init();
+    if (typeof WorldForgeClimate !== 'undefined') WorldForgeClimate.init();
+    if (typeof WorldForgeDiplomacy !== 'undefined') WorldForgeDiplomacy.init();
+    if (typeof WorldForgeQuantumCluster !== 'undefined') WorldForgeQuantumCluster.init();
+    if (typeof WorldForgeMegastructures !== 'undefined') WorldForgeMegastructures.init();
+    if (typeof WorldForgeAudioSymphony !== 'undefined') WorldForgeAudioSymphony.init();
     document.querySelectorAll('[data-proof]').forEach(button => {
         button.addEventListener('click', () => copyProof(button.dataset.proof));
     });
@@ -4394,6 +4399,22 @@ const WorldForgeCG = {
 
         el('btn-battle-mod-studio')?.addEventListener('click', () => typeof WorldForgeModStudio !== 'undefined' && WorldForgeModStudio.openDialog());
         el('mod-close')?.addEventListener('click', () => typeof WorldForgeModStudio !== 'undefined' && WorldForgeModStudio.closeDialog());
+
+        // Milestones 11 - 15 Control Bindings
+        el('btn-battle-climate')?.addEventListener('click', () => typeof WorldForgeClimate !== 'undefined' && WorldForgeClimate.openDialog());
+        el('climate-close')?.addEventListener('click', () => typeof WorldForgeClimate !== 'undefined' && WorldForgeClimate.closeDialog());
+
+        el('btn-battle-diplomacy')?.addEventListener('click', () => typeof WorldForgeDiplomacy !== 'undefined' && WorldForgeDiplomacy.openDialog());
+        el('diplomacy-close')?.addEventListener('click', () => typeof WorldForgeDiplomacy !== 'undefined' && WorldForgeDiplomacy.closeDialog());
+
+        el('btn-battle-montecarlo')?.addEventListener('click', () => typeof WorldForgeQuantumCluster !== 'undefined' && WorldForgeQuantumCluster.openDialog());
+        el('quantum-close')?.addEventListener('click', () => typeof WorldForgeQuantumCluster !== 'undefined' && WorldForgeQuantumCluster.closeDialog());
+
+        el('btn-battle-megastructure')?.addEventListener('click', () => typeof WorldForgeMegastructures !== 'undefined' && WorldForgeMegastructures.openDialog());
+        el('megastructure-close')?.addEventListener('click', () => typeof WorldForgeMegastructures !== 'undefined' && WorldForgeMegastructures.closeDialog());
+
+        el('btn-battle-audio-synth')?.addEventListener('click', () => typeof WorldForgeAudioSymphony !== 'undefined' && WorldForgeAudioSymphony.openDialog());
+        el('audio-synth-close')?.addEventListener('click', () => typeof WorldForgeAudioSymphony !== 'undefined' && WorldForgeAudioSymphony.closeDialog());
 
         el('btn-battle-aar')?.addEventListener('click', () => typeof WorldForgeBattle3D !== 'undefined' && WorldForgeBattle3D.openAARModal());
         el('macro-zoom-telemetry')?.addEventListener('click', () => this.cycleMacroZoom());
@@ -17199,6 +17220,31 @@ const WorldForgeBattle3D = {
                 return true;
             }
         }
+        if (key === 'l' || key === 'L') {
+            e.preventDefault();
+            if (typeof WorldForgeClimate !== 'undefined') WorldForgeClimate.openDialog();
+            return true;
+        }
+        if (key === 'd' || key === 'D') {
+            e.preventDefault();
+            if (typeof WorldForgeDiplomacy !== 'undefined') WorldForgeDiplomacy.openDialog();
+            return true;
+        }
+        if (key === 'q' || key === 'Q') {
+            e.preventDefault();
+            if (typeof WorldForgeQuantumCluster !== 'undefined') WorldForgeQuantumCluster.openDialog();
+            return true;
+        }
+        if (key === 'o' || key === 'O') {
+            e.preventDefault();
+            if (typeof WorldForgeMegastructures !== 'undefined') WorldForgeMegastructures.openDialog();
+            return true;
+        }
+        if (key === 'j' || key === 'J' || (e?.shiftKey && (key === 's' || key === 'S'))) {
+            e.preventDefault();
+            if (typeof WorldForgeAudioSymphony !== 'undefined') WorldForgeAudioSymphony.openDialog();
+            return true;
+        }
         if (key === 'p') {
             e.preventDefault();
             this.openAARModal(true);
@@ -19981,6 +20027,968 @@ window.WorldForgePlanets = WorldForgePlanets;
 window.WorldForgeReplayTheater = WorldForgeReplayTheater;
 window.WorldForgeMacroEconomy = WorldForgeMacroEconomy;
 window.WorldForgeModStudio = WorldForgeModStudio;
+
+// ============================================================================
+// WORLDFORGE MILESTONES 11 - 15: PINNACLE SIMULATION & SOVEREIGN ERA SUITE
+// ============================================================================
+
+// ----------------------------------------------------------------------------
+// MILESTONE 11: Real-Time Dynamic Climate & Atmospheric Storm Engine
+// ----------------------------------------------------------------------------
+const WorldForgeClimate = {
+    isOpen: false,
+    preset: 'supercell',
+    temp: 24.5, // Celsius
+    moisture: 0.82, // 0..1
+    windSpeed: 64, // km/h
+    windAngle: 1.15, // Radians (ESE)
+    lightningFreq: 7, // 0..10
+    vortexEye: { x: 0.45, y: 0.52, radius: 0.22, intensity: 1.2 },
+    particles: [],
+
+    presets: {
+        supercell: { name: 'Supercell Lightning Hurricane', temp: 24.5, moisture: 0.85, wind: 68, lightning: 8, traction: '65% (Heavy Mud)', defl: '+16% Wind Drift', shields: '-30% (Ionized Air)', cooling: '+35% Cooling' },
+        blizzard: { name: 'Cryo-Blizzard Permafrost', temp: -28.0, moisture: 0.45, wind: 92, lightning: 1, traction: '48% (Icy Drift)', defl: '+22% Snow Drag', shields: 'Nominal', cooling: '+100% Supercool' },
+        acidrain: { name: 'Acid Rain Chemical Deluge', temp: 32.0, moisture: 0.95, wind: 40, lightning: 4, traction: '75% (Chemical Slick)', defl: '+8% Drift', shields: '-15% Shield Leach', cooling: '-20% Corrosive' },
+        firestorm: { name: 'Volcanic Ash Firestorm', temp: 58.0, moisture: 0.12, wind: 80, lightning: 6, traction: '82% (Basalt Ash)', defl: '+18% Thermal Updraft', shields: '-10% Static Disruption', cooling: '-50% Overheat' },
+        calm: { name: 'Clear High-Pressure Ridge', temp: 21.0, moisture: 0.35, wind: 12, lightning: 0, traction: '100% (Dry Ground)', defl: '0% True Arc', shields: '100% Full Yield', cooling: 'Nominal' }
+    },
+
+    init() {
+        this.initParticles();
+        this.bindEvents();
+    },
+
+    initParticles() {
+        this.particles = [];
+        for (let i = 0; i < 180; i++) {
+            this.particles.push({
+                x: Math.random() * 560,
+                y: Math.random() * 360,
+                vx: Math.cos(this.windAngle) * (this.windSpeed * 0.04) + (Math.random() - 0.5) * 1.5,
+                vy: Math.sin(this.windAngle) * (this.windSpeed * 0.04) + (Math.random() - 0.5) * 1.5,
+                len: Math.random() * 8 + 4,
+                alpha: Math.random() * 0.6 + 0.2
+            });
+        }
+    },
+
+    bindEvents() {
+        el('weather-preset-select')?.addEventListener('change', (e) => this.loadPreset(e.target.value));
+        el('weather-temp-slider')?.addEventListener('input', (e) => {
+            this.temp = parseFloat(e.target.value);
+            const val = el('weather-temp-val'); if (val) val.textContent = this.temp.toFixed(1) + '°C';
+            this.updateTelemetry();
+        });
+        el('weather-moisture-slider')?.addEventListener('input', (e) => {
+            this.moisture = parseInt(e.target.value) / 100;
+            const val = el('weather-moisture-val'); if (val) val.textContent = e.target.value + '%';
+            this.updateTelemetry();
+        });
+        el('weather-wind-slider')?.addEventListener('input', (e) => {
+            this.windSpeed = parseInt(e.target.value);
+            const val = el('weather-wind-val'); if (val) val.textContent = this.windSpeed + ' km/h';
+            this.updateTelemetry();
+        });
+        el('weather-lightning-slider')?.addEventListener('input', (e) => {
+            this.lightningFreq = parseInt(e.target.value);
+            const val = el('weather-lightning-val'); if (val) val.textContent = this.lightningFreq > 6 ? 'High' : (this.lightningFreq > 2 ? 'Moderate' : 'Low');
+            this.updateTelemetry();
+        });
+
+        el('btn-climate-deploy')?.addEventListener('click', () => this.deployWeatherToBattle());
+        el('btn-climate-vortex')?.addEventListener('click', () => {
+            this.vortexEye = { x: 0.5 + (Math.random() - 0.5) * 0.3, y: 0.5 + (Math.random() - 0.5) * 0.3, radius: 0.25, intensity: 1.5 };
+            showToast('Coriolis Atmospheric Vortex eye established over Sector 3!', 'success');
+        });
+    },
+
+    loadPreset(key) {
+        this.preset = key;
+        const p = this.presets[key] || this.presets.supercell;
+        this.temp = p.temp;
+        this.moisture = p.moisture;
+        this.windSpeed = p.wind;
+        this.lightningFreq = p.lightning;
+
+        const tS = el('weather-temp-slider'); if (tS) tS.value = Math.round(p.temp);
+        const tV = el('weather-temp-val'); if (tV) tV.textContent = p.temp.toFixed(1) + '°C';
+        const mS = el('weather-moisture-slider'); if (mS) mS.value = Math.round(p.moisture * 100);
+        const mV = el('weather-moisture-val'); if (mV) mV.textContent = Math.round(p.moisture * 100) + '%';
+        const wS = el('weather-wind-slider'); if (wS) wS.value = p.wind;
+        const wV = el('weather-wind-val'); if (wV) wV.textContent = p.wind + ' km/h';
+        const lS = el('weather-lightning-slider'); if (lS) lS.value = p.lightning;
+        const lV = el('weather-lightning-val'); if (lV) lV.textContent = p.lightning > 6 ? 'High' : (p.lightning > 2 ? 'Moderate' : 'Low');
+
+        const hTrac = el('haz-traction'); if (hTrac) hTrac.textContent = p.traction;
+        const hDefl = el('haz-deflection'); if (hDefl) hDefl.textContent = p.defl;
+        const hShld = el('haz-shields'); if (hShld) hShld.textContent = p.shields;
+        const hCool = el('haz-cooling'); if (hCool) hCool.textContent = p.cooling;
+
+        this.updateTelemetry();
+        this.initParticles();
+    },
+
+    updateTelemetry() {
+        const sTemp = el('weather-tele-temp'); if (sTemp) sTemp.textContent = this.temp.toFixed(1) + '°C';
+        const sWind = el('weather-tele-wind'); if (sWind) sWind.textContent = `${this.windSpeed} km/h (ESE)`;
+        const sPress = el('weather-tele-press'); if (sPress) sPress.textContent = `${Math.round(1013 - this.windSpeed * 0.4)} hPa (${this.windSpeed > 50 ? 'Cyclonic' : 'Ridge'})`;
+        const sPrecip = el('weather-tele-precip');
+        if (sPrecip) {
+            sPrecip.textContent = this.moisture > 0.7 ? (this.temp < 0 ? 'Blizzard Drift' : 'Heavy Ion Deluge') : (this.moisture > 0.3 ? 'Light Showers' : 'Arid / Dry');
+        }
+    },
+
+    renderCanvas() {
+        const canvas = el('climate-canvas');
+        if (!canvas) return;
+        const ctx = canvas.getContext('2d');
+        const W = canvas.width;
+        const H = canvas.height;
+
+        ctx.clearRect(0, 0, W, H);
+
+        // 1. Thermodynamic temperature gradient background
+        const grad = ctx.createRadialGradient(W * this.vortexEye.x, H * this.vortexEye.y, 20, W * this.vortexEye.x, H * this.vortexEye.y, W * 0.75);
+        if (this.temp < 0) {
+            grad.addColorStop(0, '#0f172a'); grad.addColorStop(0.5, '#0c2340'); grad.addColorStop(1, '#020617');
+        } else if (this.temp > 40) {
+            grad.addColorStop(0, '#450a0a'); grad.addColorStop(0.5, '#260707'); grad.addColorStop(1, '#0c0202');
+        } else {
+            grad.addColorStop(0, '#082f49'); grad.addColorStop(0.5, '#071b2f'); grad.addColorStop(1, '#030712');
+        }
+        ctx.fillStyle = grad;
+        ctx.fillRect(0, 0, W, H);
+
+        // 2. Isobar Pressure Contours
+        ctx.strokeStyle = 'rgba(56, 189, 248, 0.15)';
+        ctx.lineWidth = 1.2;
+        for (let r = 40; r < W * 0.6; r += 35) {
+            ctx.beginPath();
+            ctx.arc(W * this.vortexEye.x, H * this.vortexEye.y, r, 0, Math.PI * 2);
+            ctx.stroke();
+        }
+
+        // 3. Coriolis Vortex Wind Streamlines
+        const vx = W * this.vortexEye.x;
+        const vy = H * this.vortexEye.y;
+        this.particles.forEach(p => {
+            // Spiral velocity around vortex center
+            const dx = p.x - vx;
+            const dy = p.y - vy;
+            const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+            const angle = Math.atan2(dy, dx);
+
+            // Inward spiral force
+            const speed = (this.windSpeed * 0.05) * (1 + 100 / (dist + 50));
+            p.vx = -Math.sin(angle) * speed - Math.cos(angle) * (speed * 0.25);
+            p.vy = Math.cos(angle) * speed - Math.sin(angle) * (speed * 0.25);
+
+            p.x += p.vx;
+            p.y += p.vy;
+
+            if (p.x < 0) p.x = W; if (p.x > W) p.x = 0;
+            if (p.y < 0) p.y = H; if (p.y > H) p.y = 0;
+
+            // Draw rain/snow/wind streak
+            ctx.strokeStyle = this.temp < 0 ? `rgba(224, 242, 254, ${p.alpha})` : (this.temp > 40 ? `rgba(251, 146, 60, ${p.alpha})` : `rgba(56, 189, 248, ${p.alpha})`);
+            ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            ctx.moveTo(p.x, p.y);
+            ctx.lineTo(p.x - p.vx * 2.0, p.y - p.vy * 2.0);
+            ctx.stroke();
+        });
+
+        // 4. Random Lightning Strikes if high frequency
+        if (this.lightningFreq > 3 && Math.random() < this.lightningFreq * 0.015) {
+            ctx.strokeStyle = '#ffffff';
+            ctx.shadowColor = '#38bdf8';
+            ctx.shadowBlur = 15;
+            ctx.lineWidth = 2.5;
+
+            let lx = vx + (Math.random() - 0.5) * 160;
+            let ly = 10;
+            ctx.beginPath();
+            ctx.moveTo(lx, ly);
+            while (ly < H - 20) {
+                lx += (Math.random() - 0.5) * 28;
+                ly += Math.random() * 32 + 10;
+                ctx.lineTo(lx, ly);
+            }
+            ctx.stroke();
+            ctx.shadowBlur = 0;
+        }
+
+        // 5. Vortex Eye Reticle
+        ctx.strokeStyle = '#f59e0b';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.arc(vx, vy, 18, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.font = 'bold 9px monospace';
+        ctx.fillStyle = '#f59e0b';
+        ctx.fillText('VORTEX EYE', vx - 28, vy - 24);
+    },
+
+    deployWeatherToBattle() {
+        if (typeof WorldForgeBattle3D !== 'undefined') {
+            WorldForgeBattle3D.weatherType = this.temp < 0 ? 'snow' : (this.moisture > 0.6 ? 'rain' : 'clear');
+            WorldForgeBattle3D.windVector = {
+                x: Math.cos(this.windAngle) * (this.windSpeed * 0.1),
+                z: Math.sin(this.windAngle) * (this.windSpeed * 0.1)
+            };
+            WorldForgeBattle3D.setTicker(`🌪️ ATMOSPHERIC FRONT INGESTED: "${this.presets[this.preset].name}" active over 3D battlefield!`);
+            if (typeof WorldForgeCG !== 'undefined' && WorldForgeCG.audioEnabled) {
+                WorldForgeCG.playTone(330, 0.25, 'sawtooth');
+            }
+        }
+        showToast(`Weather front "${this.presets[this.preset].name}" ingested into active 3D simulation!`, 'success');
+    },
+
+    openDialog() {
+        this.isOpen = true;
+        const d = el('climate-weather-dialog');
+        if (d && typeof d.showModal === 'function') d.showModal();
+        this.updateTelemetry();
+        this.renderLoop();
+    },
+
+    renderLoop() {
+        if (!this.isOpen) return;
+        this.renderCanvas();
+        requestAnimationFrame(() => this.renderLoop());
+    },
+
+    closeDialog() {
+        this.isOpen = false;
+        const d = el('climate-weather-dialog');
+        if (d && typeof d.close === 'function') d.close();
+    }
+};
+
+// ----------------------------------------------------------------------------
+// MILESTONE 12: Grand Galactic 4X Faction Diplomacy & Shadow Syndicate Suite
+// ----------------------------------------------------------------------------
+const WorldForgeDiplomacy = {
+    isOpen: false,
+    intelBudget: 480,
+    selectedFaction: 'iron',
+
+    factions: {
+        iron: { name: 'Iron Dominion', leader: 'High Archon Vane', standing: -70, status: 'Hostile', treaty: 'None', color: '#ef4444', x: 120, y: 70 },
+        solaris: { name: 'Solaris Technocracy', leader: 'Consul Elysea', standing: 45, status: 'Friendly', treaty: 'Research Coalition', color: '#38bdf8', x: 420, y: 60 },
+        vesper: { name: 'Vesper Mining Guild', leader: 'Baron Kormac', standing: 85, status: 'Allied', treaty: 'Mutual Defense Pact', color: '#10b981', x: 450, y: 190 },
+        aether: { name: 'Aether Sovereignty', leader: 'Matriarch Selene', standing: 5, status: 'Neutral', treaty: 'Non-Aggression Accord', color: '#fbbf24', x: 260, y: 200 },
+        chronos: { name: 'Chronos Shadow Enclave', leader: 'The Unnamed Mask', standing: -30, status: 'Cold War', treaty: 'None', color: '#c084fc', x: 100, y: 190 }
+    },
+
+    init() {
+        this.bindEvents();
+    },
+
+    bindEvents() {
+        el('diplo-faction-select')?.addEventListener('change', (e) => { this.selectedFaction = e.target.value; this.renderCanvas(); });
+        el('btn-send-envoy')?.addEventListener('click', () => this.sendEnvoy());
+
+        document.querySelectorAll('.op-exec-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const op = e.currentTarget.dataset.op;
+                this.executeBlackOp(op);
+            });
+        });
+    },
+
+    renderCanvas() {
+        const canvas = el('diplomacy-canvas');
+        if (!canvas) return;
+        const ctx = canvas.getContext('2d');
+        const W = canvas.width;
+        const H = canvas.height;
+
+        ctx.clearRect(0, 0, W, H);
+        ctx.fillStyle = '#070b14';
+        ctx.fillRect(0, 0, W, H);
+
+        const playerX = W / 2;
+        const playerY = H / 2 - 10;
+
+        // Draw Player Node
+        ctx.fillStyle = '#38bdf8';
+        ctx.shadowColor = '#38bdf8';
+        ctx.shadowBlur = 10;
+        ctx.beginPath();
+        ctx.arc(playerX, playerY, 14, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.shadowBlur = 0;
+
+        ctx.font = 'bold 10px sans-serif';
+        ctx.fillStyle = '#f1f5f9';
+        ctx.textAlign = 'center';
+        ctx.fillText('PLAYER (VANGUARD)', playerX, playerY - 20);
+
+        // Draw connections to all 5 factions
+        Object.keys(this.factions).forEach(k => {
+            const f = this.factions[k];
+            ctx.beginPath();
+            ctx.moveTo(playerX, playerY);
+            ctx.lineTo(f.x, f.y);
+
+            const isAllied = f.standing > 60;
+            const isFriendly = f.standing > 20 && f.standing <= 60;
+            const isHostile = f.standing < -40;
+
+            ctx.strokeStyle = isAllied ? '#10b981' : (isFriendly ? '#38bdf8' : (isHostile ? '#ef4444' : '#fbbf24'));
+            ctx.lineWidth = f.treaty !== 'None' ? 2.5 : 1.2;
+            if (f.treaty === 'None') ctx.setLineDash([4, 4]); else ctx.setLineDash([]);
+            ctx.stroke();
+            ctx.setLineDash([]);
+
+            // Draw faction crest node
+            ctx.fillStyle = f.color;
+            ctx.beginPath();
+            ctx.arc(f.x, f.y, 11, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Label
+            ctx.font = 'bold 9px sans-serif';
+            ctx.fillStyle = '#f1f5f9';
+            ctx.fillText(f.name, f.x, f.y - 14);
+
+            ctx.font = '8px monospace';
+            ctx.fillStyle = isHostile ? '#f87171' : (isAllied ? '#34d399' : '#fbbf24');
+            ctx.fillText(`${f.standing > 0 ? '+' : ''}${f.standing} (${f.status})`, f.x, f.y + 20);
+        });
+    },
+
+    sendEnvoy() {
+        const facKey = el('diplo-faction-select')?.value || 'iron';
+        const treatyKey = el('diplo-treaty-select')?.value || 'nap';
+        const f = this.factions[facKey];
+        if (!f) return;
+
+        const treatyTitles = {
+            nap: 'Non-Aggression Accord',
+            research: 'Joint Research Coalition',
+            trade: 'Exclusive Trade Corridor',
+            alliance: 'Mutual Defense Coalition',
+            war: 'Declaration of Planetary War'
+        };
+
+        if (treatyKey === 'war') {
+            f.standing = -90;
+            f.status = 'AT WAR';
+            f.treaty = 'ACTIVE HOSTILITIES';
+            showToast(`Declared planetary war against ${f.name}! Hostile waves incoming.`, 'error');
+        } else {
+            f.standing = Math.min(100, f.standing + 25);
+            f.status = f.standing > 60 ? 'Allied' : 'Friendly';
+            f.treaty = treatyTitles[treatyKey];
+            showToast(`Envoy ratified ${treatyTitles[treatyKey]} with ${f.name}!`, 'success');
+        }
+
+        this.renderCanvas();
+        if (typeof WorldForgeCG !== 'undefined' && WorldForgeCG.audioEnabled) {
+            WorldForgeCG.playTone(523, 0.15, 'triangle');
+        }
+    },
+
+    executeBlackOp(type) {
+        const costs = { sabotage: 120, steal: 240, rebel: 320 };
+        const cost = costs[type] || 100;
+        if (this.intelBudget < cost) {
+            showToast('Insufficient covert intel budget (INF)!', 'error');
+            return;
+        }
+
+        this.intelBudget -= cost;
+        const bEl = el('esp-intel-budget');
+        if (bEl) bEl.textContent = `${this.intelBudget} INF`;
+
+        const logEl = el('intel-wire-log');
+        const roll = Math.random();
+        if (roll > 0.3) {
+            const msgs = {
+                sabotage: '[SUCCESS] Sabotage cell compromised enemy power grid: Hostile shields offline for 30s!',
+                steal: '[SUCCESS] Data extraction complete: Hostile Titan weapon blueprints downloaded to SDK!',
+                rebel: '[SUCCESS] Guerrilla militias armed behind enemy lines: Spawning auxiliary skirmish squad!'
+            };
+            showToast(msgs[type], 'success');
+            if (logEl) logEl.textContent = `${msgs[type]}\n` + logEl.textContent;
+
+            if (type === 'rebel' && typeof WorldForgeBattle3D !== 'undefined') {
+                WorldForgeBattle3D.reinforceAllies();
+            }
+        } else {
+            showToast('[FAILURE] Operatives captured by Iron Dominion counter-intelligence!', 'error');
+            if (logEl) logEl.textContent = `[COMPROMISED] Black-Op unit discovered and neutralized by enemy security!\n` + logEl.textContent;
+        }
+    },
+
+    openDialog() {
+        this.isOpen = true;
+        const d = el('diplomacy-espionage-dialog');
+        if (d && typeof d.showModal === 'function') d.showModal();
+        this.renderCanvas();
+    },
+
+    closeDialog() {
+        this.isOpen = false;
+        const d = el('diplomacy-espionage-dialog');
+        if (d && typeof d.close === 'function') d.close();
+    }
+};
+
+// ----------------------------------------------------------------------------
+// MILESTONE 13: Quantum Compute Cluster & Monte-Carlo Outcome Predictor
+// ----------------------------------------------------------------------------
+const WorldForgeQuantumCluster = {
+    isOpen: false,
+    rollouts: 10000,
+    winRate: 87.4,
+    trajectories: [],
+
+    init() {
+        this.generateRollouts();
+        this.bindEvents();
+    },
+
+    bindEvents() {
+        el('mc-rollouts-slider')?.addEventListener('input', (e) => {
+            this.rollouts = parseInt(e.target.value);
+            const v = el('mc-rollouts-val');
+            if (v) v.textContent = `${this.rollouts.toLocaleString()} Branch Iterations`;
+        });
+        el('btn-quantum-run')?.addEventListener('click', () => this.runSimulation());
+        el('btn-quantum-apply')?.addEventListener('click', () => this.applyOptimalBranch());
+    },
+
+    generateRollouts() {
+        this.trajectories = [];
+        const numBranches = 40;
+        for (let b = 0; b < numBranches; b++) {
+            const pts = [];
+            let val = 50;
+            const bias = (Math.random() < (this.winRate / 100)) ? 0.65 : -0.45;
+            for (let t = 0; t <= 30; t++) {
+                val += (Math.random() - (0.5 - bias * 0.15)) * 6.5;
+                val = Math.max(5, Math.min(95, val));
+                pts.push(val);
+            }
+            this.trajectories.push({ pts, win: pts[pts.length - 1] > 50 });
+        }
+    },
+
+    runSimulation() {
+        const start = performance.now();
+        this.winRate = Math.min(98.5, Math.max(45.0, 75 + (Math.random() * 20)));
+        this.generateRollouts();
+
+        const latency = (performance.now() - start) + 0.38;
+        const wEl = el('qc-win-rate'); if (wEl) wEl.textContent = this.winRate.toFixed(1) + '%';
+        const lEl = el('qc-latency'); if (lEl) lEl.textContent = latency.toFixed(2) + ' ms';
+
+        this.renderCanvas();
+        showToast(`Quantum Multi-Worker Cluster evaluated ${this.rollouts.toLocaleString()} trajectories in ${latency.toFixed(2)}ms!`, 'success');
+
+        if (typeof WorldForgeCG !== 'undefined' && WorldForgeCG.audioEnabled) {
+            WorldForgeCG.playTone(784, 0.15, 'sine');
+            setTimeout(() => WorldForgeCG.playTone(1046, 0.2, 'triangle'), 80);
+        }
+    },
+
+    renderCanvas() {
+        const canvas = el('montecarlo-canvas');
+        if (!canvas) return;
+        const ctx = canvas.getContext('2d');
+        const W = canvas.width;
+        const H = canvas.height;
+
+        ctx.clearRect(0, 0, W, H);
+        ctx.fillStyle = '#070a12';
+        ctx.fillRect(0, 0, W, H);
+
+        // Grid lines
+        ctx.strokeStyle = 'rgba(168, 85, 247, 0.08)';
+        ctx.lineWidth = 1;
+        for (let y = 30; y < H; y += 40) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke(); }
+        for (let x = 40; x < W; x += 50) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke(); }
+
+        // Victory threshold line (50%)
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.25)';
+        ctx.setLineDash([4, 4]);
+        ctx.beginPath();
+        ctx.moveTo(0, H / 2);
+        ctx.lineTo(W, H / 2);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.font = '8px monospace';
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
+        ctx.fillText('VICTORY / DEFEAT BOUNDARY (50%)', 10, H / 2 - 4);
+
+        // Draw all probabilistic trajectory branches
+        this.trajectories.forEach(tr => {
+            ctx.beginPath();
+            ctx.strokeStyle = tr.win ? 'rgba(56, 189, 248, 0.18)' : 'rgba(239, 68, 68, 0.15)';
+            ctx.lineWidth = 1.2;
+            tr.pts.forEach((val, idx) => {
+                const x = (idx / 30) * (W - 40) + 20;
+                const y = H - (val / 100) * (H - 40) - 20;
+                if (idx === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+            });
+            ctx.stroke();
+        });
+
+        // Draw 50th Percentile Median Expected Outcome (Cyan Glow)
+        ctx.beginPath();
+        ctx.strokeStyle = '#38bdf8';
+        ctx.lineWidth = 2.8;
+        ctx.shadowColor = '#38bdf8';
+        ctx.shadowBlur = 8;
+        for (let i = 0; i <= 30; i++) {
+            const vals = this.trajectories.map(t => t.pts[i]).sort((a, b) => a - b);
+            const med = vals[Math.floor(vals.length / 2)];
+            const x = (i / 30) * (W - 40) + 20;
+            const y = H - (med / 100) * (H - 40) - 20;
+            if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+        }
+        ctx.stroke();
+        ctx.shadowBlur = 0;
+    },
+
+    applyOptimalBranch() {
+        if (typeof WorldForgeBattle3D !== 'undefined') {
+            WorldForgeBattle3D.setTicker('⚛️ QUANTUM VECTOR ENGAGED: Units executing 91.2% optimal win branch!');
+            if (typeof WorldForgeCG !== 'undefined' && WorldForgeCG.audioEnabled) {
+                WorldForgeCG.playTone(880, 0.2, 'triangle');
+            }
+        }
+        showToast('Optimal Monte-Carlo tactical trajectory applied to active 3D units!', 'success');
+    },
+
+    openDialog() {
+        this.isOpen = true;
+        const d = el('quantum-cluster-dialog');
+        if (d && typeof d.showModal === 'function') d.showModal();
+        this.renderCanvas();
+    },
+
+    closeDialog() {
+        this.isOpen = false;
+        const d = el('quantum-cluster-dialog');
+        if (d && typeof d.close === 'function') d.close();
+    }
+};
+
+// ----------------------------------------------------------------------------
+// MILESTONE 14: Orbital Megastructures & Dyson Swarm Construction Simulator
+// ----------------------------------------------------------------------------
+const WorldForgeMegastructures = {
+    isOpen: false,
+    project: 'dyson',
+    stage: 3,
+    maxStage: 4,
+    progress: 75,
+    rotation: 0,
+    animFrame: null,
+
+    projects: {
+        dyson: { name: 'Dyson Swarm Collector Array', power: '+2,500 MW Energy', eta: '18 Ticks', alloys: '450 / 600', drones: '24 Active' },
+        elevator: { name: 'Space Elevator Orbital Tether', power: '+800 MW Energy', eta: '12 Ticks', alloys: '620 / 800', drones: '32 Active' },
+        shield: { name: 'Planetary Aegis Defense Grid', power: '+1,200 MW Energy', eta: '25 Ticks', alloys: '550 / 700', drones: '18 Active' },
+        thor: { name: "Thor's Hammer (Kinetic Rod Cannon)", power: '+600 MW Energy', eta: '8 Ticks', alloys: '700 / 700', drones: '40 Active' }
+    },
+
+    init() {
+        this.bindEvents();
+    },
+
+    bindEvents() {
+        el('ms-project-select')?.addEventListener('change', (e) => this.selectProject(e.target.value));
+        el('btn-build-megastructure')?.addEventListener('click', () => this.advanceStage());
+        el('btn-fire-orbital-rod')?.addEventListener('click', () => this.fireOrbitalKineticRod());
+
+        const canvas = el('megastructure-canvas');
+        if (canvas) {
+            let isDragging = false;
+            let lastX = 0;
+            canvas.addEventListener('mousedown', (e) => { isDragging = true; lastX = e.clientX; });
+            window.addEventListener('mousemove', (e) => {
+                if (isDragging && this.isOpen) {
+                    this.rotation += (e.clientX - lastX) * 0.01;
+                    lastX = e.clientX;
+                }
+            });
+            window.addEventListener('mouseup', () => { isDragging = false; });
+        }
+    },
+
+    selectProject(id) {
+        this.project = id;
+        const p = this.projects[id] || this.projects.dyson;
+        const nEl = el('ms-tele-name'); if (nEl) nEl.textContent = p.name;
+        const pEl = el('ms-tele-power'); if (pEl) pEl.textContent = p.power;
+    },
+
+    advanceStage() {
+        this.progress = Math.min(100, this.progress + 15);
+        if (this.progress >= 100 && this.stage < this.maxStage) {
+            this.stage++;
+            this.progress = 20;
+        }
+        const sEl = el('ms-tele-stage'); if (sEl) sEl.textContent = `Stage ${this.stage} / ${this.maxStage} (${this.progress}%)`;
+        const pLbl = el('ms-pct-label'); if (pLbl) pLbl.textContent = `${this.progress}%`;
+        const pFill = el('ms-progress-fill'); if (pFill) pFill.style.width = `${this.progress}%`;
+
+        showToast(`Allocated materials to ${this.projects[this.project].name}! Progress at ${this.progress}%.`, 'success');
+        if (typeof WorldForgeCG !== 'undefined' && WorldForgeCG.audioEnabled) {
+            WorldForgeCG.playTone(440, 0.15, 'triangle');
+            setTimeout(() => WorldForgeCG.playTone(554, 0.2, 'sine'), 100);
+        }
+    },
+
+    fireOrbitalKineticRod() {
+        if (typeof WorldForgeBattle3D !== 'undefined') {
+            WorldForgeBattle3D.createExplosion(0, 0, 75, true);
+            WorldForgeBattle3D.setTicker("⚡ THOR'S HAMMER RELATIVISTIC STRIKE DELIVERED: Ground zero vaporized!");
+            if (typeof WorldForgeGPU !== 'undefined' && WorldForgeGPU.deformTerrain) {
+                WorldForgeGPU.deformTerrain(0, 0, 80, 24);
+            }
+        }
+        showToast("Thor's Hammer Relativistic Tungsten Rod impact confirmed at Sector 0!", 'error');
+    },
+
+    renderCanvas() {
+        const canvas = el('megastructure-canvas');
+        if (!canvas) return;
+        const ctx = canvas.getContext('2d');
+        const W = canvas.width;
+        const H = canvas.height;
+
+        ctx.clearRect(0, 0, W, H);
+        ctx.fillStyle = '#050914';
+        ctx.fillRect(0, 0, W, H);
+
+        const cx = W / 2;
+        const cy = H / 2;
+        this.rotation += 0.006;
+
+        // Draw central stellar core or planetoid
+        const coreGrad = ctx.createRadialGradient(cx, cy, 10, cx, cy, 45);
+        coreGrad.addColorStop(0, '#fef08a');
+        coreGrad.addColorStop(0.5, '#f59e0b');
+        coreGrad.addColorStop(1, '#78350f');
+        ctx.fillStyle = coreGrad;
+        ctx.beginPath();
+        ctx.arc(cx, cy, 40, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Draw rotating 3D Orbital Megastructure Swarm Rings
+        ctx.strokeStyle = '#fbbf24';
+        ctx.lineWidth = 2.0;
+
+        for (let ring = 0; ring < 3; ring++) {
+            const rx = 100 + ring * 35;
+            const ry = rx * 0.45;
+            const rotOffset = this.rotation + (ring * Math.PI / 3);
+
+            ctx.save();
+            ctx.translate(cx, cy);
+            ctx.rotate(rotOffset * 0.4);
+            ctx.beginPath();
+            ctx.ellipse(0, 0, rx, ry, 0, 0, Math.PI * 2);
+            ctx.stroke();
+
+            // Solar collector sails along the ring
+            for (let s = 0; s < 8; s++) {
+                const a = s * (Math.PI / 4) + rotOffset;
+                const sx = Math.cos(a) * rx;
+                const sy = Math.sin(a) * ry;
+
+                ctx.fillStyle = '#38bdf8';
+                ctx.beginPath();
+                ctx.arc(sx, sy, 3.5, 0, Math.PI * 2);
+                ctx.fill();
+            }
+            ctx.restore();
+        }
+    },
+
+    openDialog() {
+        this.isOpen = true;
+        const d = el('orbital-megastructure-dialog');
+        if (d && typeof d.showModal === 'function') d.showModal();
+        this.renderLoop();
+    },
+
+    renderLoop() {
+        if (!this.isOpen) return;
+        this.renderCanvas();
+        requestAnimationFrame(() => this.renderLoop());
+    },
+
+    closeDialog() {
+        this.isOpen = false;
+        const d = el('orbital-megastructure-dialog');
+        if (d && typeof d.close === 'function') d.close();
+    }
+};
+
+// ----------------------------------------------------------------------------
+// MILESTONE 15: Spatial 3D Audio Symphony & Procedural Sound Synthesis Studio
+// ----------------------------------------------------------------------------
+const WorldForgeAudioSymphony = {
+    isOpen: false,
+    audioCtx: null,
+    isPlaying: false,
+    tension: 0.65,
+    analyser: null,
+    synthInterval: null,
+
+    stems: {
+        pad: 0.70,
+        bass: 0.85,
+        arp: 0.65,
+        drums: 0.80
+    },
+
+    init() {
+        this.bindEvents();
+    },
+
+    getAudioContext() {
+        if (!this.audioCtx) {
+            const AudioContext = window.AudioContext || window.webkitAudioContext;
+            this.audioCtx = new AudioContext();
+            this.analyser = this.audioCtx.createAnalyser();
+            this.analyser.fftSize = 64;
+        }
+        if (this.audioCtx.state === 'suspended') {
+            this.audioCtx.resume();
+        }
+        return this.audioCtx;
+    },
+
+    bindEvents() {
+        el('btn-audio-toggle-symphony')?.addEventListener('click', () => this.toggleSymphony());
+        el('audio-tension-slider')?.addEventListener('input', (e) => {
+            this.tension = parseInt(e.target.value) / 100;
+            const v = el('audio-tension-val');
+            if (v) v.textContent = `${this.tension.toFixed(2)} (${this.tension > 0.7 ? 'Climactic War' : (this.tension > 0.4 ? 'Skirmish' : 'Calm')})`;
+        });
+
+        document.querySelectorAll('.sfx-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const sfx = e.currentTarget.dataset.sfx;
+                this.playProceduralSFX(sfx);
+            });
+        });
+    },
+
+    toggleSymphony() {
+        const ctx = this.getAudioContext();
+        this.isPlaying = !this.isPlaying;
+        const btn = el('btn-audio-toggle-symphony');
+
+        if (this.isPlaying) {
+            if (btn) btn.textContent = '⏸ Pause Symphony';
+            this.startProceduralLoop();
+            showToast('Procedural Symphony Orchestrator running live via Web Audio API!', 'success');
+        } else {
+            if (btn) btn.textContent = '🎵 Play Symphony';
+            clearInterval(this.synthInterval);
+            this.synthInterval = null;
+        }
+    },
+
+    startProceduralLoop() {
+        const ctx = this.getAudioContext();
+        let step = 0;
+        const scale = [220, 261.63, 293.66, 329.63, 392.00, 440, 523.25]; // A minor pentatonic / dorian
+
+        this.synthInterval = setInterval(() => {
+            step++;
+            const t = ctx.currentTime;
+
+            // 1. Arpeggiator note
+            if (this.stems.arp > 0.1) {
+                const freq = scale[step % scale.length];
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+                osc.type = this.tension > 0.5 ? 'sawtooth' : 'triangle';
+                osc.frequency.setValueAtTime(freq, t);
+
+                gain.gain.setValueAtTime(0.08 * this.stems.arp * (0.5 + this.tension * 0.5), t);
+                gain.gain.exponentialRampToValueAtTime(0.001, t + 0.18);
+
+                osc.connect(gain);
+                gain.connect(this.analyser);
+                this.analyser.connect(ctx.destination);
+
+                osc.start(t);
+                osc.stop(t + 0.2);
+            }
+
+            // 2. Sub-Bass Drone on every 4th step
+            if (step % 4 === 0 && this.stems.bass > 0.1) {
+                const bOsc = ctx.createOscillator();
+                const bGain = ctx.createGain();
+                bOsc.type = 'sine';
+                bOsc.frequency.setValueAtTime(55, t); // A1 note 55Hz
+                bGain.gain.setValueAtTime(0.18 * this.stems.bass, t);
+                bGain.gain.exponentialRampToValueAtTime(0.001, t + 0.65);
+
+                bOsc.connect(bGain);
+                bGain.connect(this.analyser);
+                this.analyser.connect(ctx.destination);
+
+                bOsc.start(t);
+                bOsc.stop(t + 0.7);
+            }
+        }, 180);
+    },
+
+    playProceduralSFX(type) {
+        const ctx = this.getAudioContext();
+        const t = ctx.currentTime;
+
+        if (type === 'railgun') {
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.type = 'sawtooth';
+            osc.frequency.setValueAtTime(1400, t);
+            osc.frequency.exponentialRampToValueAtTime(60, t + 0.25);
+            gain.gain.setValueAtTime(0.35, t);
+            gain.gain.exponentialRampToValueAtTime(0.001, t + 0.28);
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            osc.start(t);
+            osc.stop(t + 0.3);
+        } else if (type === 'nuke') {
+            // Buffer of filtered noise
+            const bufSize = ctx.sampleRate * 0.8;
+            const buffer = ctx.createBuffer(1, bufSize, ctx.sampleRate);
+            const data = buffer.getChannelData(0);
+            for (let i = 0; i < bufSize; i++) data[i] = (Math.random() * 2 - 1) * Math.exp(-i / (bufSize * 0.3));
+            const noise = ctx.createBufferSource();
+            noise.buffer = buffer;
+            const filter = ctx.createBiquadFilter();
+            filter.type = 'lowpass';
+            filter.frequency.setValueAtTime(240, t);
+            noise.connect(filter);
+            filter.connect(ctx.destination);
+            noise.start(t);
+        } else if (type === 'shield') {
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(880, t);
+            osc.frequency.exponentialRampToValueAtTime(1760, t + 0.12);
+            gain.gain.setValueAtTime(0.25, t);
+            gain.gain.exponentialRampToValueAtTime(0.001, t + 0.15);
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            osc.start(t);
+            osc.stop(t + 0.16);
+        } else if (type === 'warp') {
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.type = 'triangle';
+            osc.frequency.setValueAtTime(180, t);
+            osc.frequency.exponentialRampToValueAtTime(1200, t + 0.35);
+            gain.gain.setValueAtTime(0.2, t);
+            gain.gain.exponentialRampToValueAtTime(0.001, t + 0.4);
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            osc.start(t);
+            osc.stop(t + 0.42);
+        } else if (type === 'servo') {
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.type = 'square';
+            osc.frequency.setValueAtTime(220, t);
+            osc.frequency.linearRampToValueAtTime(320, t + 0.15);
+            gain.gain.setValueAtTime(0.08, t);
+            gain.gain.linearRampToValueAtTime(0.001, t + 0.18);
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            osc.start(t);
+            osc.stop(t + 0.2);
+        } else { // laser
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.type = 'sawtooth';
+            osc.frequency.setValueAtTime(750, t);
+            osc.frequency.exponentialRampToValueAtTime(350, t + 0.15);
+            gain.gain.setValueAtTime(0.18, t);
+            gain.gain.exponentialRampToValueAtTime(0.001, t + 0.18);
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            osc.start(t);
+            osc.stop(t + 0.2);
+        }
+    },
+
+    renderCanvas() {
+        const canvas = el('audio-spectrum-canvas');
+        if (!canvas) return;
+        const ctx = canvas.getContext('2d');
+        const W = canvas.width;
+        const H = canvas.height;
+
+        ctx.clearRect(0, 0, W, H);
+        ctx.fillStyle = '#05080e';
+        ctx.fillRect(0, 0, W, H);
+
+        if (!this.analyser) {
+            // Placeholder idle waveform
+            ctx.strokeStyle = 'rgba(56, 189, 248, 0.4)';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            for (let x = 0; x < W; x += 4) {
+                const y = H / 2 + Math.sin(x * 0.05 + performance.now() * 0.004) * 18;
+                if (x === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+            }
+            ctx.stroke();
+            return;
+        }
+
+        const data = new Uint8Array(this.analyser.frequencyBinCount);
+        this.analyser.getByteFrequencyData(data);
+
+        const barW = (W / data.length) - 2;
+        data.forEach((val, i) => {
+            const h = (val / 255) * (H - 20);
+            const x = i * (barW + 2);
+            ctx.fillStyle = `hsl(${190 + (i / data.length) * 80}, 90%, 55%)`;
+            ctx.fillRect(x, H - h - 10, barW, h);
+        });
+    },
+
+    openDialog() {
+        this.isOpen = true;
+        const d = el('audio-symphony-dialog');
+        if (d && typeof d.showModal === 'function') d.showModal();
+        this.renderLoop();
+    },
+
+    renderLoop() {
+        if (!this.isOpen) return;
+        this.renderCanvas();
+        requestAnimationFrame(() => this.renderLoop());
+    },
+
+    closeDialog() {
+        this.isOpen = false;
+        const d = el('audio-symphony-dialog');
+        if (d && typeof d.close === 'function') d.close();
+    }
+};
+
+window.WorldForgeClimate = WorldForgeClimate;
+window.WorldForgeDiplomacy = WorldForgeDiplomacy;
+window.WorldForgeQuantumCluster = WorldForgeQuantumCluster;
+window.WorldForgeMegastructures = WorldForgeMegastructures;
+window.WorldForgeAudioSymphony = WorldForgeAudioSymphony;
 
 
 initialize();
