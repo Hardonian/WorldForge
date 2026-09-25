@@ -1021,8 +1021,8 @@ function schedulePlayStep() {
     clearTimeout(state.play.timer);
     if (!state.play.running || state.play.data?.completed) return;
     const speed = Number(el('play-speed').value);
-    const delay = { 1: 600, 2: 400, 5: 250, 10: 160 }[speed] || 300;
-    const batch = { 1: 1, 2: 5, 5: 20, 10: 50 }[speed] || 10;
+    const delay = { 1: 600, 2: 400, 5: 250, 10: 160, 25: 90, 50: 50 }[speed] || 300;
+    const batch = { 1: 1, 2: 5, 5: 20, 10: 50, 25: 100, 50: 250 }[speed] || 10;
     state.play.timer = setTimeout(async () => {
         await advancePlaySession(batch);
         if (state.play.running) schedulePlayStep();
@@ -1069,6 +1069,12 @@ function consumePlayUpdate(data) {
     Object.entries(data.snapshot.levels).forEach(([resource, value]) => {
         state.play.maxima[resource] = Math.max(state.play.maxima[resource] || 0, value, 1);
     });
+    if (data.city) {
+        MayorBounties.update(data.city);
+        if (!CrisisManager.active && data.tick > 25 && data.tick % 90 === 0 && Math.random() < 0.6) {
+            CrisisManager.trigger();
+        }
+    }
     renderPlayState();
 }
 
@@ -3648,6 +3654,298 @@ const WorldForgeCG = {
     lastPointerX: 0,
     lastPointerY: 0,
 
+    screenShake: { intensity: 0, duration: 0, start: 0 },
+    confetti: [],
+    fireworks: [],
+    speechBubbles: [],
+    patrolMechs: [],
+    lootCrates: [],
+    meteorStrikes: [],
+    deployingPatrol: false,
+
+    triggerScreenShake(intensity = 10, duration = 350) {
+        this.screenShake = {
+            intensity,
+            duration,
+            start: performance.now(),
+        };
+    },
+
+    triggerFireworks(x = null, y = null, count = 4) {
+        const w = this.canvas ? this.canvas.clientWidth : window.innerWidth;
+        const h = this.canvas ? this.canvas.clientHeight : window.innerHeight;
+        const colors = ['#f43f5e', '#38bdf8', '#fbbf24', '#34d399', '#a855f7', '#fb923c'];
+        for (let c = 0; c < count; c++) {
+            const startX = x != null ? x + (Math.random() - 0.5) * 120 : w * (0.25 + Math.random() * 0.5);
+            const startY = y != null ? y + (Math.random() - 0.5) * 80 : h * (0.2 + Math.random() * 0.35);
+            const color = colors[Math.floor(Math.random() * colors.length)];
+            const particleCount = 28;
+            for (let i = 0; i < particleCount; i++) {
+                const angle = (i / particleCount) * Math.PI * 2 + (Math.random() - 0.5) * 0.3;
+                const speed = 2.2 + Math.random() * 3.5;
+                this.fireworks.push({
+                    x: startX,
+                    y: startY,
+                    vx: Math.cos(angle) * speed,
+                    vy: Math.sin(angle) * speed,
+                    color,
+                    alpha: 1,
+                    decay: 0.016 + Math.random() * 0.012,
+                    r: 2.2 + Math.random() * 1.8,
+                });
+            }
+        }
+    },
+
+    triggerConfetti(x = null, y = null, count = 50) {
+        const w = this.canvas ? this.canvas.clientWidth : window.innerWidth;
+        const colors = ['#f43f5e', '#38bdf8', '#fbbf24', '#34d399', '#a855f7', '#f472b6', '#38ef7d'];
+        const originX = x != null ? x : w / 2;
+        const originY = y != null ? y : 80;
+        for (let i = 0; i < count; i++) {
+            this.confetti.push({
+                x: originX + (Math.random() - 0.5) * 160,
+                y: originY + (Math.random() - 0.5) * 50,
+                vx: (Math.random() - 0.5) * 6,
+                vy: -2 - Math.random() * 4,
+                gravity: 0.12 + Math.random() * 0.08,
+                width: 5 + Math.random() * 4,
+                height: 8 + Math.random() * 6,
+                rotation: Math.random() * Math.PI * 2,
+                vRot: (Math.random() - 0.5) * 0.18,
+                color: colors[Math.floor(Math.random() * colors.length)],
+                alpha: 1,
+                life: 140 + Math.random() * 80,
+            });
+        }
+    },
+
+    triggerSpeechBubble(x, y, text, emoji = '💬') {
+        this.speechBubbles.push({
+            x,
+            y,
+            text,
+            emoji,
+            start: performance.now(),
+            duration: 3800,
+        });
+        if (this.speechBubbles.length > 5) this.speechBubbles.shift();
+    },
+
+    drawFireworks(ctx, now) {
+        if (!this.fireworks || !this.fireworks.length) return;
+        ctx.save();
+        for (let i = this.fireworks.length - 1; i >= 0; i--) {
+            const p = this.fireworks[i];
+            p.x += p.vx;
+            p.y += p.vy;
+            p.vy += 0.06;
+            p.alpha -= p.decay;
+            if (p.alpha <= 0) {
+                this.fireworks.splice(i, 1);
+                continue;
+            }
+            ctx.fillStyle = p.color;
+            ctx.globalAlpha = Math.max(0, p.alpha);
+            ctx.beginPath();
+            ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+            ctx.fill();
+        }
+        ctx.restore();
+    },
+
+    drawConfetti(ctx, now) {
+        if (!this.confetti || !this.confetti.length) return;
+        ctx.save();
+        for (let i = this.confetti.length - 1; i >= 0; i--) {
+            const c = this.confetti[i];
+            c.x += c.vx;
+            c.y += c.vy;
+            c.vy += c.gravity;
+            c.vx *= 0.98;
+            c.rotation += c.vRot;
+            c.life--;
+            if (c.life <= 0 || c.y > (this.canvas?.clientHeight || 900) + 50) {
+                this.confetti.splice(i, 1);
+                continue;
+            }
+            ctx.save();
+            ctx.translate(c.x, c.y);
+            ctx.rotate(c.rotation);
+            ctx.fillStyle = c.color;
+            ctx.globalAlpha = Math.min(1, c.life / 30);
+            ctx.fillRect(-c.width / 2, -c.height / 2, c.width, c.height);
+            ctx.restore();
+        }
+        ctx.restore();
+    },
+
+    drawSpeechBubbles(ctx, now) {
+        if (!this.speechBubbles || !this.speechBubbles.length) return;
+        for (let i = this.speechBubbles.length - 1; i >= 0; i--) {
+            const b = this.speechBubbles[i];
+            const elapsed = now - b.start;
+            if (elapsed > b.duration) {
+                this.speechBubbles.splice(i, 1);
+                continue;
+            }
+            const fade = elapsed < 200 ? elapsed / 200 : (b.duration - elapsed < 400 ? (b.duration - elapsed) / 400 : 1);
+            ctx.save();
+            ctx.translate(b.x, b.y - Math.min(8, elapsed * 0.015));
+            ctx.globalAlpha = Math.max(0, fade);
+
+            ctx.font = 'bold 9.5px ' + FONT_SANS;
+            const metrics = ctx.measureText(`${b.emoji} ${b.text}`);
+            const bubbleW = metrics.width + 16;
+            const bubbleH = 20;
+
+            ctx.fillStyle = 'rgba(15, 23, 42, 0.95)';
+            ctx.strokeStyle = '#38bdf8';
+            ctx.lineWidth = 1.2;
+            ctx.shadowColor = 'rgba(56, 189, 248, 0.45)';
+            ctx.shadowBlur = 6;
+            ctx.beginPath();
+            ctx.roundRect(-bubbleW / 2, -bubbleH, bubbleW, bubbleH, 6);
+            ctx.fill();
+            ctx.stroke();
+
+            ctx.shadowBlur = 0;
+            ctx.fillStyle = 'rgba(15, 23, 42, 0.95)';
+            ctx.beginPath();
+            ctx.moveTo(-4, 0);
+            ctx.lineTo(4, 0);
+            ctx.lineTo(0, 4);
+            ctx.closePath();
+            ctx.fill();
+            ctx.stroke();
+
+            ctx.fillStyle = '#f8fafc';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(`${b.emoji} ${b.text}`, 0, -bubbleH / 2);
+
+            ctx.restore();
+        }
+    },
+
+    drawPatrolMechs(ctx, now) {
+        if (!this.patrolMechs || !this.patrolMechs.length) return;
+        this.patrolMechs.forEach(mech => {
+            mech.shieldPulse = (mech.shieldPulse + 0.05) % (Math.PI * 2);
+            if (mech.axis === 'x') {
+                mech.gx += mech.speed * mech.dir;
+                if (mech.gx >= 8) { mech.dir = -1; }
+                else if (mech.gx <= 1) { mech.dir = 1; }
+            } else {
+                mech.gy += mech.speed * mech.dir;
+                if (mech.gy >= 8) { mech.dir = -1; }
+                else if (mech.gy <= 1) { mech.dir = 1; }
+            }
+            const { x: cx, y: cy } = this.toIso(mech.gx, mech.gy);
+            ctx.save();
+            ctx.translate(cx, cy + 10);
+
+            const shieldR = 14 + Math.sin(mech.shieldPulse) * 2;
+            ctx.strokeStyle = 'rgba(6, 182, 212, 0.7)';
+            ctx.lineWidth = 1.5;
+            ctx.fillStyle = 'rgba(6, 182, 212, 0.15)';
+            ctx.beginPath();
+            ctx.ellipse(0, -6, shieldR, shieldR * 0.6, 0, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.stroke();
+
+            ctx.fillStyle = '#1e293b';
+            ctx.fillRect(-6, -14, 12, 10);
+            ctx.fillStyle = '#06b6d4';
+            ctx.fillRect(-4, -12, 8, 3);
+            ctx.fillStyle = '#475569';
+            ctx.fillRect(-8, -10, 3, 8);
+            ctx.fillRect(5, -10, 3, 8);
+
+            ctx.strokeStyle = 'rgba(6, 182, 212, 0.4)';
+            ctx.beginPath();
+            ctx.moveTo(0, -11);
+            ctx.lineTo(mech.dir * 22, -11);
+            ctx.stroke();
+
+            ctx.fillStyle = '#a5f3fc';
+            ctx.font = 'bold 7.5px ' + FONT_MONO;
+            ctx.textAlign = 'center';
+            ctx.fillText('ENFORCER', 0, -18);
+
+            ctx.restore();
+        });
+    },
+
+    drawMeteorStrikes(ctx, now) {
+        if (!this.meteorStrikes || !this.meteorStrikes.length) return;
+        for (let i = this.meteorStrikes.length - 1; i >= 0; i--) {
+            const m = this.meteorStrikes[i];
+            m.progress += 0.04;
+            const { x: tx, y: ty } = this.toIso(m.gx, m.gy);
+            if (m.progress < 1) {
+                const startX = tx - 140;
+                const startY = ty - 220;
+                const curX = startX + (tx - startX) * m.progress;
+                const curY = startY + (ty - startY) * m.progress;
+                ctx.save();
+                ctx.strokeStyle = 'rgba(251, 146, 60, 0.75)';
+                ctx.lineWidth = 4;
+                ctx.beginPath();
+                ctx.moveTo(curX - 40, curY - 60);
+                ctx.lineTo(curX, curY);
+                ctx.stroke();
+                ctx.fillStyle = '#ffffff';
+                ctx.beginPath();
+                ctx.arc(curX, curY, 6, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.restore();
+            } else {
+                this.lootCrates.push({ gx: m.gx, gy: m.gy, id: Math.random(), type: 'star-metal' });
+                this.shockwaves.push({ x: tx, y: ty, r: 5, maxR: 90, color: '#f97316', alpha: 1, width: 3 });
+                this.triggerScreenShake(14, 400);
+                this.triggerFireworks(window.innerWidth / 2, window.innerHeight * 0.4, 4);
+                this.meteorStrikes.splice(i, 1);
+            }
+        }
+    },
+
+    drawLootCrates(ctx, now) {
+        if (!this.lootCrates || !this.lootCrates.length) return;
+        this.lootCrates.forEach(crate => {
+            const { x: cx, y: cy } = this.toIso(crate.gx, crate.gy);
+            const bob = Math.sin(now * 0.005 + (crate.id || 0)) * 3;
+            ctx.save();
+            ctx.translate(cx, cy + 12 - bob);
+
+            const glowR = 12 + Math.sin(now * 0.008) * 3;
+            const glow = ctx.createRadialGradient(0, -6, 2, 0, -6, glowR);
+            glow.addColorStop(0, crate.type === 'star-metal' ? 'rgba(168, 85, 247, 0.6)' : 'rgba(250, 204, 21, 0.6)');
+            glow.addColorStop(1, 'rgba(0, 0, 0, 0)');
+            ctx.fillStyle = glow;
+            ctx.beginPath();
+            ctx.arc(0, -6, glowR, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.fillStyle = crate.type === 'star-metal' ? '#581c87' : '#78350f';
+            ctx.fillRect(-7, -13, 14, 12);
+            ctx.strokeStyle = crate.type === 'star-metal' ? '#c084fc' : '#facc15';
+            ctx.lineWidth = 1.2;
+            ctx.strokeRect(-7, -13, 14, 12);
+
+            ctx.font = '9px ' + FONT_SANS;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(crate.type === 'star-metal' ? '☄️' : '📦', 0, -7);
+
+            ctx.fillStyle = '#fef08a';
+            ctx.font = 'bold 7.5px ' + FONT_MONO;
+            ctx.fillText('CLAIM', 0, -18);
+
+            ctx.restore();
+        });
+    },
+
     init() {
         if (this.canvas) return;
         this.canvas = el('play-cg-canvas');
@@ -3921,6 +4219,133 @@ const WorldForgeCG = {
 
             if (this.worldLens === 'city') {
                 const tile = this.fromIso(px, py);
+
+                if (this.deployingPatrol) {
+                    const isRoad = (tile.gx === 4 || tile.gx === 5 || tile.gy === 4 || tile.gy === 5);
+                    if (isRoad) {
+                        this.patrolMechs = this.patrolMechs || [];
+                        this.patrolMechs.push({
+                            gx: tile.gx,
+                            gy: tile.gy,
+                            dir: 1,
+                            axis: (tile.gx === 4 || tile.gx === 5) ? 'y' : 'x',
+                            speed: 0.018,
+                            shieldPulse: 0,
+                        });
+                        this.deployingPatrol = false;
+                        this.audio.playConstruction();
+                        this.triggerScreenShake(7, 250);
+                        const iso = this.toIso(tile.gx, tile.gy);
+                        this.shockwaves.push({ x: iso.x, y: iso.y, r: 10, maxR: 60, color: '#06b6d4', alpha: 1, width: 2.5 });
+                        spawnFloatingText('🛡️ CYBER ENFORCER DEPLOYED!', px, py, 'fx-surge');
+                        showToast('Enforcer Deployed! 🤖', 'Patrol unit activated on sector roads! Keeping citizens safe.');
+                        MayorBounties.addXp(30);
+                    } else {
+                        showToast('Road Required', 'Cyber Enforcers must be deployed on a road or transit corridor.', 'error');
+                        this.audio.playShortage();
+                    }
+                    return;
+                }
+
+                const w = c.clientWidth;
+                const h = c.clientHeight;
+                const wx = (px - (w / 2 + this.camera.x)) / this.camera.zoom;
+                const wy = (py - (h / 2 + this.camera.y - 120)) / this.camera.zoom;
+
+                // 1. Clickable Loot Crates & Star Deposits
+                if (this.lootCrates && this.lootCrates.length) {
+                    for (let i = 0; i < this.lootCrates.length; i++) {
+                        const crate = this.lootCrates[i];
+                        const { x: cx, y: cy } = this.toIso(crate.gx, crate.gy);
+                        const dist = Math.hypot(wx - cx, wy - (cy + 6));
+                        if (dist < 26) {
+                            this.lootCrates.splice(i, 1);
+                            this.audio.playCoin();
+                            this.triggerScreenShake(5, 200);
+                            this.triggerConfetti(px, py, 40);
+                            const isStar = crate.type === 'star-metal';
+                            const creds = isStar ? 250 : 150;
+                            const xp = isStar ? 60 : 40;
+                            spawnFloatingText(`📦 +${creds} 🪙 & +${isStar ? 80 : 40} ⚙️ LOOT!`, px, py, 'fx-success');
+                            if (state.play?.data?.city) {
+                                state.play.data.city.credits = (state.play.data.city.credits || 0) + creds;
+                                renderCityLayer(state.play.data.city);
+                            }
+                            MayorBounties.addXp(xp);
+                            showToast('Loot Secured! 🪙', `Recovered ${creds} credits and municipal supplies! (+${xp} Mayor XP)`, 'success');
+                            return;
+                        }
+                    }
+                }
+
+                // 2. Clickable Citizens with Quirky Speech Bubbles & Tip Rewards
+                if (this.cityCitizens && this.cityCitizens.length) {
+                    for (let i = 0; i < this.cityCitizens.length; i++) {
+                        const citizen = this.cityCitizens[i];
+                        const { x: cx, y: cy } = this.toIso(citizen.gx, citizen.gy);
+                        const dist = Math.hypot(wx - cx, wy - (cy + 6));
+                        if (dist < 24) {
+                            const citizenQuips = [
+                                "More espresso, less distress-o! ☕",
+                                "My hydroponic tomatoes won 1st prize at the fair! 🍅",
+                                "Is that a drone overhead or an alien mothership? 🛸",
+                                "Can someone please fix pothole #42 on Cyber Boulevard? 🕳️",
+                                "Here Mayor, 5 credits for the public fountain! 🪙",
+                                "The air smells 12% cleaner today! Thank you! 🌿",
+                                "I heard raiders are lurking near the canyon... ⚔️",
+                                "Working at the Fusion Plant gives my hair great volume! ⚡",
+                                "Best city in the sector! Five stars on Yelp! ⭐⭐⭐⭐⭐",
+                                "Did you know our defense grid deflected a cosmic meteor? 🛡️",
+                                "Solar panels are looking shiny today! ☀️",
+                                "Living here is 10/10, Mayor! Keep up the good work! 🎉",
+                            ];
+                            const quip = citizenQuips[Math.floor(Math.random() * citizenQuips.length)];
+                            this.triggerSpeechBubble(cx, cy - 14, quip, citizen.emoji || '😊');
+                            this.audio.playChirp();
+                            citizen.bob += 2.8;
+                            citizen.dir *= -1;
+                            if (state.play?.data?.city) {
+                                state.play.data.city.credits = (state.play.data.city.credits || 0) + 5;
+                                state.play.data.city.wellbeing = Math.min(100, (state.play.data.city.wellbeing || 0) + 0.8);
+                                renderCityLayer(state.play.data.city);
+                            }
+                            MayorBounties.addXp(10);
+                            spawnFloatingText('+5 🪙 (Citizen Tip!)', px, py - 10, 'fx-culture');
+                            return;
+                        }
+                    }
+                }
+
+                // 3. Clickable Air Couriers / Drones
+                if (this.cityDrones && this.cityDrones.length) {
+                    for (let i = 0; i < this.cityDrones.length; i++) {
+                        const drone = this.cityDrones[i];
+                        const curX = drone.x + (drone.tx - drone.x) * drone.t;
+                        const curY = drone.y + (drone.ty - drone.y) * drone.t - 65;
+                        const dist = Math.hypot(wx - curX, wy - curY);
+                        if (dist < 28) {
+                            const droneQuips = [
+                                "BEEP BOOP: Priority package delivered on time! 📦",
+                                "OPTIMAL ROUTE COMPUTED. TIP ACCEPTED. 🤖",
+                                "RADAR SCAN COMPLETE: SECTOR SECURE. 📡",
+                                "BATTERY AT 99%. THRUSTERS AT MAXIMUM. 🔋",
+                                "AIR CORRIDOR CLEAR. DISPATCHING MEDICAL SUPPLIES. 💊",
+                            ];
+                            const quip = droneQuips[Math.floor(Math.random() * droneQuips.length)];
+                            this.triggerSpeechBubble(curX, curY - 14, quip, '🛸');
+                            this.audio.playChirp();
+                            drone.speed *= -1;
+                            if (state.play?.data?.city) {
+                                state.play.data.city.credits = (state.play.data.city.credits || 0) + 15;
+                                renderCityLayer(state.play.data.city);
+                            }
+                            MayorBounties.addXp(15);
+                            spawnFloatingText('+15 🪙 (Courier Bonus!)', px, py - 10, 'fx-success');
+                            return;
+                        }
+                    }
+                }
+
                 if (tile.gx >= 0 && tile.gx < 10 && tile.gy >= 0 && tile.gy < 10) {
                     const district = this.getDistrictForTile(tile.gx, tile.gy);
                     if (this.placementBuilding) {
@@ -4831,12 +5256,14 @@ const WorldForgeCG = {
         const wy = (py - cy) / this.camera.zoom;
 
         const realms = [
-            { id: 'sanctuary-haven', name: 'Sanctuary Haven', x: 0, y: 0, r: 52 },
-            { id: 'barony-oakhaven', name: 'Barony of Oakhaven', x: 0, y: -190, r: 44 },
-            { id: 'riverside-vassal', name: 'Riverside Protectorate', x: -260, y: -30, r: 44 },
-            { id: 'iron-mandate', name: 'Iron Mandate Hegemony', x: 260, y: -30, r: 44 },
-            { id: 'mercantile-league', name: 'Free Mercantile League', x: 120, y: 190, r: 44 },
-            { id: 'dust-canyon-raiders', name: 'Dust Canyon Raiders', x: -180, y: 170, r: 44 },
+            { id: 'sanctuary-haven', name: 'Sanctuary Haven', x: 0, y: 0, r: 56 },
+            { id: 'barony-oakhaven', name: 'Barony of Oakhaven', x: 0, y: -210, r: 48 },
+            { id: 'riverside-vassal', name: 'Riverside Protectorate', x: -280, y: -30, r: 48 },
+            { id: 'iron-mandate', name: 'Iron Mandate Hegemony', x: 280, y: -30, r: 48 },
+            { id: 'mercantile-league', name: 'Free Mercantile League', x: 130, y: 210, r: 48 },
+            { id: 'dust-canyon-raiders', name: 'Dust Canyon Raiders', x: -200, y: 190, r: 48 },
+            { id: 'quantum-monolith', name: 'Quantum Monolith', x: -160, y: -260, r: 38 },
+            { id: 'abyssal-rig', name: 'Abyssal Research Dome', x: 260, y: 230, r: 38 },
         ];
 
         for (const r of realms) {
@@ -5021,8 +5448,11 @@ const WorldForgeCG = {
 
         this.drawChimneySmoke(ctx, now);
         this.drawCitizens(ctx, now);
+        this.drawPatrolMechs(ctx, now);
         this.drawLogisticsCaravans(ctx, now, eco);
         this.drawSkyDrones(ctx, now);
+        this.drawMeteorStrikes(ctx, now);
+        this.drawLootCrates(ctx, now);
 
         if (raidThreat > 25) {
             this.drawRaiders(ctx, now, raidThreat);
@@ -5031,6 +5461,8 @@ const WorldForgeCG = {
         if (isFortified) {
             this.drawShieldDome(ctx, now);
         }
+
+        this.drawSpeechBubbles(ctx, now);
 
         this.drawAtmosphericWeather(ctx, w, h, now, weather, season);
 
@@ -6387,93 +6819,670 @@ const WorldForgeCG = {
         ctx.restore();
     },
 
-    renderRealmView(ctx, w, h, now) {
-        const cx = 0;
-        const cy = 0;
+    initWorldMapEnvironment() {
+        if (this.worldMapEnvInit) return;
+        this.worldMapEnvInit = true;
 
-        ctx.save();
-        ctx.strokeStyle = 'rgba(241, 185, 107, 0.12)';
-        ctx.lineWidth = 1.5;
-        ctx.beginPath();
-        ctx.arc(cx, cy, 260, 0, Math.PI * 2);
-        ctx.stroke();
-        ctx.setLineDash([6, 6]);
-        ctx.beginPath();
-        ctx.arc(cx, cy, 180, 0, Math.PI * 2);
-        ctx.stroke();
-        ctx.setLineDash([]);
-        ctx.restore();
+        this.starfieldStars = Array.from({ length: 280 }, () => {
+            const spectral = Math.random();
+            const color = spectral > 0.85 ? '#93c5fd'
+                        : spectral > 0.45 ? '#ffffff'
+                        : spectral > 0.2 ? '#fef08a'
+                        : '#f87171';
+            return {
+                x: (Math.random() - 0.5) * 3200,
+                y: (Math.random() - 0.5) * 2200,
+                r: Math.random() < 0.08 ? 2.5 : (Math.random() < 0.25 ? 1.6 : 0.9),
+                alpha: Math.random() * 0.7 + 0.3,
+                phase: Math.random() * Math.PI * 2,
+                twinkleSpeed: 0.002 + Math.random() * 0.005,
+                color,
+                layer: Math.random() < 0.3 ? 0.15 : (Math.random() < 0.7 ? 0.35 : 0.65),
+                spike: Math.random() < 0.06,
+            };
+        });
 
-        const realms = [
-            { id: 'sanctuary-haven', name: 'Sanctuary Haven', title: 'Your Sovereign City', power: 'Metropolis', stance: 'ally', x: 0, y: 0, crest: '🏰', color: '#f59e0b', r: 52 },
-            { id: 'barony-oakhaven', name: 'Barony of Oakhaven', title: 'Martial Fiefdom · Baron Kaelen', power: 'Power 125 · Feudal Levies', stance: 'neutral', x: 0, y: -190, crest: '🛡️', color: '#eab308', r: 44 },
-            { id: 'riverside-vassal', name: 'Riverside Protectorate', title: 'Agricultural Vassal · Gov. Chen', power: 'Tribute: +100 Food, +80 Water', stance: 'vassal', x: -260, y: -30, crest: '🌾', color: '#10b981', r: 44 },
-            { id: 'iron-mandate', name: 'Iron Mandate Hegemony', title: 'Imperial Hegemon · Arch-Imperator', power: 'Power 290 · Threat Aura', stance: 'hostile', x: 260, y: -30, crest: '🦅', color: '#ef4444', r: 44 },
-            { id: 'mercantile-league', name: 'Free Mercantile League', title: 'Trade Coalition · Chancellor Mirren', power: 'Coalition Pact · Credit Lines', stance: 'coalition', x: 120, y: 190, crest: '⚖️', color: '#38bdf8', r: 44 },
-            { id: 'dust-canyon-raiders', name: 'Dust Canyon Raiders', title: 'Desert Insurgency · Warlord Jax', power: 'Warlord Raids · High Incursion', stance: 'hostile', x: -180, y: 170, crest: '⚔️', color: '#f97316', r: 44 },
+        this.nebulaClouds = [
+            { x: -550, y: -380, rx: 420, ry: 260, colorA: 'rgba(244, 63, 94, 0.14)', colorB: 'rgba(168, 85, 247, 0.08)' },
+            { x: 620, y: -290, rx: 480, ry: 300, colorA: 'rgba(6, 182, 212, 0.15)', colorB: 'rgba(59, 130, 246, 0.07)' },
+            { x: -280, y: 460, rx: 390, ry: 240, colorA: 'rgba(245, 158, 11, 0.12)', colorB: 'rgba(234, 88, 12, 0.06)' },
+            { x: 440, y: 410, rx: 450, ry: 280, colorA: 'rgba(168, 85, 247, 0.13)', colorB: 'rgba(99, 102, 241, 0.06)' },
         ];
 
+        this.shootingStars = [];
+        this.lastShootingStar = 0;
+
+        this.worldShips = [
+            { x: -40, y: 60, tx: 90, ty: 160, t: 0.15, speed: 0.0009, name: 'SS Meridian', cargo: '🪙 Gold', flag: '⚖️' },
+            { x: 80, y: 150, tx: -190, ty: -10, t: 0.65, speed: 0.0007, name: 'Aegean Tide', cargo: '🍞 Grain', flag: '🌾' },
+            { x: -210, y: -15, tx: -20, ty: -10, t: 0.4, speed: 0.0011, name: 'Nautilus VII', cargo: '⚡ Energy', flag: '🏰' },
+            { x: 140, y: 180, tx: 220, ty: 30, t: 0.8, speed: 0.0008, name: 'Kraken Barque', cargo: '⚙️ Ores', flag: '🦅' },
+        ];
+
+        this.worldAirships = [
+            { x: 0, y: -20, tx: 0, ty: -180, t: 0.25, speed: 0.0015, name: 'Sky-Cruiser Aegis', trailColor: '#38bdf8' },
+            { x: 0, y: -20, tx: 250, ty: -25, t: 0.7, speed: 0.0018, name: 'Hegemon Courier', trailColor: '#ef4444' },
+            { x: -160, y: 150, tx: 100, ty: 170, t: 0.5, speed: 0.0013, name: 'Desert Zephyr', trailColor: '#f97316' },
+        ];
+
+        this.worldClouds = Array.from({ length: 9 }, (_, i) => ({
+            x: -700 + i * 180 + (Math.random() - 0.5) * 80,
+            y: -350 + (i % 5) * 160 + (Math.random() - 0.5) * 50,
+            rx: 120 + Math.random() * 90,
+            ry: 50 + Math.random() * 35,
+            speed: 0.12 + Math.random() * 0.1,
+            alpha: 0.35 + Math.random() * 0.22,
+        }));
+    },
+
+    drawCosmicStarfield(w, h, now) {
+        this.initWorldMapEnvironment();
+        const ctx = this.ctx;
+
+        const bgGrad = ctx.createRadialGradient(w / 2, h / 2, 50, w / 2, h / 2, Math.max(w, h));
+        bgGrad.addColorStop(0, '#060b1c');
+        bgGrad.addColorStop(0.5, '#030713');
+        bgGrad.addColorStop(1, '#010308');
+        ctx.fillStyle = bgGrad;
+        ctx.fillRect(0, 0, w, h);
+
+        ctx.save();
+        this.nebulaClouds.forEach(neb => {
+            const nx = w / 2 + neb.x + this.camera.x * 0.08;
+            const ny = h / 2 + neb.y + this.camera.y * 0.08;
+            const grad = ctx.createRadialGradient(nx, ny, 10, nx, ny, neb.rx);
+            grad.addColorStop(0, neb.colorA);
+            grad.addColorStop(0.6, neb.colorB);
+            grad.addColorStop(1, 'transparent');
+            ctx.fillStyle = grad;
+            ctx.beginPath();
+            ctx.ellipse(nx, ny, neb.rx, neb.ry, 0.2, 0, Math.PI * 2);
+            ctx.fill();
+        });
+        ctx.restore();
+
+        ctx.save();
+        this.starfieldStars.forEach(s => {
+            const px = w / 2 + s.x + this.camera.x * s.layer;
+            const py = h / 2 + s.y + this.camera.y * s.layer;
+
+            const wrapW = w + 400;
+            const wrapH = h + 400;
+            const sx = ((px % wrapW) + wrapW) % wrapW - 200;
+            const sy = ((py % wrapH) + wrapH) % wrapH - 200;
+
+            const twinkle = Math.sin(now * s.twinkleSpeed + s.phase);
+            const curAlpha = Math.max(0.15, Math.min(1, s.alpha * (0.75 + 0.25 * twinkle)));
+
+            ctx.fillStyle = s.color;
+            ctx.globalAlpha = curAlpha;
+            ctx.beginPath();
+            ctx.arc(sx, sy, s.r, 0, Math.PI * 2);
+            ctx.fill();
+
+            if (s.spike && s.r >= 2.0 && curAlpha > 0.6) {
+                ctx.strokeStyle = s.color;
+                ctx.lineWidth = 0.75;
+                ctx.globalAlpha = curAlpha * 0.6;
+                ctx.beginPath();
+                ctx.moveTo(sx - 8, sy); ctx.lineTo(sx + 8, sy);
+                ctx.moveTo(sx, sy - 8); ctx.lineTo(sx, sy + 8);
+                ctx.stroke();
+            }
+        });
+        ctx.restore();
+
+        if (now - this.lastShootingStar > 4500 && Math.random() < 0.04) {
+            this.lastShootingStar = now;
+            this.shootingStars.push({
+                x: Math.random() * w,
+                y: Math.random() * (h * 0.4),
+                vx: -8 - Math.random() * 8,
+                vy: 5 + Math.random() * 6,
+                len: 80 + Math.random() * 60,
+                alpha: 1,
+                decay: 0.02 + Math.random() * 0.015,
+                color: Math.random() > 0.5 ? '#67e8f9' : '#fef08a',
+            });
+        }
+
+        if (this.shootingStars.length > 0) {
+            ctx.save();
+            for (let i = this.shootingStars.length - 1; i >= 0; i--) {
+                const ss = this.shootingStars[i];
+                ss.x += ss.vx;
+                ss.y += ss.vy;
+                ss.alpha -= ss.decay;
+                if (ss.alpha <= 0) {
+                    this.shootingStars.splice(i, 1);
+                    continue;
+                }
+                const tailGrad = ctx.createLinearGradient(ss.x, ss.y, ss.x - ss.vx * 6, ss.y - ss.vy * 6);
+                tailGrad.addColorStop(0, `${ss.color}`);
+                tailGrad.addColorStop(1, 'transparent');
+                ctx.strokeStyle = tailGrad;
+                ctx.lineWidth = 2.2;
+                ctx.globalAlpha = ss.alpha;
+                ctx.beginPath();
+                ctx.moveTo(ss.x, ss.y);
+                ctx.lineTo(ss.x - ss.vx * 6, ss.y - ss.vy * 6);
+                ctx.stroke();
+
+                ctx.fillStyle = '#ffffff';
+                ctx.beginPath();
+                ctx.arc(ss.x, ss.y, 2, 0, Math.PI * 2);
+                ctx.fill();
+            }
+            ctx.restore();
+        }
+
+        ctx.save();
+        const cx = w / 2 + this.camera.x * 0.15;
+        const cy = h / 2 + this.camera.y * 0.15;
+
+        ctx.strokeStyle = 'rgba(56, 189, 248, 0.07)';
+        ctx.lineWidth = 1;
+        ctx.setLineDash([4, 6]);
+        [320, 520, 720].forEach(rad => {
+            ctx.beginPath();
+            ctx.arc(cx, cy, rad, 0, Math.PI * 2);
+            ctx.stroke();
+        });
+        ctx.beginPath();
+        ctx.moveTo(cx - 850, cy); ctx.lineTo(cx + 850, cy);
+        ctx.moveTo(cx, cy - 850); ctx.lineTo(cx, cy + 850);
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        const sweepAngle = (now * 0.0004) % (Math.PI * 2);
+        const sweepR = 720;
+        const radGrad = ctx.createLinearGradient(cx, cy, cx + Math.cos(sweepAngle) * sweepR, cy + Math.sin(sweepAngle) * sweepR);
+        radGrad.addColorStop(0, 'rgba(56, 189, 248, 0.09)');
+        radGrad.addColorStop(1, 'transparent');
+        ctx.fillStyle = radGrad;
+        ctx.beginPath();
+        ctx.moveTo(cx, cy);
+        ctx.arc(cx, cy, sweepR, sweepAngle - 0.28, sweepAngle);
+        ctx.closePath();
+        ctx.fill();
+
+        ctx.font = 'bold 9px ' + FONT_MONO;
+        ctx.fillStyle = 'rgba(56, 189, 248, 0.45)';
+        ctx.textAlign = 'left';
+        ctx.fillText('ORBITAL ATLAS PLATFORM · SECTOR 07-FORGE', 24, 28);
+        ctx.fillText('ORBIT: SYNCHRONOUS · 35,786 KM · GEO-LOCK', 24, 42);
+
+        ctx.textAlign = 'right';
+        ctx.fillText('PLANETARY SCAN: 142.4°E 38.6°N', w - 24, 28);
+        ctx.fillText('TECTONIC SENSOR: ACTIVE · STABLE REALM', w - 24, 42);
+        ctx.restore();
+    },
+
+    renderRealmView(ctx, w, h, now) {
+        this.initWorldMapEnvironment();
+
+        ctx.save();
+
+        // 1. Continental Ocean Basin & Planetary Atmospheric Limb
+        const globeR = 640;
+        const oceanGrad = ctx.createRadialGradient(0, 0, 100, 0, 0, globeR);
+        oceanGrad.addColorStop(0, '#0a2540');
+        oceanGrad.addColorStop(0.65, '#06172e');
+        oceanGrad.addColorStop(0.92, '#030c1a');
+        oceanGrad.addColorStop(1, '#02060f');
+        ctx.fillStyle = oceanGrad;
+        ctx.beginPath();
+        ctx.arc(0, 0, globeR, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Planetary Ozone Glow Rim
+        const limbGrad = ctx.createRadialGradient(0, 0, globeR - 25, 0, 0, globeR + 15);
+        limbGrad.addColorStop(0, 'rgba(56, 189, 248, 0)');
+        limbGrad.addColorStop(0.7, 'rgba(56, 189, 248, 0.28)');
+        limbGrad.addColorStop(1, 'rgba(56, 189, 248, 0)');
+        ctx.strokeStyle = limbGrad;
+        ctx.lineWidth = 28;
+        ctx.beginPath();
+        ctx.arc(0, 0, globeR, 0, Math.PI * 2);
+        ctx.stroke();
+
+        // Ocean Wave Currents / Bathymetric Depth Lines
+        ctx.strokeStyle = 'rgba(14, 165, 233, 0.12)';
+        ctx.lineWidth = 1.2;
+        ctx.setLineDash([8, 12]);
+        [180, 320, 460, 580].forEach(r => {
+            ctx.beginPath();
+            ctx.arc(0, 0, r, 0, Math.PI * 2);
+            ctx.stroke();
+        });
+        ctx.setLineDash([]);
+
+        // 2. Continental Landmasses with Topography & Biomes
+        // Continental Shelf 1: Central Crownlands & Delta (Green fertile temperate)
+        ctx.save();
+        ctx.fillStyle = '#0f3820';
+        ctx.beginPath();
+        ctx.ellipse(0, -30, 420, 260, -0.05, 0, Math.PI * 2);
+        ctx.fill();
+
+        const crownGrad = ctx.createLinearGradient(-350, -220, 350, 220);
+        crownGrad.addColorStop(0, '#15803d');
+        crownGrad.addColorStop(0.4, '#166534');
+        crownGrad.addColorStop(0.7, '#14532d');
+        crownGrad.addColorStop(1, '#1b4332');
+        ctx.fillStyle = crownGrad;
+        ctx.beginPath();
+        ctx.moveTo(-320, -60);
+        ctx.bezierCurveTo(-340, -180, -140, -240, 0, -230);
+        ctx.bezierCurveTo(160, -240, 330, -160, 340, -40);
+        ctx.bezierCurveTo(360, 80, 220, 210, 80, 210);
+        ctx.bezierCurveTo(-60, 220, -240, 180, -310, 60);
+        ctx.closePath();
+        ctx.fill();
+
+        // Animated Coastal Wave Foam Lines
+        ctx.strokeStyle = `rgba(186, 230, 253, ${0.28 + Math.sin(now * 0.003) * 0.1})`;
+        ctx.lineWidth = 2.5;
+        ctx.stroke();
+        ctx.restore();
+
+        // Continent 2: Northern Frostpeaks & Alpine Taiga (Ice / Snow / Granite)
+        ctx.save();
+        const northGrad = ctx.createLinearGradient(0, -350, 0, -140);
+        northGrad.addColorStop(0, '#f8fafc');
+        northGrad.addColorStop(0.4, '#cbd5e1');
+        northGrad.addColorStop(1, '#334155');
+        ctx.fillStyle = northGrad;
+        ctx.beginPath();
+        ctx.moveTo(-220, -180);
+        ctx.bezierCurveTo(-180, -330, 180, -330, 220, -180);
+        ctx.bezierCurveTo(120, -160, -120, -160, -220, -180);
+        ctx.closePath();
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
+        // Mountain Ridges (Jagged Peaks with Shading)
+        const mountainPeaks = [
+            { x: -140, y: -230, h: 36, w: 26 },
+            { x: -90, y: -260, h: 48, w: 32 },
+            { x: -30, y: -240, h: 42, w: 28 },
+            { x: 40, y: -270, h: 54, w: 36 },
+            { x: 110, y: -240, h: 40, w: 28 },
+            { x: 160, y: -210, h: 32, w: 24 },
+        ];
+        mountainPeaks.forEach(m => {
+            ctx.fillStyle = '#475569';
+            ctx.beginPath();
+            ctx.moveTo(m.x, m.y - m.h);
+            ctx.lineTo(m.x + m.w / 2, m.y);
+            ctx.lineTo(m.x, m.y);
+            ctx.closePath();
+            ctx.fill();
+
+            ctx.fillStyle = '#f1f5f9';
+            ctx.beginPath();
+            ctx.moveTo(m.x, m.y - m.h);
+            ctx.lineTo(m.x - m.w / 2, m.y);
+            ctx.lineTo(m.x, m.y);
+            ctx.closePath();
+            ctx.fill();
+        });
+        ctx.restore();
+
+        // Continent 3: Eastern Obsidian Badlands & Volcanic Caldera
+        ctx.save();
+        const volcanicGrad = ctx.createRadialGradient(290, -30, 15, 290, -30, 150);
+        volcanicGrad.addColorStop(0, '#451a03');
+        volcanicGrad.addColorStop(0.5, '#292524');
+        volcanicGrad.addColorStop(1, '#1c1917');
+        ctx.fillStyle = volcanicGrad;
+        ctx.beginPath();
+        ctx.moveTo(210, -110);
+        ctx.bezierCurveTo(340, -120, 390, 40, 270, 70);
+        ctx.bezierCurveTo(220, 50, 180, -40, 210, -110);
+        ctx.closePath();
+        ctx.fill();
+
+        // Molten Lava Veins with Pulsing Incandescent Glow
+        const lavaPulse = 0.65 + Math.sin(now * 0.004) * 0.25;
+        ctx.strokeStyle = `rgba(239, 68, 68, ${lavaPulse})`;
+        ctx.lineWidth = 3.5;
+        ctx.shadowColor = '#ef4444';
+        ctx.shadowBlur = 10;
+        ctx.beginPath();
+        ctx.moveTo(280, -30);
+        ctx.lineTo(310, -10);
+        ctx.lineTo(335, -40);
+        ctx.moveTo(280, -30);
+        ctx.lineTo(260, 10);
+        ctx.lineTo(290, 35);
+        ctx.stroke();
+        ctx.shadowBlur = 0;
+        ctx.restore();
+
+        // Continent 4: Southwestern Dust Canyon & Sand Dunes
+        ctx.save();
+        const desertGrad = ctx.createLinearGradient(-340, 110, -110, 270);
+        desertGrad.addColorStop(0, '#b45309');
+        desertGrad.addColorStop(0.5, '#d97706');
+        desertGrad.addColorStop(1, '#92400e');
+        ctx.fillStyle = desertGrad;
+        ctx.beginPath();
+        ctx.moveTo(-130, 130);
+        ctx.bezierCurveTo(-260, 100, -350, 220, -220, 270);
+        ctx.bezierCurveTo(-140, 280, -80, 210, -130, 130);
+        ctx.closePath();
+        ctx.fill();
+
+        // Winding Canyon Chasms
+        ctx.strokeStyle = '#451a03';
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        ctx.moveTo(-180, 140);
+        ctx.bezierCurveTo(-210, 170, -190, 220, -240, 250);
+        ctx.stroke();
+        ctx.restore();
+
+        // Continent 5: Southern Azure Archipelago & Coral Atolls
+        ctx.save();
+        const atolls = [
+            { x: 100, y: 190, rx: 32, ry: 20 },
+            { x: 155, y: 220, rx: 42, ry: 26 },
+            { x: 210, y: 195, rx: 28, ry: 18 },
+            { x: 140, y: 265, rx: 24, ry: 16 },
+        ];
+        atolls.forEach(a => {
+            ctx.fillStyle = 'rgba(6, 182, 212, 0.45)';
+            ctx.beginPath();
+            ctx.ellipse(a.x, a.y, a.rx + 12, a.ry + 8, 0.2, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.fillStyle = '#fef08a';
+            ctx.beginPath();
+            ctx.ellipse(a.x, a.y, a.rx, a.ry, 0.2, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.fillStyle = '#15803d';
+            ctx.beginPath();
+            ctx.ellipse(a.x, a.y, a.rx * 0.65, a.ry * 0.65, 0.2, 0, Math.PI * 2);
+            ctx.fill();
+        });
+        ctx.restore();
+
+        // Major Serpentine Crown River with Specular Sunlight Glints
+        ctx.save();
+        ctx.strokeStyle = '#0284c7';
+        ctx.lineWidth = 8;
+        ctx.lineCap = 'round';
+        ctx.beginPath();
+        ctx.moveTo(10, -170);
+        ctx.bezierCurveTo(-40, -90, 40, -40, -10, 40);
+        ctx.bezierCurveTo(-60, 110, -120, 120, -180, 150);
+        ctx.stroke();
+
+        ctx.strokeStyle = 'rgba(224, 242, 254, 0.65)';
+        ctx.lineWidth = 2.5;
+        ctx.stroke();
+        ctx.restore();
+
+        // 3. Drifting Atmospheric Cloud Decks with Ground Shadows
+        ctx.save();
+        this.worldClouds.forEach(c => {
+            c.x += c.speed;
+            if (c.x > 800) c.x = -800;
+
+            ctx.fillStyle = 'rgba(2, 6, 23, 0.25)';
+            ctx.beginPath();
+            ctx.ellipse(c.x + 24, c.y + 32, c.rx, c.ry, 0.1, 0, Math.PI * 2);
+            ctx.fill();
+
+            const cloudGrad = ctx.createRadialGradient(c.x, c.y, 10, c.x, c.y, c.rx);
+            cloudGrad.addColorStop(0, `rgba(255, 255, 255, ${c.alpha})`);
+            cloudGrad.addColorStop(0.7, `rgba(241, 245, 249, ${c.alpha * 0.7})`);
+            cloudGrad.addColorStop(1, 'transparent');
+            ctx.fillStyle = cloudGrad;
+            ctx.beginPath();
+            ctx.ellipse(c.x, c.y, c.rx, c.ry, 0.1, 0, Math.PI * 2);
+            ctx.fill();
+        });
+        ctx.restore();
+
+        // 4. Moving Maritime Trade Fleets on the World Ocean
+        ctx.save();
+        this.worldShips.forEach(ship => {
+            ship.t = (ship.t + ship.speed) % 1;
+            const curX = ship.x + (ship.tx - ship.x) * ship.t;
+            const curY = ship.y + (ship.ty - ship.y) * ship.t;
+            const angle = Math.atan2(ship.ty - ship.y, ship.tx - ship.x);
+
+            ctx.save();
+            ctx.translate(curX, curY);
+            ctx.rotate(angle);
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.45)';
+            ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            ctx.moveTo(-16, -4); ctx.lineTo(-2, 0); ctx.lineTo(-16, 4);
+            ctx.stroke();
+
+            ctx.fillStyle = '#0f172a';
+            ctx.fillRect(-7, -3, 14, 6);
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(-4, -1, 4, 2);
+            ctx.font = '8px ' + FONT_SANS;
+            ctx.fillText(ship.flag, 2, -5);
+            ctx.restore();
+        });
+        ctx.restore();
+
+        // 5. High-Altitude Cargo Airships & Zeppelins
+        ctx.save();
+        this.worldAirships.forEach(air => {
+            air.t = (air.t + air.speed) % 1;
+            const curX = air.x + (air.tx - air.x) * air.t;
+            const curY = air.y + (air.ty - air.y) * air.t - 40;
+            const angle = Math.atan2(air.ty - air.y, air.tx - air.x);
+
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.2)';
+            ctx.beginPath();
+            ctx.ellipse(curX, curY + 40, 10, 5, 0, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.save();
+            ctx.translate(curX, curY);
+            ctx.rotate(angle);
+
+            ctx.strokeStyle = air.trailColor;
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(-12, 0); ctx.lineTo(-24, 0);
+            ctx.stroke();
+
+            ctx.fillStyle = '#1e293b';
+            ctx.beginPath();
+            ctx.ellipse(0, 0, 12, 5, 0, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.strokeStyle = '#38bdf8';
+            ctx.lineWidth = 1;
+            ctx.stroke();
+
+            ctx.fillStyle = '#f8fafc';
+            ctx.fillRect(-2, -1, 5, 2);
+            ctx.restore();
+        });
+        ctx.restore();
+
+        // 6. Sovereign Realms & World Entities (Capitals, Citadels & Wonders)
+        const realms = [
+            { id: 'sanctuary-haven', name: 'Sanctuary Haven', title: 'Your Sovereign Metropolis', power: 'Metropolis · Defense Shield Active', stance: 'ally', x: 0, y: 0, r: 56, crest: '🏰', color: '#f59e0b', type: 'capital' },
+            { id: 'barony-oakhaven', name: 'Barony of Oakhaven', title: 'Highland Fiefdom · Baron Kaelen', power: 'Power 125 · Feudal Levies', stance: 'neutral', x: 0, y: -210, r: 48, crest: '🛡️', color: '#eab308', type: 'realm' },
+            { id: 'riverside-vassal', name: 'Riverside Protectorate', title: 'Agricultural Delta · Gov. Chen', power: 'Tribute: +100 Food, +80 Water', stance: 'vassal', x: -280, y: -30, r: 48, crest: '🌾', color: '#10b981', type: 'realm' },
+            { id: 'iron-mandate', name: 'Iron Mandate Hegemony', title: 'Imperial Hegemon · Arch-Imperator', power: 'Power 290 · Threat Aura High', stance: 'hostile', x: 280, y: -30, r: 48, crest: '🦅', color: '#ef4444', type: 'realm' },
+            { id: 'mercantile-league', name: 'Free Mercantile League', title: 'Trade Coalition · Chancellor Mirren', power: 'Coalition Pact · Credit Lines', stance: 'coalition', x: 130, y: 210, r: 48, crest: '⚖️', color: '#38bdf8', type: 'realm' },
+            { id: 'dust-canyon-raiders', name: 'Dust Canyon Raiders', title: 'Desert Insurgency · Warlord Jax', power: 'Warlord Raids · High Incursion', stance: 'hostile', x: -200, y: 190, r: 48, crest: '⚔️', color: '#f97316', type: 'realm' },
+            { id: 'quantum-monolith', name: 'Quantum Monolith', title: 'Polar Wonder · Leyline Anomaly', power: 'Ancient Wonder · +80 Science Surge', stance: 'neutral', x: -160, y: -260, r: 38, crest: '🔮', color: '#a855f7', type: 'wonder' },
+            { id: 'abyssal-rig', name: 'Abyssal Research Dome', title: 'Oceanic Wonder · Geothermal Vent', power: 'Deepsea Wonder · +120 Energy Core', stance: 'ally', x: 260, y: 230, r: 38, crest: '🌊', color: '#06b6d4', type: 'wonder' },
+        ];
+
+        // Diplomatic Conduits & Trade Routes
         realms.slice(1).forEach(r => {
             ctx.save();
             ctx.strokeStyle = r.color;
-            ctx.globalAlpha = 0.35;
-            ctx.lineWidth = 2;
-            ctx.setLineDash([5, 5]);
+            ctx.globalAlpha = 0.38;
+            ctx.lineWidth = 2.2;
+            ctx.setLineDash([6, 6]);
             ctx.beginPath();
             ctx.moveTo(0, 0);
             ctx.lineTo(r.x, r.y);
             ctx.stroke();
 
-            const packetT = ((now * 0.0006 + r.x * 0.01) % 1);
+            const packetT = ((now * 0.0006 + Math.abs(r.x) * 0.01) % 1);
             const px = r.x * packetT;
             const py = r.y * packetT;
             ctx.fillStyle = r.color;
-            ctx.globalAlpha = 0.9;
+            ctx.globalAlpha = 1;
+            ctx.shadowColor = r.color;
+            ctx.shadowBlur = 8;
             ctx.beginPath();
-            ctx.arc(px, py, 3.5, 0, Math.PI * 2);
+            ctx.arc(px, py, 4, 0, Math.PI * 2);
             ctx.fill();
+            ctx.shadowBlur = 0;
             ctx.restore();
         });
 
+        // Rotating Tactical Radar Sweep from Sanctuary Haven
+        ctx.save();
+        const radarAngle = (now * 0.0008) % (Math.PI * 2);
+        const radarR = 360;
+        const radGrad = ctx.createLinearGradient(0, 0, Math.cos(radarAngle) * radarR, Math.sin(radarAngle) * radarR);
+        radGrad.addColorStop(0, 'rgba(245, 158, 11, 0.18)');
+        radGrad.addColorStop(1, 'transparent');
+        ctx.fillStyle = radGrad;
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        ctx.arc(0, 0, radarR, radarAngle - 0.35, radarAngle);
+        ctx.closePath();
+        ctx.fill();
+        ctx.restore();
+
+        // Draw Each Realm & Capital with 3D Settlement Details & Badges
         realms.forEach(r => {
             const isHovered = this.hoveredRealmEntity?.id === r.id;
             ctx.save();
             ctx.translate(r.x, r.y);
 
+            const auraR = r.r + 14 + Math.sin(now * 0.003 + r.x) * 3;
+            ctx.strokeStyle = r.color;
+            ctx.lineWidth = isHovered ? 2.5 : 1.2;
+            ctx.globalAlpha = isHovered ? 0.8 : 0.35;
+            ctx.setLineDash([4, 4]);
+            ctx.beginPath();
+            ctx.arc(0, 0, auraR, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.setLineDash([]);
+            ctx.globalAlpha = 1;
+
             if (isHovered) {
-                ctx.fillStyle = `${r.color}22`;
+                ctx.fillStyle = `${r.color}28`;
                 ctx.beginPath();
-                ctx.arc(0, 0, r.r + 12, 0, Math.PI * 2);
+                ctx.arc(0, 0, r.r + 8, 0, Math.PI * 2);
                 ctx.fill();
             }
 
-            ctx.fillStyle = '#0f172a';
+            ctx.fillStyle = '#090e1a';
             ctx.beginPath();
             ctx.arc(0, 0, r.r, 0, Math.PI * 2);
             ctx.fill();
-            ctx.strokeStyle = isHovered ? '#ffffff' : r.color;
-            ctx.lineWidth = isHovered ? 3 : 2;
-            ctx.stroke();
 
-            ctx.font = '22px ' + FONT_SANS;
+            ctx.strokeStyle = isHovered ? '#ffffff' : r.color;
+            ctx.lineWidth = isHovered ? 3.5 : 2.5;
+            ctx.shadowColor = r.color;
+            ctx.shadowBlur = isHovered ? 18 : 8;
+            ctx.stroke();
+            ctx.shadowBlur = 0;
+
+            // Space Elevator Tether for Sanctuary Haven
+            if (r.id === 'sanctuary-haven') {
+                ctx.strokeStyle = 'rgba(56, 189, 248, 0.6)';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.moveTo(0, -r.r);
+                ctx.lineTo(0, -380);
+                ctx.stroke();
+
+                const climberY = -r.r - ((now * 0.035) % 280);
+                ctx.fillStyle = '#facc15';
+                ctx.fillRect(-3, climberY, 6, 6);
+            }
+
+            // Lighthouse beam for Mercantile League
+            if (r.id === 'mercantile-league') {
+                const beamAngle = (now * 0.0018) % (Math.PI * 2);
+                ctx.save();
+                ctx.rotate(beamAngle);
+                const beamGrad = ctx.createLinearGradient(0, 0, 140, 0);
+                beamGrad.addColorStop(0, 'rgba(254, 240, 138, 0.4)');
+                beamGrad.addColorStop(1, 'transparent');
+                ctx.fillStyle = beamGrad;
+                ctx.beginPath();
+                ctx.moveTo(0, 0);
+                ctx.arc(0, 0, 140, -0.2, 0.2);
+                ctx.closePath();
+                ctx.fill();
+                ctx.restore();
+            }
+
+            ctx.font = `${Math.floor(r.r * 0.55)}px ` + FONT_SANS;
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
-            ctx.fillText(r.crest, 0, -4);
+            ctx.fillText(r.crest, 0, -2);
+
+            const plaqueW = Math.max(110, ctx.measureText(r.name).width + 24);
+            const plaqueH = 18;
+            ctx.fillStyle = 'rgba(15, 23, 42, 0.92)';
+            ctx.strokeStyle = r.color;
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.roundRect(-plaqueW / 2, r.r + 8, plaqueW, plaqueH, 4);
+            ctx.fill();
+            ctx.stroke();
 
             ctx.fillStyle = '#f8fafc';
-            ctx.font = 'bold 12px ' + FONT_SANS;
-            ctx.fillText(r.name, 0, r.r + 16);
+            ctx.font = 'bold 10px ' + FONT_SANS;
+            ctx.fillText(r.name, 0, r.r + 17);
 
             ctx.fillStyle = 'var(--text-muted, #94a3b8)';
-            ctx.font = '10px ' + FONT_SANS;
-            ctx.fillText(r.title, 0, r.r + 30);
+            ctx.font = '8.5px ' + FONT_SANS;
+            ctx.fillText(r.title, 0, r.r + 35);
 
             ctx.fillStyle = r.color;
-            ctx.font = 'bold 9px ' + FONT_MONO;
-            ctx.fillText(r.power, 0, r.r + 43);
+            ctx.font = 'bold 8px ' + FONT_MONO;
+            ctx.fillText(r.power, 0, r.r + 48);
 
             ctx.restore();
         });
+
+        // 7. Interactive Map Lenses Selector (Top HUD)
+        ctx.save();
+        const lensBarW = 380;
+        const lensBarH = 26;
+        ctx.fillStyle = 'rgba(11, 19, 38, 0.88)';
+        ctx.strokeStyle = 'rgba(56, 189, 248, 0.35)';
+        ctx.lineWidth = 1.2;
+        ctx.beginPath();
+        ctx.roundRect(-lensBarW / 2, -320, lensBarW, lensBarH, 13);
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.font = 'bold 8.5px ' + FONT_MONO;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillStyle = '#38bdf8';
+        ctx.fillText('🌍 REALM ATLAS · PLANETARY GEOPOLITICAL THEATER · LIVE TELEMETRY', 0, -307);
+        ctx.restore();
+
+        ctx.restore();
     },
 
     renderWildernessEcosystemView(ctx, w, h, now) {
@@ -6984,9 +7993,24 @@ const WorldForgeCG = {
         // 1. Draw ambient background & tactical grid
         this.drawBackground(w, h, now);
 
+        // Screen shake calculation
+        let shakeX = 0;
+        let shakeY = 0;
+        if (this.screenShake && this.screenShake.intensity > 0.05) {
+            const elapsed = now - this.screenShake.start;
+            if (elapsed < this.screenShake.duration) {
+                const decay = 1 - (elapsed / this.screenShake.duration);
+                const currentIntensity = this.screenShake.intensity * decay;
+                shakeX = (Math.random() - 0.5) * 2 * currentIntensity;
+                shakeY = (Math.random() - 0.5) * 2 * currentIntensity;
+            } else {
+                this.screenShake.intensity = 0;
+            }
+        }
+
         // Transform into world space
         ctx.save();
-        ctx.translate(w / 2 + this.camera.x, h / 2 + this.camera.y);
+        ctx.translate(w / 2 + this.camera.x + shakeX, h / 2 + this.camera.y + shakeY);
         if (this.perspectiveMode === 'first') ctx.rotate(-this.walker.heading);
         ctx.scale(this.camera.zoom, this.camera.zoom);
 
@@ -7025,6 +8049,11 @@ const WorldForgeCG = {
         ctx.restore();
 
         if (this.perspectiveMode !== 'strategic') this.drawImmersiveOverlay(ctx, w, h, now);
+
+        // Arcade Juice: Fullscreen Fireworks & Confetti
+        this.drawFireworks(ctx, now);
+        this.drawConfetti(ctx, now);
+
         ctx.restore();
 
         // 7. Tactical Minimap Radar
@@ -8054,9 +9083,466 @@ function setupTreeTabs() {
     });
 }
 
+const MayorBounties = {
+    xp: 0,
+    claimed: new Set(),
+    rankTitles: [
+        { min: 0, title: 'Rookie Governor', level: 1 },
+        { min: 100, title: 'District Superintendent', level: 2 },
+        { min: 250, title: 'High Cyber-Architect', level: 3 },
+        { min: 500, title: 'Grand Realm Sovereign', level: 4 },
+        { min: 900, title: 'Immortal Forge Divinity', level: 5 },
+    ],
+    bounties: [
+        {
+            id: 'pop-boom',
+            icon: '🏙️',
+            title: 'Settlement Boom',
+            desc: 'Expand micro-city population to 150+ citizens',
+            target: 150,
+            unit: 'citizens',
+            rewardText: '+100 🪙 · +50 🍞 · +50 XP',
+            check: (city) => city?.population || 0,
+            reward: (city) => {
+                if (city) {
+                    city.credits = (city.credits || 0) + 100;
+                }
+                MayorBounties.addXp(50);
+            },
+        },
+        {
+            id: 'grid-master',
+            icon: '⚡',
+            title: 'Grid Independence',
+            desc: 'Operate clean energy infrastructure (Solar or Fusion active)',
+            target: 1,
+            unit: 'plants',
+            rewardText: '+120 🪙 · +40 ⚡ · +60 XP',
+            check: (city) => {
+                const buildings = city?.buildings || [];
+                return buildings.filter(b => b.id.includes('solar') || b.id.includes('fusion')).length;
+            },
+            reward: (city) => {
+                if (city) {
+                    city.credits = (city.credits || 0) + 120;
+                }
+                MayorBounties.addXp(60);
+            },
+        },
+        {
+            id: 'green-haven',
+            icon: '🌿',
+            title: 'Ecological Eden',
+            desc: 'Nurture biological ecosystem health to 75% or higher',
+            target: 75,
+            unit: '%',
+            rewardText: '+80 🪙 · +8 Wellbeing · +50 XP',
+            check: (city) => Math.round(city?.ecology?.biodiversity_index || city?.wellbeing || 0),
+            reward: (city) => {
+                if (city) {
+                    city.credits = (city.credits || 0) + 80;
+                    city.wellbeing = Math.min(100, (city.wellbeing || 0) + 8);
+                }
+                MayorBounties.addXp(50);
+            },
+        },
+        {
+            id: 'skyline-rise',
+            icon: '🏗️',
+            title: 'Vertical Evolution',
+            desc: 'Upgrade any municipal structure to Level 2 or higher',
+            target: 1,
+            unit: 'upgraded',
+            rewardText: '+150 🪙 · +50 ⚙️ · +75 XP',
+            check: (city) => {
+                const buildings = city?.buildings || [];
+                return buildings.some(b => b.level >= 2) ? 1 : 0;
+            },
+            reward: (city) => {
+                if (city) {
+                    city.credits = (city.credits || 0) + 150;
+                }
+                MayorBounties.addXp(75);
+            },
+        },
+        {
+            id: 'tech-pioneer',
+            icon: '🔬',
+            title: 'Knowledge Horizon',
+            desc: 'Unlock at least 2 technologies from the Evolution Tree',
+            target: 2,
+            unit: 'techs',
+            rewardText: '+100 🪙 · +40 🧪 · +80 XP',
+            check: (city) => {
+                const techs = city?.technologies || [];
+                return techs.filter(t => t.researched).length;
+            },
+            reward: (city) => {
+                if (city) {
+                    city.credits = (city.credits || 0) + 100;
+                }
+                MayorBounties.addXp(80);
+            },
+        },
+        {
+            id: 'iron-citadel',
+            icon: '🛡️',
+            title: 'Iron Bulwark',
+            desc: 'Shift municipal posture to Fortified Defense',
+            target: 1,
+            unit: 'fortified',
+            rewardText: '+120 🪙 · +10 Defense · +70 XP',
+            check: (city) => city?.geopolitics?.defensePosture === 'fortified' ? 1 : 0,
+            reward: (city) => {
+                if (city) {
+                    city.credits = (city.credits || 0) + 120;
+                }
+                MayorBounties.addXp(70);
+            },
+        },
+    ],
+    getRank() {
+        let current = this.rankTitles[0];
+        let next = this.rankTitles[1];
+        for (let i = 0; i < this.rankTitles.length; i++) {
+            if (this.xp >= this.rankTitles[i].min) {
+                current = this.rankTitles[i];
+                next = this.rankTitles[i + 1] || null;
+            }
+        }
+        return { current, next };
+    },
+    addXp(amount) {
+        const prevRank = this.getRank().current.level;
+        this.xp += amount;
+        const newRank = this.getRank().current.level;
+        if (newRank > prevRank) {
+            WorldForgeCG.audio?.playCheer?.();
+            WorldForgeCG.triggerFireworks?.(window.innerWidth / 2, window.innerHeight * 0.35, 6);
+            showToast('MAYOR PROMOTION! 🎖️', `You achieved Rank ${newRank}: ${this.getRank().current.title}!`, 'success');
+        }
+        this.renderRank();
+    },
+    claim(id) {
+        if (this.claimed.has(id)) return;
+        const bounty = this.bounties.find(b => b.id === id);
+        if (!bounty) return;
+        const city = state.play?.data?.city;
+        const cur = bounty.check(city);
+        if (cur < bounty.target) return;
+
+        this.claimed.add(id);
+        bounty.reward(city);
+        WorldForgeCG.audio?.playCoin?.();
+        WorldForgeCG.audio?.playCheer?.();
+        WorldForgeCG.triggerFireworks?.(window.innerWidth / 2, window.innerHeight * 0.4, 6);
+        WorldForgeCG.triggerConfetti?.(window.innerWidth / 2, window.innerHeight * 0.3, 80);
+        showToast('Bounty Claimed! 🪙', `${bounty.title} completed: ${bounty.rewardText}`, 'success');
+        if (city) renderCityLayer(city);
+        this.renderList(city);
+        this.updateReadyBadge(city);
+    },
+    update(city) {
+        this.updateReadyBadge(city);
+        const widget = el('mayor-bounties-widget');
+        if (widget && !widget.classList.contains('hidden')) {
+            this.renderList(city);
+        }
+    },
+    updateReadyBadge(city) {
+        let readyCount = 0;
+        this.bounties.forEach(b => {
+            if (!this.claimed.has(b.id) && b.check(city) >= b.target) {
+                readyCount++;
+            }
+        });
+        const badge = el('bounty-dock-badge');
+        const pill = el('bounty-ready-pill');
+        if (badge) {
+            badge.textContent = readyCount;
+            badge.classList.toggle('hidden', readyCount === 0);
+        }
+        if (pill) {
+            pill.textContent = `${readyCount} READY`;
+            pill.classList.toggle('hidden', readyCount === 0);
+        }
+    },
+    renderRank() {
+        const { current, next } = this.getRank();
+        const titleEl = el('mayor-rank-title');
+        const xpValEl = el('mayor-xp-val');
+        const xpFillEl = el('mayor-xp-fill');
+        if (titleEl) titleEl.textContent = `Rank ${current.level}: ${current.title}`;
+        if (next) {
+            const range = next.min - current.min;
+            const progress = this.xp - current.min;
+            const pct = Math.min(100, Math.max(0, (progress / range) * 100));
+            if (xpValEl) xpValEl.textContent = `${this.xp} / ${next.min} XP`;
+            if (xpFillEl) xpFillEl.style.width = `${pct.toFixed(0)}%`;
+        } else {
+            if (xpValEl) xpValEl.textContent = `${this.xp} XP (MAX)`;
+            if (xpFillEl) xpFillEl.style.width = '100%';
+        }
+    },
+    renderList(city) {
+        const listEl = el('bounties-list-container') || el('bounties-list');
+        if (!listEl) return;
+        this.renderRank();
+
+        listEl.innerHTML = this.bounties.map(b => {
+            const isClaimed = this.claimed.has(b.id);
+            const curVal = b.check(city);
+            const isReady = !isClaimed && curVal >= b.target;
+            const progressPct = Math.min(100, Math.round((curVal / b.target) * 100));
+
+            return `
+                <div class="bounty-card ${isClaimed ? 'claimed' : (isReady ? 'ready' : '')}">
+                    <div class="bounty-card-header">
+                        <span class="bounty-card-icon">${b.icon}</span>
+                        <div class="bounty-card-info">
+                            <h5 class="bounty-card-title">${b.title}</h5>
+                            <p class="bounty-card-desc">${b.desc}</p>
+                        </div>
+                    </div>
+                    <div class="bounty-progress-wrap">
+                        <div class="bounty-progress-labels">
+                            <span class="bounty-progress-val">${isClaimed ? 'Completed' : `${curVal} / ${b.target} ${b.unit}`}</span>
+                            <span class="bounty-reward-pill">${b.rewardText}</span>
+                        </div>
+                        <div class="bounty-progress-bar">
+                            <div class="bounty-progress-fill" style="width: ${isClaimed ? '100%' : `${progressPct}%`}"></div>
+                        </div>
+                    </div>
+                    <div class="bounty-card-footer">
+                        ${isClaimed
+                            ? '<span class="bounty-claimed-tag">✓ REWARD CLAIMED</span>'
+                            : (isReady
+                                ? `<button class="bounty-claim-btn ready" onclick="MayorBounties.claim('${b.id}')">CLAIM REWARD ✨</button>`
+                                : `<button class="bounty-claim-btn" disabled>IN PROGRESS (${progressPct}%)</button>`
+                              )
+                        }
+                    </div>
+                </div>
+            `;
+        }).join('');
+    }
+};
+
+const CrisisManager = {
+    active: false,
+    timer: null,
+    currentCrisis: null,
+    crises: [
+        {
+            id: 'solar-flare',
+            badge: '⚡ SOLAR FLARE EMP',
+            title: 'Critical Coronal Mass Ejection Incoming!',
+            desc: 'A massive coronal discharge is destabilizing sector capacitors! Coolant networks are heating up.',
+            optionA: 'Emergency Coolant (-30 💧, -5% Heat)',
+            optionB: 'Throttle Grid (+25 🪙, -15% Power)',
+        },
+        {
+            id: 'warlord-raid',
+            badge: '⚔️ DUST CANYON RAIDERS',
+            title: 'Armored Raider Warband Breaching Perimeter!',
+            desc: 'Dust scavengers with improvised war rigs demand tribute or threaten fuel silos.',
+            optionA: 'Mobilize Militia & Enforcers (Repel Raiders)',
+            optionB: 'Pay Security Bribe (-80 🪙 Scavenger Ransom)',
+        },
+        {
+            id: 'toxic-smog',
+            badge: '🌫️ ACID SMOG INVERSION',
+            title: 'Hazardous Chemical Blanket Trapped in Valley!',
+            desc: 'Thermal inversion is trapping sulfuric particulate over residential districts.',
+            optionA: 'Overdrive Hydroponic Scrubbers (-40 ⚡ Energy)',
+            optionB: 'Declare District Curfew (-15% Production)',
+        },
+        {
+            id: 'meteor-event',
+            badge: '☄️ STARFALL ANOMALY',
+            title: 'Cosmic Bolide Crashing Near Sector 7!',
+            desc: 'An iridium-rich meteorite survived atmospheric burn and created a kinetic crater.',
+            optionA: 'Dispatch Heavy Mining Rig (+180 🪙, +60 🧪 Star Metal)',
+            optionB: 'Activate Deflector Forcefield (-35 ⚡ Grid Surge)',
+        },
+    ],
+    trigger(crisisId = null) {
+        if (this.active) return;
+        const crisis = crisisId
+            ? this.crises.find(c => c.id === crisisId)
+            : this.crises[Math.floor(Math.random() * this.crises.length)];
+        if (!crisis) return;
+
+        this.active = true;
+        this.currentCrisis = crisis;
+
+        WorldForgeCG.audio?.playSiren?.();
+        WorldForgeCG.triggerScreenShake?.(12, 450);
+
+        const banner = el('crisis-alert-banner');
+        if (banner) {
+            banner.classList.remove('hidden');
+            banner.classList.add('active');
+            el('crisis-badge').textContent = crisis.badge;
+            el('crisis-title').textContent = crisis.title;
+            el('crisis-desc').textContent = crisis.desc;
+            const btnA = el('crisis-action-a') || el('crisis-btn-a');
+            const btnB = el('crisis-action-b') || el('crisis-btn-b');
+            if (btnA) btnA.textContent = crisis.optionA;
+            if (btnB) btnB.textContent = crisis.optionB;
+            el('crisis-timer-bar').style.width = '100%';
+        }
+
+        clearInterval(this.timer);
+        const startTime = Date.now();
+        const duration = 25000;
+        this.timer = setInterval(() => {
+            const elapsed = Date.now() - startTime;
+            const remaining = Math.max(0, 1 - (elapsed / duration));
+            const bar = el('crisis-timer-bar');
+            if (bar) bar.style.width = `${(remaining * 100).toFixed(1)}%`;
+            if (elapsed >= duration) {
+                this.resolve('timeout');
+            }
+        }, 100);
+    },
+    resolve(choice) {
+        clearInterval(this.timer);
+        this.active = false;
+        const banner = el('crisis-alert-banner');
+        if (banner) {
+            banner.classList.add('hidden');
+            banner.classList.remove('active');
+        }
+
+        const city = state.play?.data?.city;
+        if (choice === 'a') {
+            WorldForgeCG.audio?.playLevelUp?.();
+            WorldForgeCG.triggerFireworks?.(window.innerWidth / 2, window.innerHeight * 0.35, 5);
+            WorldForgeCG.triggerConfetti?.(window.innerWidth / 2, window.innerHeight * 0.3, 60);
+            MayorBounties.addXp(75);
+            showToast('Crisis Mastered! 🛡️', 'Decisive command resolved the emergency with zero civilian losses! (+75 XP)', 'success');
+            if (city) {
+                city.wellbeing = Math.min(100, (city.wellbeing || 0) + 6);
+                renderCityLayer(city);
+            }
+        } else if (choice === 'b') {
+            WorldForgeCG.audio?.playCoin?.();
+            MayorBounties.addXp(50);
+            showToast('Crisis Mitigated ⚠️', 'Tactical concession contained damages. Infrastructure stabilized (+50 XP).');
+        } else {
+            WorldForgeCG.audio?.playExplosion?.();
+            WorldForgeCG.triggerScreenShake?.(15, 500);
+            showToast('Crisis Timeout! 💥', 'Emergency response window lapsed! Sector suffered structural strain.', 'error');
+            if (city) {
+                city.wellbeing = Math.max(0, (city.wellbeing || 0) - 10);
+                renderCityLayer(city);
+            }
+        }
+    }
+};
+
+window.MayorBounties = MayorBounties;
+window.CrisisManager = CrisisManager;
+
 function setupCommanderPowers() {
+    // Event delegation for claiming bounties
+    el('bounties-list')?.addEventListener('click', (e) => {
+        const btn = e.target.closest('.bounty-claim-btn.ready');
+        if (btn) {
+            const card = btn.closest('.bounty-card');
+            const claimAttr = btn.getAttribute('onclick');
+            if (claimAttr) {
+                const match = claimAttr.match(/MayorBounties\.claim\('([^']+)'\)/);
+                if (match && match[1]) {
+                    MayorBounties.claim(match[1]);
+                }
+            }
+        }
+    });
+    // Quick Speed Chips
+    document.querySelectorAll('.speed-control-group .speed-chip').forEach(chip => {
+        chip.addEventListener('click', () => {
+            const speed = chip.dataset.speed;
+            const select = el('play-speed');
+            if (select) {
+                select.value = speed;
+                document.querySelectorAll('.speed-control-group .speed-chip').forEach(c => {
+                    c.classList.toggle('active', c.dataset.speed === speed);
+                });
+                if (state.play.running) schedulePlayStep();
+                showToast(`Simulation Speed: ${chip.textContent.trim()}`, 'Clock warp rate updated.');
+            }
+        });
+    });
+
+    el('play-speed')?.addEventListener('change', (e) => {
+        const speed = e.target.value;
+        document.querySelectorAll('.speed-control-group .speed-chip').forEach(c => {
+            c.classList.toggle('active', c.dataset.speed === speed);
+        });
+    });
+
+    // Mayor Bounties Dock Toggle & Header toggle
+    const toggleDirectives = () => {
+        const widget = el('mayor-bounties-widget');
+        const body = el('bounties-body');
+        if (widget) {
+            const isHidden = widget.classList.toggle('hidden');
+            if (!isHidden) {
+                if (body) body.classList.remove('hidden');
+                MayorBounties.renderList(state.play?.data?.city);
+                WorldForgeCG.audio?.playChirp?.();
+            }
+        }
+    };
+    el('btn-bounties-dock')?.addEventListener('click', toggleDirectives);
+    el('bounties-toggle-btn')?.addEventListener('click', () => {
+        const body = el('bounties-body');
+        const btn = el('bounties-collapse-btn');
+        if (body) {
+            const isHidden = body.classList.toggle('hidden');
+            if (btn) btn.textContent = isHidden ? '▲' : '▼';
+        }
+    });
+    el('bounties-collapse-btn')?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const body = el('bounties-body');
+        const btn = el('bounties-collapse-btn');
+        if (body) {
+            const isHidden = body.classList.toggle('hidden');
+            if (btn) btn.textContent = isHidden ? '▲' : '▼';
+        }
+    });
+
+    // Crisis Decision Buttons
+    (el('crisis-action-a') || el('crisis-btn-a'))?.addEventListener('click', () => CrisisManager.resolve('a'));
+    (el('crisis-action-b') || el('crisis-btn-b'))?.addEventListener('click', () => CrisisManager.resolve('b'));
+
+    // Deploy Enforcer Mech
+    el('pwr-patrol')?.addEventListener('click', () => {
+        WorldForgeCG.deployingPatrol = true;
+        WorldForgeCG.audio?.playBlip?.(880, 0.08);
+        showToast('Deploy Enforcer Mech 🤖', 'Click any road or transit corridor tile to deploy a Cyber Enforcer!');
+        spawnFloatingText('🛡️ CLICK ROAD TO DEPLOY MECH', null, null, 'fx-surge');
+    });
+
+    // Cosmic Meteorite Strike
+    el('pwr-meteor')?.addEventListener('click', () => {
+        WorldForgeCG.audio?.playExplosion?.();
+        WorldForgeCG.triggerScreenShake?.(16, 500);
+        const gx = 2 + Math.floor(Math.random() * 6);
+        const gy = 2 + Math.floor(Math.random() * 6);
+        WorldForgeCG.meteorStrikes.push({ gx, gy, progress: 0 });
+        showToast('Cosmic Meteor Strike! ☄️', 'A celestial meteor is crashing into the sector! Click the Star-Metal deposit for rewards.');
+        spawnFloatingText('☄️ INCOMING STARFALL BOLIDE!', null, null, 'fx-danger');
+        CrisisManager.trigger('meteor-event');
+    });
+
+    // Overdrive
     el('pwr-overdrive')?.addEventListener('click', () => {
         WorldForgeCG.audio?.playOverdrive?.();
+        WorldForgeCG.triggerScreenShake?.(8, 280);
         spawnFloatingText('⚡ 150% GRID OVERDRIVE ACTIVE!', null, null, 'fx-surge');
         const slider = el('capacity-slider');
         if (slider) {
@@ -8067,16 +9553,22 @@ function setupCommanderPowers() {
         }
     });
 
+    // Grand Civic Festival
     el('pwr-festival')?.addEventListener('click', () => {
         WorldForgeCG.audio?.playLevelUp?.();
+        WorldForgeCG.audio?.playCheer?.();
+        WorldForgeCG.triggerFireworks?.(window.innerWidth / 2, window.innerHeight * 0.35, 6);
+        WorldForgeCG.triggerConfetti?.(window.innerWidth / 2, window.innerHeight * 0.3, 80);
         spawnFloatingText('🎉 GRAND CIVIC FESTIVAL (+10 WELLBEING)!', null, null, 'fx-culture');
         showToast('Festival Celebrated', 'A grand festival sweeps the districts, elevating civic unity and wellbeing!');
         if (state.play?.data?.city) {
             state.play.data.city.wellbeing = (state.play.data.city.wellbeing || 0) + 10.0;
             renderCityLayer(state.play.data.city);
         }
+        MayorBounties.addXp(25);
     });
 
+    // Eureka Breakthrough
     el('pwr-eureka')?.addEventListener('click', () => {
         WorldForgeCG.audio?.playUnlock?.();
         spawnFloatingText('🧪 EUREKA BREAKTHROUGH (+40 RESEARCH)!', null, null, 'fx-success');
@@ -8085,25 +9577,20 @@ function setupCommanderPowers() {
         if (available) {
             showToast('Breakthrough ready', `Research ${available.name} in the Evolution Tree.`);
         }
+        MayorBounties.addXp(25);
     });
 
+    // Relief Airdrop
     el('pwr-relief')?.addEventListener('click', () => {
         WorldForgeCG.audio?.playConstruction?.();
         spawnFloatingText('📦 RELIEF AIRDROP: +100 WATER, +100 FOOD!', null, null, 'fx-warning');
         showToast('Emergency Relief Dispatched', 'Emergency provisions air-dropped across distressed sectors.');
+        MayorBounties.addXp(20);
     });
 
+    // Crisis Trigger
     el('pwr-crisis')?.addEventListener('click', () => {
-        WorldForgeCG.audio?.playChaos?.();
-        spawnFloatingText('🌪️ CHAOS SURGE: SOLAR STORM DETECTED!', null, null, 'fx-danger');
-        showToast('Stochastic Crisis Triggered', 'A fierce solar storm tests district grids! Monitor shortages.', 'error');
-        const slider = el('capacity-slider');
-        if (slider && Number(slider.value) > 80) {
-            slider.value = 80;
-            updateCapacityLabel();
-            syncPresetHighlight(80);
-            applyCapacityDecision();
-        }
+        CrisisManager.trigger();
     });
 }
 

@@ -1,0 +1,31 @@
+{
+  "formatVersion": 2,
+  "engineVersion": "0.2.0",
+  "profileId": "local",
+  "kind": "autosave",
+  "id": "b552e5b977374ded9d1be0cf8b7c2a1d",
+  "name": "Autosave · micro-city",
+  "world": "micro-city",
+  "worldFingerprint": "7b7b34f3b6baf2c53ef5a21e2af0fefb4753f71b2fe22b0f73243fb835eb2eef",
+  "seed": 99,
+  "totalTicks": 1500,
+  "currentTick": 50,
+  "checkpointFingerprint": "c7602f9a46566e9f59f06f5ae0880a4d13ba93743dafc84655e1e7bcfdcdd76b",
+  "interventions": [
+    {
+      "tick": 24,
+      "action": "capacity",
+      "entity": "coal-plant",
+      "capacity": 1.5
+    },
+    {
+      "tick": 49,
+      "action": "geopolitics",
+      "entity": "defense-garrison",
+      "option": "fortified",
+      "geoAction": "posture"
+    }
+  ],
+  "createdAt": 1790300514,
+  "updatedAt": 1790300514
+}
