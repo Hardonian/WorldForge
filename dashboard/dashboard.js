@@ -4095,6 +4095,13 @@ const WorldForgeCG = {
                         'm': 'grand-amphitheater',
                     };
                     if (bMap[key]) this.setPlacementBuilding(bMap[key]);
+                } else if (this.worldLens === 'realm') {
+                    const lensKeys = { '1': 'geopolitics', '2': 'trade', '3': 'resources', '4': 'threats' };
+                    if (lensKeys[key]) {
+                        this.realmMapLens = lensKeys[key];
+                        this.audio.playBlip(780, 0.06);
+                        showToast('Map Lens Switched', `Tactical overlay: ${this.realmMapLens.toUpperCase()}`);
+                    }
                 } else {
                     const speeds = { '1': 1, '2': 2, '3': 5, '4': 10, '5': 20 };
                     const speedSelect = el('play-speed');
@@ -4382,10 +4389,41 @@ const WorldForgeCG = {
                 }
                 return;
             } else if (this.worldLens === 'realm') {
+                const w = c.clientWidth;
+                const h = c.clientHeight;
+
+                // 1. Check top lens bar clicks
+                const tabW = 118;
+                const tabH = 30;
+                const gap = 8;
+                const totalW = 4 * tabW + 3 * gap;
+                const startX = (w - totalW) / 2;
+                const topY = 22;
+
+                if (py >= topY && py <= topY + tabH && px >= startX && px <= startX + totalW) {
+                    const idx = Math.floor((px - startX) / (tabW + gap));
+                    const lenses = ['geopolitics', 'trade', 'resources', 'threats'];
+                    if (idx >= 0 && idx < lenses.length) {
+                        this.realmMapLens = lenses[idx];
+                        this.audio.playBlip(780, 0.06);
+                        showToast('Map Lens Switched', `Tactical overlay: ${this.realmMapLens.toUpperCase()}`);
+                        return;
+                    }
+                }
+
+                // 2. Check Realm & Wonder clicks
                 const realmHit = this.getRealmEntityAt(px, py);
                 if (realmHit) {
-                    openWarRoomModal();
-                    this.audio.playWarHorn();
+                    if (realmHit.type === 'wonder') {
+                        this.audio.playUnlock();
+                        this.triggerFireworks(px, py, 4);
+                        spawnFloatingText(`✨ WONDER: ${realmHit.name.toUpperCase()}`, px, py, 'fx-surge');
+                        showToast(`Ancient Wonder: ${realmHit.name}`, `${realmHit.title} · ${realmHit.power}`, 'success');
+                    } else {
+                        openWarRoomModal();
+                        this.audio.playWarHorn();
+                        spawnFloatingText(`⚔️ ${realmHit.name.toUpperCase()}`, px, py, 'fx-surge');
+                    }
                 }
                 return;
             }
@@ -4450,6 +4488,18 @@ const WorldForgeCG = {
             el('city-build-dock')?.classList.toggle('hidden', this.worldLens !== 'city');
             el('play-network-container')?.setAttribute('data-perspective', this.perspectiveMode);
             if (this.perspectiveMode !== 'strategic') this.enterImmersiveMode();
+            if (mode === 'realm') {
+                this.camera.targetX = 0;
+                this.camera.targetY = 0;
+                this.camera.targetZoom = 0.72;
+                this.camera.hasInteracted = false;
+                this.realmMapLens = this.realmMapLens || 'geopolitics';
+            } else if (mode === 'city') {
+                this.camera.targetX = 0;
+                this.camera.targetY = 0;
+                this.camera.targetZoom = 1.0;
+                this.camera.hasInteracted = false;
+            }
             this.start();
         } else {
             btnCg?.classList.remove('active');
@@ -5256,14 +5306,14 @@ const WorldForgeCG = {
         const wy = (py - cy) / this.camera.zoom;
 
         const realms = [
-            { id: 'sanctuary-haven', name: 'Sanctuary Haven', x: 0, y: 0, r: 56 },
-            { id: 'barony-oakhaven', name: 'Barony of Oakhaven', x: 0, y: -210, r: 48 },
-            { id: 'riverside-vassal', name: 'Riverside Protectorate', x: -280, y: -30, r: 48 },
-            { id: 'iron-mandate', name: 'Iron Mandate Hegemony', x: 280, y: -30, r: 48 },
-            { id: 'mercantile-league', name: 'Free Mercantile League', x: 130, y: 210, r: 48 },
-            { id: 'dust-canyon-raiders', name: 'Dust Canyon Raiders', x: -200, y: 190, r: 48 },
-            { id: 'quantum-monolith', name: 'Quantum Monolith', x: -160, y: -260, r: 38 },
-            { id: 'abyssal-rig', name: 'Abyssal Research Dome', x: 260, y: 230, r: 38 },
+            { id: 'sanctuary-haven', name: 'Sanctuary Haven', title: 'Your Sovereign Metropolis', power: 'Metropolis · Defense Shield Active', stance: 'ally', x: 0, y: 0, r: 56, crest: '🏰', color: '#f59e0b', type: 'capital', ruler: 'Mayor / Commander (You)', loyalty: 100, military: 320, tribute: 'Self-Governed Capital' },
+            { id: 'barony-oakhaven', name: 'Barony of Oakhaven', title: 'Highland Fiefdom · Baron Kaelen', power: 'Power 125 · Feudal Levies', stance: 'neutral', x: 0, y: -210, r: 48, crest: '🛡️', color: '#eab308', type: 'realm', ruler: 'Baron Kaelen', loyalty: 65, military: 125, tribute: '+40 Food, +30 Timber' },
+            { id: 'riverside-vassal', name: 'Riverside Protectorate', title: 'Agricultural Delta · Gov. Chen', power: 'Tribute: +100 Food, +80 Water', stance: 'vassal', x: -280, y: -30, r: 48, crest: '🌾', color: '#10b981', type: 'realm', ruler: 'Governor Chen', loyalty: 92, military: 85, tribute: '+100 Food, +80 Water' },
+            { id: 'iron-mandate', name: 'Iron Mandate Hegemony', title: 'Imperial Hegemon · Arch-Imperator', power: 'Power 290 · Threat Aura High', stance: 'hostile', x: 280, y: -30, r: 48, crest: '🦅', color: '#ef4444', type: 'realm', ruler: 'Arch-Imperator Vane', loyalty: 20, military: 290, tribute: 'None (Demands submission)' },
+            { id: 'mercantile-league', name: 'Free Mercantile League', title: 'Trade Coalition · Chancellor Mirren', power: 'Coalition Pact · Credit Lines', stance: 'coalition', x: 130, y: 210, r: 48, crest: '⚖️', color: '#38bdf8', type: 'realm', ruler: 'Chancellor Mirren', loyalty: 88, military: 140, tribute: '+150 Credits, +60 Goods' },
+            { id: 'dust-canyon-raiders', name: 'Dust Canyon Raiders', title: 'Desert Insurgency · Warlord Jax', power: 'Warlord Raids · High Incursion', stance: 'hostile', x: -200, y: 190, r: 48, crest: '⚔️', color: '#f97316', type: 'realm', ruler: 'Warlord Jax', loyalty: 10, military: 160, tribute: 'None (Raid Threat 75%)' },
+            { id: 'quantum-monolith', name: 'Quantum Monolith', title: 'Polar Wonder · Leyline Anomaly', power: 'Ancient Wonder · +80 Science Surge', stance: 'wonder', x: -160, y: -260, r: 38, crest: '🔮', color: '#a855f7', type: 'wonder', ruler: 'Precursor Builders', loyalty: 100, military: 0, tribute: '+80 Research XP / cycle' },
+            { id: 'abyssal-rig', name: 'Abyssal Research Dome', title: 'Oceanic Wonder · Geothermal Vent', power: 'Deepsea Wonder · +120 Energy Core', stance: 'wonder', x: 260, y: 230, r: 38, crest: '🌊', color: '#06b6d4', type: 'wonder', ruler: 'Oceanic Institute', loyalty: 100, military: 0, tribute: '+120 MW Geothermal Energy' },
         ];
 
         for (const r of realms) {
@@ -6976,6 +7026,63 @@ const WorldForgeCG = {
             ctx.restore();
         }
 
+        // Celestial Moon / Orbital Companion
+        ctx.save();
+        const moonX = w - 160 + this.camera.x * 0.05;
+        const moonY = 110 + this.camera.y * 0.05;
+        const moonR = 44;
+
+        // Soft celestial moon glow
+        const moonGlow = ctx.createRadialGradient(moonX, moonY, moonR * 0.5, moonX, moonY, moonR * 2.2);
+        moonGlow.addColorStop(0, 'rgba(224, 242, 254, 0.2)');
+        moonGlow.addColorStop(0.5, 'rgba(186, 230, 253, 0.06)');
+        moonGlow.addColorStop(1, 'transparent');
+        ctx.fillStyle = moonGlow;
+        ctx.beginPath();
+        ctx.arc(moonX, moonY, moonR * 2.2, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Moon sphere body
+        const moonBodyGrad = ctx.createRadialGradient(moonX - 10, moonY - 10, 4, moonX, moonY, moonR);
+        moonBodyGrad.addColorStop(0, '#f1f5f9');
+        moonBodyGrad.addColorStop(0.6, '#94a3b8');
+        moonBodyGrad.addColorStop(1, '#334155');
+        ctx.fillStyle = moonBodyGrad;
+        ctx.beginPath();
+        ctx.arc(moonX, moonY, moonR, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Moon Maria Craters
+        const craters = [
+            { dx: -10, dy: -8, r: 10 },
+            { dx: 12, dy: 8, r: 8 },
+            { dx: -14, dy: 14, r: 6 },
+            { dx: 6, dy: -14, r: 7 },
+            { dx: 14, dy: -6, r: 5 },
+        ];
+        ctx.fillStyle = 'rgba(30, 41, 59, 0.45)';
+        craters.forEach(c => {
+            ctx.beginPath();
+            ctx.arc(moonX + c.dx, moonY + c.dy, c.r, 0, Math.PI * 2);
+            ctx.fill();
+        });
+
+        // Orbital Satellite Relay Beacon
+        const satAngle = (now * 0.0012) % (Math.PI * 2);
+        const satR = moonR + 16;
+        const satX = moonX + Math.cos(satAngle) * satR;
+        const satY = moonY + Math.sin(satAngle) * satR * 0.45;
+        ctx.fillStyle = '#38bdf8';
+        ctx.beginPath();
+        ctx.arc(satX, satY, 2.5, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.font = 'bold 8px ' + FONT_MONO;
+        ctx.textAlign = 'center';
+        ctx.fillStyle = 'rgba(148, 163, 184, 0.65)';
+        ctx.fillText('LUNAR RELAY · SELENE-1', moonX, moonY + moonR + 14);
+        ctx.restore();
+
         ctx.save();
         const cx = w / 2 + this.camera.x * 0.15;
         const cy = h / 2 + this.camera.y * 0.15;
@@ -7402,18 +7509,65 @@ const WorldForgeCG = {
             ctx.stroke();
             ctx.shadowBlur = 0;
 
-            // Space Elevator Tether for Sanctuary Haven
+            // Space Elevator Tether for Sanctuary Haven (Reaching into Orbit)
             if (r.id === 'sanctuary-haven') {
-                ctx.strokeStyle = 'rgba(56, 189, 248, 0.6)';
-                ctx.lineWidth = 2;
+                ctx.save();
+                // Dual high-tension carbon-nanotube cables
+                ctx.strokeStyle = 'rgba(56, 189, 248, 0.45)';
+                ctx.lineWidth = 1.6;
                 ctx.beginPath();
-                ctx.moveTo(0, -r.r);
-                ctx.lineTo(0, -380);
+                ctx.moveTo(-2, -r.r); ctx.lineTo(-2, -620);
+                ctx.moveTo(2, -r.r); ctx.lineTo(2, -620);
                 ctx.stroke();
 
-                const climberY = -r.r - ((now * 0.035) % 280);
+                // Center energy core pulse
+                ctx.strokeStyle = 'rgba(255, 255, 255, 0.8)';
+                ctx.lineWidth = 0.8;
+                ctx.beginPath();
+                ctx.moveTo(0, -r.r); ctx.lineTo(0, -620);
+                ctx.stroke();
+
+                // Climbing Pod 1 (Ascending to Orbit)
+                const climber1Y = -r.r - ((now * 0.04) % 520);
                 ctx.fillStyle = '#facc15';
-                ctx.fillRect(-3, climberY, 6, 6);
+                ctx.shadowColor = '#facc15';
+                ctx.shadowBlur = 6;
+                ctx.fillRect(-3.5, climber1Y, 7, 7);
+
+                // Climbing Pod 2 (Descending to Surface)
+                const climber2Y = -620 + ((now * 0.032 + 260) % 520);
+                ctx.fillStyle = '#38bdf8';
+                ctx.shadowColor = '#38bdf8';
+                ctx.shadowBlur = 6;
+                ctx.fillRect(-3.5, climber2Y, 7, 7);
+                ctx.shadowBlur = 0;
+
+                // Orbital Counterweight Station at y = -620
+                ctx.fillStyle = '#0f172a';
+                ctx.strokeStyle = '#38bdf8';
+                ctx.lineWidth = 1.5;
+                ctx.beginPath();
+                ctx.roundRect(-24, -632, 48, 20, 4);
+                ctx.fill();
+                ctx.stroke();
+
+                // Solar panels on orbital station
+                ctx.fillStyle = '#0284c7';
+                ctx.fillRect(-48, -628, 22, 12);
+                ctx.fillRect(26, -628, 22, 12);
+
+                // Navigation strobe
+                const strobe = Math.sin(now * 0.008) > 0;
+                ctx.fillStyle = strobe ? '#ef4444' : '#22c55e';
+                ctx.beginPath();
+                ctx.arc(0, -634, 2.5, 0, Math.PI * 2);
+                ctx.fill();
+
+                ctx.font = 'bold 7.5px ' + FONT_MONO;
+                ctx.textAlign = 'center';
+                ctx.fillStyle = '#7dd3fc';
+                ctx.fillText('ORBITAL DOCK SECTOR-07', 0, -638);
+                ctx.restore();
             }
 
             // Lighthouse beam for Mercantile League
@@ -7421,15 +7575,52 @@ const WorldForgeCG = {
                 const beamAngle = (now * 0.0018) % (Math.PI * 2);
                 ctx.save();
                 ctx.rotate(beamAngle);
-                const beamGrad = ctx.createLinearGradient(0, 0, 140, 0);
-                beamGrad.addColorStop(0, 'rgba(254, 240, 138, 0.4)');
+                const beamGrad = ctx.createLinearGradient(0, 0, 160, 0);
+                beamGrad.addColorStop(0, 'rgba(254, 240, 138, 0.45)');
                 beamGrad.addColorStop(1, 'transparent');
                 ctx.fillStyle = beamGrad;
                 ctx.beginPath();
                 ctx.moveTo(0, 0);
-                ctx.arc(0, 0, 140, -0.2, 0.2);
+                ctx.arc(0, 0, 160, -0.22, 0.22);
                 ctx.closePath();
                 ctx.fill();
+                ctx.restore();
+            }
+
+            // Quantum Monolith Leyline Resonance
+            if (r.id === 'quantum-monolith') {
+                ctx.save();
+                const leyRadius = r.r + 14 + Math.sin(now * 0.003) * 6;
+                ctx.strokeStyle = 'rgba(168, 85, 247, 0.65)';
+                ctx.lineWidth = 1.5;
+                ctx.setLineDash([6, 6]);
+                ctx.beginPath();
+                ctx.arc(0, 0, leyRadius, 0, Math.PI * 2);
+                ctx.stroke();
+
+                // Floating Leyline Crystal Sparks
+                for (let s = 0; s < 3; s++) {
+                    const sparkAngle = now * 0.002 + (s * Math.PI * 2) / 3;
+                    const sx = Math.cos(sparkAngle) * (r.r + 20);
+                    const sy = Math.sin(sparkAngle) * (r.r + 20);
+                    ctx.fillStyle = '#e879f9';
+                    ctx.beginPath();
+                    ctx.arc(sx, sy, 2, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+                ctx.restore();
+            }
+
+            // Abyssal Dome Sonar Ping Pulses
+            if (r.id === 'abyssal-rig') {
+                ctx.save();
+                const pingR = ((now * 0.025) % 40) + r.r;
+                const pingAlpha = Math.max(0, 1 - (pingR - r.r) / 40);
+                ctx.strokeStyle = `rgba(6, 182, 212, ${pingAlpha * 0.7})`;
+                ctx.lineWidth = 1.5;
+                ctx.beginPath();
+                ctx.arc(0, 0, pingR, 0, Math.PI * 2);
+                ctx.stroke();
                 ctx.restore();
             }
 
@@ -7463,24 +7654,123 @@ const WorldForgeCG = {
             ctx.restore();
         });
 
-        // 7. Interactive Map Lenses Selector (Top HUD)
-        ctx.save();
-        const lensBarW = 380;
-        const lensBarH = 26;
-        ctx.fillStyle = 'rgba(11, 19, 38, 0.88)';
-        ctx.strokeStyle = 'rgba(56, 189, 248, 0.35)';
-        ctx.lineWidth = 1.2;
-        ctx.beginPath();
-        ctx.roundRect(-lensBarW / 2, -320, lensBarW, lensBarH, 13);
-        ctx.fill();
-        ctx.stroke();
+        // 7. Dynamic World Lens Overlays (Active Mode Specific)
+        const currentLens = this.realmMapLens || 'geopolitics';
 
-        ctx.font = 'bold 8.5px ' + FONT_MONO;
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillStyle = '#38bdf8';
-        ctx.fillText('🌍 REALM ATLAS · PLANETARY GEOPOLITICAL THEATER · LIVE TELEMETRY', 0, -307);
-        ctx.restore();
+        if (currentLens === 'trade') {
+            // High-Value Maritime Shipping Lanes with Resource Badges
+            ctx.save();
+            const tradeRoutes = [
+                { from: { x: 0, y: 0 }, to: { x: 130, y: 210 }, label: '🪙 +150 Trade Credits / s', color: '#f59e0b' },
+                { from: { x: 0, y: 0 }, to: { x: -280, y: -30 }, label: '🌾 +100 Grain Shipments / s', color: '#10b981' },
+                { from: { x: 130, y: 210 }, to: { x: 260, y: 230 }, label: '⚡ +120 Geothermal Flux', color: '#06b6d4' },
+                { from: { x: 0, y: -210 }, to: { x: 0, y: 0 }, label: '🌲 +40 Timber Convoys', color: '#eab308' },
+            ];
+
+            tradeRoutes.forEach(tr => {
+                ctx.strokeStyle = tr.color;
+                ctx.lineWidth = 2.4;
+                ctx.setLineDash([8, 8]);
+                ctx.beginPath();
+                ctx.moveTo(tr.from.x, tr.from.y);
+                ctx.lineTo(tr.to.x, tr.to.y);
+                ctx.stroke();
+
+                // Midpoint route label pill
+                const mx = (tr.from.x + tr.to.x) / 2;
+                const my = (tr.from.y + tr.to.y) / 2;
+                ctx.font = 'bold 8.5px ' + FONT_MONO;
+                const tw = ctx.measureText(tr.label).width;
+                ctx.fillStyle = 'rgba(15, 23, 42, 0.9)';
+                ctx.strokeStyle = tr.color;
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                ctx.roundRect(mx - tw / 2 - 6, my - 9, tw + 12, 18, 4);
+                ctx.fill();
+                ctx.stroke();
+
+                ctx.fillStyle = '#ffffff';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(tr.label, mx, my);
+            });
+            ctx.restore();
+        } else if (currentLens === 'resources') {
+            // Strategic Regional Resource Reserves Overlays
+            ctx.save();
+            const reserves = [
+                { x: 0, y: -260, icon: '⛏️', name: 'TITANIUM & STAR-METAL', yield: '+140 Raw Metal / s', color: '#94a3b8' },
+                { x: -230, y: -80, icon: '🌾', name: 'SERPENTINE GRAIN DELTA', yield: '+200 Harvest Food / s', color: '#10b981' },
+                { x: 280, y: 20, icon: '⚡', name: 'MAGMA GEOTHERMAL TAP', yield: '+320 MW Power Output', color: '#ef4444' },
+                { x: 190, y: 160, icon: '💎', name: 'BARRIER CORAL PEARLS', yield: '+85 Rare Materials', color: '#06b6d4' },
+                { x: -160, y: 140, icon: '🛢️', name: 'SHALE HYDROCARBON BASIN', yield: '+90 Synthetic Fuel', color: '#f97316' },
+                { x: -160, y: -300, icon: '🔮', name: 'QUANTUM LEYLINE CORE', yield: '+80 Precursor Science', color: '#a855f7' },
+            ];
+
+            reserves.forEach(res => {
+                ctx.fillStyle = 'rgba(15, 23, 42, 0.92)';
+                ctx.strokeStyle = res.color;
+                ctx.lineWidth = 1.2;
+                ctx.beginPath();
+                ctx.roundRect(res.x - 70, res.y - 18, 140, 36, 6);
+                ctx.fill();
+                ctx.stroke();
+
+                ctx.font = 'bold 8.5px ' + FONT_SANS;
+                ctx.fillStyle = res.color;
+                ctx.textAlign = 'center';
+                ctx.fillText(`${res.icon} ${res.name}`, res.x, res.y - 4);
+                ctx.font = '7.5px ' + FONT_MONO;
+                ctx.fillStyle = '#cbd5e1';
+                ctx.fillText(res.yield, res.x, res.y + 10);
+            });
+            ctx.restore();
+        } else if (currentLens === 'threats') {
+            // Tactical Threat Radar & Danger Zones
+            ctx.save();
+            // Raider Incursion Zone
+            const raiderPulse = 0.35 + Math.sin(now * 0.005) * 0.15;
+            ctx.fillStyle = `rgba(239, 68, 68, ${raiderPulse * 0.4})`;
+            ctx.strokeStyle = '#ef4444';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.arc(-200, 190, 85, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.stroke();
+
+            ctx.font = 'bold 9px ' + FONT_MONO;
+            ctx.fillStyle = '#fca5a5';
+            ctx.textAlign = 'center';
+            ctx.fillText('⚠️ RAIDER INCURSION RADIUS', -200, 220);
+
+            // Hegemon Frontline Barricade
+            ctx.strokeStyle = '#f97316';
+            ctx.lineWidth = 3;
+            ctx.setLineDash([6, 6]);
+            ctx.beginPath();
+            ctx.moveTo(180, -120);
+            ctx.lineTo(240, -40);
+            ctx.lineTo(210, 80);
+            ctx.stroke();
+            ctx.setLineDash([]);
+
+            ctx.font = 'bold 9px ' + FONT_MONO;
+            ctx.fillStyle = '#fdba74';
+            ctx.fillText('⚔️ HEGEMON LEGION BORDER', 230, -70);
+
+            // Sanctuary Haven Defense Shield Aura
+            const shieldPulse = 0.5 + Math.sin(now * 0.004) * 0.2;
+            ctx.strokeStyle = `rgba(56, 189, 248, ${shieldPulse})`;
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.arc(0, 0, 75, 0, Math.PI * 2);
+            ctx.stroke();
+
+            ctx.fillStyle = '#38bdf8';
+            ctx.font = 'bold 8.5px ' + FONT_MONO;
+            ctx.fillText('🛡️ METROPOLIS CITADEL SHIELD ACTIVE', 0, 92);
+            ctx.restore();
+        }
 
         ctx.restore();
     },
@@ -8106,6 +8396,10 @@ const WorldForgeCG = {
     },
 
     drawBackground(w, h, now) {
+        if (this.worldLens === 'realm') {
+            this.drawCosmicStarfield(w, h, now);
+            return;
+        }
         const ctx = this.ctx;
         // Central subtle radar sweep line
         this.radarAngle = (now * 0.0006) % (Math.PI * 2);
