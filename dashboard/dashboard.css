@@ -663,6 +663,94 @@ button, input, select, a { -webkit-tap-highlight-color: transparent; }
     overflow: hidden;
     background: #020611;
 }
+.play-body {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    flex: 1;
+    overflow: hidden;
+}
+.play-stage {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+}
+.play-panel-heading {
+    position: absolute;
+    top: 48px;
+    left: 450px;
+    z-index: 46;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.play-panel-heading > div:first-child {
+    display: none !important;
+}
+.play-stage-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.view-mode-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    padding: 3px 6px;
+    background: rgba(7, 12, 22, 0.92);
+    -webkit-backdrop-filter: blur(12px);
+    backdrop-filter: blur(12px);
+    border: 1px solid rgba(56, 189, 248, 0.28);
+    border-radius: 20px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
+}
+.view-toggle-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 4px 9px;
+    font-size: 0.64rem;
+    font-weight: 700;
+    color: #94a3b8;
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 14px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    white-space: nowrap;
+}
+.view-toggle-btn svg {
+    width: 13px;
+    height: 13px;
+    fill: currentColor;
+    flex-shrink: 0;
+}
+.view-toggle-btn:hover {
+    color: #f8fafc;
+    background: rgba(255, 255, 255, 0.08);
+}
+.view-toggle-btn.active {
+    color: #ffffff;
+    background: linear-gradient(135deg, rgba(14, 165, 233, 0.4), rgba(2, 132, 199, 0.5));
+    border-color: #38bdf8;
+    box-shadow: 0 0 10px rgba(56, 189, 248, 0.4);
+}
+.play-network-wrap {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+}
+#play-cg-canvas {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    display: block;
+}
 .play-header {
     position: absolute;
     top: 0;
@@ -800,6 +888,7 @@ button, input, select, a { -webkit-tap-highlight-color: transparent; }
 }
 
 /* Battle Lens Fullscreen Rules — 3D Tactical Battlefield Simulator */
+.play-dialog.lens-battle .play-toolbar,
 .play-dialog.lens-battle .commander-powers-dock,
 .play-dialog.lens-battle #city-hardship-hud,
 .play-dialog.lens-battle .city-build-dock,
@@ -807,8 +896,13 @@ button, input, select, a { -webkit-tap-highlight-color: transparent; }
 .play-dialog.lens-battle .cg-view-legend,
 .play-dialog.lens-battle .cg-avatar-card,
 .play-dialog.lens-battle .cg-minimap-card,
+.play-dialog.lens-battle .cg-toolbar,
+.play-dialog.lens-battle .live-indicator,
 .play-dialog.lens-battle .cg-layer-toggles {
     display: none !important;
+}
+.play-dialog.lens-battle .play-panel-heading {
+    left: 16px;
 }
 .play-dialog:not(.lens-battle) .battle-3d-hud {
     display: none !important;
@@ -1012,9 +1106,9 @@ button, input, select, a { -webkit-tap-highlight-color: transparent; }
     justify-content: space-between;
     gap: 16px;
     max-width: 980px;
-    margin: 0 auto;
-    width: 100%;
-    padding: 8px 16px;
+    margin: 76px auto 0;
+    width: calc(100% - 32px);
+    padding: 7px 14px;
     background: linear-gradient(180deg, rgba(8, 14, 26, 0.95), rgba(4, 8, 16, 0.98));
     -webkit-backdrop-filter: blur(16px);
     backdrop-filter: blur(16px);
@@ -1139,11 +1233,12 @@ button, input, select, a { -webkit-tap-highlight-color: transparent; }
 .battle-bottom-dock {
     display: flex;
     align-items: center;
-    gap: 10px;
-    max-width: 1180px;
-    margin: 0 auto;
-    width: 100%;
-    padding: 8px 12px;
+    justify-content: space-between;
+    gap: 6px;
+    max-width: 1440px;
+    margin: 0 auto 10px;
+    width: calc(100% - 32px);
+    padding: 5px 10px;
     background: linear-gradient(180deg, rgba(8, 14, 26, 0.96), rgba(3, 7, 14, 0.99));
     -webkit-backdrop-filter: blur(16px);
     backdrop-filter: blur(16px);
@@ -1152,29 +1247,32 @@ button, input, select, a { -webkit-tap-highlight-color: transparent; }
     box-shadow: 0 16px 44px rgba(0, 0, 0, 0.8), 0 0 28px rgba(56, 189, 248, 0.15);
     pointer-events: auto;
     box-sizing: border-box;
+    flex-wrap: nowrap;
+    overflow-x: auto;
 }
 
 .battle-unit-card {
-    flex: 0 0 270px;
+    flex: 0 0 195px;
     display: flex;
     align-items: center;
-    gap: 10px;
-    padding: 4px 8px;
+    gap: 7px;
+    padding: 2px 5px;
     background: rgba(255, 255, 255, 0.03);
     border-right: 1px solid rgba(255, 255, 255, 0.08);
     border-radius: 6px 0 0 6px;
     overflow: hidden;
+    flex-shrink: 0;
 }
 .unit-card-avatar {
-    flex: 0 0 38px;
-    width: 38px;
-    height: 38px;
-    border-radius: 8px;
+    flex: 0 0 30px;
+    width: 30px;
+    height: 30px;
+    border-radius: 6px;
     border: 1px solid rgba(56, 189, 248, 0.4);
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 20px;
+    font-size: 16px;
     background: rgba(3, 7, 18, 0.6);
     box-shadow: 0 0 10px rgba(56, 189, 248, 0.2);
 }
@@ -1182,17 +1280,17 @@ button, input, select, a { -webkit-tap-highlight-color: transparent; }
     flex: 1;
     display: flex;
     flex-direction: column;
-    gap: 3px;
+    gap: 2px;
     min-width: 0;
 }
 .unit-card-title-row {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 6px;
+    gap: 4px;
 }
 #battle-unit-name {
-    font-size: 0.72rem;
+    font-size: 0.66rem;
     font-weight: 700;
     color: #f8fafc;
     white-space: nowrap;
@@ -1200,13 +1298,13 @@ button, input, select, a { -webkit-tap-highlight-color: transparent; }
     text-overflow: ellipsis;
 }
 .unit-role-pill {
-    font-size: 0.52rem;
+    font-size: 0.48rem;
     font-weight: 800;
     font-family: var(--font-mono);
     color: #38bdf8;
     background: rgba(56, 189, 248, 0.15);
     border: 1px solid rgba(56, 189, 248, 0.3);
-    padding: 1px 5px;
+    padding: 1px 4px;
     border-radius: 3px;
     letter-spacing: 0.04em;
     flex-shrink: 0;
@@ -1214,11 +1312,11 @@ button, input, select, a { -webkit-tap-highlight-color: transparent; }
 .unit-vitals-row {
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: 5px;
 }
 .unit-vitals-row .vital-bar.hp {
     flex: 1;
-    height: 6px;
+    height: 5px;
     background: rgba(255, 255, 255, 0.1);
     border-radius: 3px;
     overflow: hidden;
@@ -1230,13 +1328,13 @@ button, input, select, a { -webkit-tap-highlight-color: transparent; }
     border-radius: 3px;
 }
 #battle-unit-hp-text {
-    font-size: 0.58rem;
+    font-size: 0.55rem;
     font-family: var(--font-mono);
     color: #a7f3d0;
     white-space: nowrap;
 }
 .unit-orders-row {
-    font-size: 0.58rem;
+    font-size: 0.52rem;
     color: #94a3b8;
     font-family: var(--font-mono);
     white-space: nowrap;
@@ -1248,17 +1346,18 @@ button, input, select, a { -webkit-tap-highlight-color: transparent; }
 .battle-formations-bar {
     display: flex;
     align-items: center;
-    gap: 4px;
-    padding: 0 8px;
+    gap: 3px;
+    padding: 0 5px;
     border-right: 1px solid rgba(255, 255, 255, 0.08);
+    flex-shrink: 0;
 }
 .battle-formations-bar .bar-title {
-    font-size: 0.55rem;
+    font-size: 0.50rem;
     font-family: var(--font-mono);
     font-weight: 800;
     color: #64748b;
     letter-spacing: 0.08em;
-    margin-right: 4px;
+    margin-right: 2px;
     writing-mode: vertical-rl;
     transform: rotate(180deg);
 }
@@ -1266,13 +1365,13 @@ button, input, select, a { -webkit-tap-highlight-color: transparent; }
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    padding: 6px 9px;
-    font-size: 0.65rem;
+    padding: 4px 6px;
+    font-size: 0.58rem;
     font-weight: 700;
     color: #cbd5e1;
     background: rgba(255, 255, 255, 0.04);
     border: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: 6px;
+    border-radius: 5px;
     cursor: pointer;
     transition: all 0.15s ease;
 }
@@ -1293,13 +1392,13 @@ button, input, select, a { -webkit-tap-highlight-color: transparent; }
 .battle-abilities-bar {
     display: flex;
     align-items: center;
-    gap: 6px;
-    padding: 0 8px;
-    flex: 1;
-    min-width: 0;
+    gap: 4px;
+    padding: 0 5px;
+    border-right: 1px solid rgba(255, 255, 255, 0.08);
+    flex-shrink: 0;
 }
 .battle-abilities-bar .bar-title {
-    font-size: 0.55rem;
+    font-size: 0.50rem;
     font-family: var(--font-mono);
     font-weight: 800;
     color: #64748b;
@@ -1311,53 +1410,54 @@ button, input, select, a { -webkit-tap-highlight-color: transparent; }
 .battle-ability-btn {
     display: inline-flex;
     align-items: center;
-    gap: 6px;
-    padding: 5px 8px;
+    gap: 4px;
+    padding: 3px 6px;
     background: rgba(255, 255, 255, 0.04);
     border: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: 6px;
+    border-radius: 5px;
     cursor: pointer;
     transition: all 0.15s ease;
     color: #f8fafc;
-    min-width: 0;
+    flex-shrink: 0;
+    white-space: nowrap;
 }
 .battle-ability-btn:hover {
     background: rgba(56, 189, 248, 0.14);
     border-color: rgba(56, 189, 248, 0.5);
-    transform: translateY(-2px);
+    transform: translateY(-1px);
     box-shadow: 0 4px 12px rgba(56, 189, 248, 0.25);
 }
 .battle-ability-btn:active {
     transform: translateY(0);
 }
 .battle-ability-btn .ability-icon {
-    font-size: 1.1rem;
+    font-size: 0.85rem;
 }
 .battle-ability-btn .ability-info {
     display: flex;
     flex-direction: column;
     align-items: flex-start;
-    line-height: 1.15;
+    line-height: 1.1;
 }
 .battle-ability-btn .ability-info strong {
-    font-size: 0.65rem;
+    font-size: 0.58rem;
     font-weight: 700;
     color: #f1f5f9;
     white-space: nowrap;
 }
 .battle-ability-btn .ability-info small {
-    font-size: 0.54rem;
+    font-size: 0.46rem;
     color: #94a3b8;
     white-space: nowrap;
 }
 .battle-ability-btn .ability-hotkey {
-    font-size: 0.54rem;
+    font-size: 0.48rem;
     font-family: var(--font-mono);
     font-weight: 800;
     color: #38bdf8;
     background: rgba(56, 189, 248, 0.15);
     border: 1px solid rgba(56, 189, 248, 0.35);
-    padding: 1px 4px;
+    padding: 1px 3px;
     border-radius: 3px;
     margin-left: 2px;
 }
@@ -1371,15 +1471,15 @@ button, input, select, a { -webkit-tap-highlight-color: transparent; }
 .battle-actions-bar {
     display: flex;
     align-items: center;
-    gap: 5px;
+    gap: 3px;
     flex-shrink: 0;
 }
 .battle-ctrl-btn {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    padding: 6px 10px;
-    font-size: 0.65rem;
+    padding: 4px 7px;
+    font-size: 0.58rem;
     font-weight: 700;
     color: #cbd5e1;
     background: rgba(255, 255, 255, 0.05);

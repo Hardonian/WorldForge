@@ -11797,13 +11797,13 @@ const WorldForgeBattle3D = {
         panZ: 0,
         targetPanX: 0,
         targetPanZ: 0,
-        yaw: 0.38,       // Azimuth angle
-        targetYaw: 0.38,
-        pitch: 0.56,     // ~32 deg elevation angle
-        targetPitch: 0.56,
-        dist: 260,       // Distance from ground focal center
-        targetDist: 260,
-        fov: 340,
+        yaw: 0.42,       // Azimuth angle
+        targetYaw: 0.42,
+        pitch: 0.58,     // ~33 deg elevation angle
+        targetPitch: 0.58,
+        dist: 340,       // Distance from ground focal center
+        targetDist: 340,
+        fov: 620,
         isOrbiting: false,
         isPanning: false,
         dragStartX: 0,
@@ -11954,32 +11954,38 @@ const WorldForgeBattle3D = {
         this.playTone(650, 'sine', 0.08, 0.12, 180);
     },
 
-    // --------------------------------------------------------------------------
-    // 3D Perspective Projection & Ground Raycasting Pipeline
-    // --------------------------------------------------------------------------
     project(x, y, z, w, h) {
         const cam = this.camera;
-        const dx = x - cam.panX;
-        const dy = y;
-        const dz = z - cam.panZ;
-
-        // Yaw rotation around Y
         const cosY = Math.cos(cam.yaw);
         const sinY = Math.sin(cam.yaw);
-        const x1 = dx * cosY - dz * sinY;
-        const z1 = dx * sinY + dz * cosY;
-
-        // Pitch rotation around X
         const cosP = Math.cos(cam.pitch);
         const sinP = Math.sin(cam.pitch);
-        const y2 = dy * cosP - (z1 + cam.dist) * sinP;
-        const z2 = dy * sinP + (z1 + cam.dist) * cosP;
+
+        // Camera world position looking at (cam.panX, 0, cam.panZ)
+        const camX = cam.panX - cam.dist * cosP * sinY;
+        const camY = cam.dist * sinP;
+        const camZ = cam.panZ - cam.dist * cosP * cosY;
+
+        // Relative point vector to camera
+        const px = x - camX;
+        const py = y - camY;
+        const pz = z - camZ;
+
+        // Yaw rotation around Y axis (-cam.yaw)
+        const x1 = px * cosY - pz * sinY;
+        const z1 = px * sinY + pz * cosY;
+        const y1 = py;
+
+        // Pitch rotation around X axis (+cam.pitch)
+        const x2 = x1;
+        const y2 = y1 * cosP + z1 * sinP;
+        const z2 = -y1 * sinP + z1 * cosP;
 
         // Near-plane clipping
-        if (z2 < 6) return null;
+        if (z2 < 8) return null;
 
         const scale = cam.fov / z2;
-        const sx = w / 2 + x1 * scale;
+        const sx = w / 2 + x2 * scale;
         const sy = h / 2 - y2 * scale;
 
         return { sx, sy, scale, z: z2 };
@@ -11996,24 +12002,25 @@ const WorldForgeBattle3D = {
         const sinY = Math.sin(cam.yaw);
 
         // Ray in camera space: (u, v, 1)
-        const y1 = v * cosP + 1.0 * sinP;
-        const z1 = -v * sinP + 1.0 * cosP;
+        // Inverse pitch rotation (-pitch around X)
         const x1 = u;
+        const y1 = v * cosP - 1.0 * sinP;
+        const z1 = v * sinP + 1.0 * cosP;
 
-        // Ray in world space
+        // Inverse yaw rotation (+yaw around Y)
         const rdx = x1 * cosY + z1 * sinY;
         const rdz = -x1 * sinY + z1 * cosY;
         const rdy = y1;
 
         // Camera world position
+        const camX = cam.panX - cam.dist * cosP * sinY;
         const camY = cam.dist * sinP;
         const camZ = cam.panZ - cam.dist * cosP * cosY;
-        const camX = cam.panX + cam.dist * cosP * sinY;
 
-        // Ray intersection with Y = 0
-        if (Math.abs(rdy) < 0.0001) return { wx: camX, wz: camZ };
+        // Ray intersection with ground plane Y = 0: camY + t * rdy = 0 => t = -camY / rdy
+        if (rdy >= -0.001) return { wx: cam.panX, wz: cam.panZ };
         const t = -camY / rdy;
-        if (t <= 0) return { wx: camX, wz: camZ };
+        if (t <= 0) return { wx: cam.panX, wz: cam.panZ };
 
         return {
             wx: camX + t * rdx,
@@ -12055,9 +12062,9 @@ const WorldForgeBattle3D = {
             role: 'HEAVY ASSAULT',
             icon: '🤖',
             team: 'friendly',
-            x: -75,
+            x: -120,
             y: 0,
-            z: -45,
+            z: -60,
             vx: 0,
             vy: 0,
             vz: 0,
@@ -12075,8 +12082,8 @@ const WorldForgeBattle3D = {
             angle: Math.PI * 0.25,
             turretAngle: Math.PI * 0.25,
             order: 'DEFEND',
-            targetX: -75,
-            targetZ: -45,
+            targetX: -120,
+            targetZ: -60,
             walkCycle: 0,
             overdriveTime: 0,
             stunnedTime: 0,
@@ -12089,9 +12096,9 @@ const WorldForgeBattle3D = {
             role: 'ION ARTILLERY',
             icon: '🛸',
             team: 'friendly',
-            x: -40,
+            x: -80,
             y: 0,
-            z: -75,
+            z: -120,
             vx: 0,
             vy: 0,
             vz: 0,
@@ -12102,15 +12109,15 @@ const WorldForgeBattle3D = {
             shield: 160,
             maxShield: 160,
             speed: 22,
-            range: 145,
+            range: 155,
             cooldown: 0,
             fireRate: 1.6,
             weaponType: 'ion_slug',
             angle: Math.PI * 0.25,
             turretAngle: Math.PI * 0.25,
             order: 'DEFEND',
-            targetX: -40,
-            targetZ: -75,
+            targetX: -80,
+            targetZ: -120,
             walkCycle: 0,
             overdriveTime: 0,
             stunnedTime: 0,
@@ -12120,8 +12127,8 @@ const WorldForgeBattle3D = {
 
         // 3. Vanguard Exosuit Infantry (Squad of 6)
         const infantryCoords = [
-            [-55, -25], [-45, -35], [-65, -15],
-            [-35, -45], [-25, -55], [-75, -5],
+            [-60, -25], [-80, -40], [-100, -20],
+            [-45, -60], [-30, -80], [-115, 10],
         ];
         infantryCoords.forEach((pt, idx) => {
             this.units.push({
@@ -12160,7 +12167,7 @@ const WorldForgeBattle3D = {
 
         // Dust Raider Horde (Hostile - Crimson/Orange)
         // 1. Raider Heavy War-Rigs (x2)
-        const rigCoords = [[65, 55], [45, 80]];
+        const rigCoords = [[110, 70], [80, 115]];
         rigCoords.forEach((pt, idx) => {
             this.units.push({
                 id: `raider-rig-${idx + 1}`,
@@ -12181,15 +12188,15 @@ const WorldForgeBattle3D = {
                 shield: 0,
                 maxShield: 0,
                 speed: 13,
-                range: 125,
+                range: 135,
                 cooldown: idx * 0.8,
                 fireRate: 2.3,
                 weaponType: 'mortar',
                 angle: -Math.PI * 0.75,
                 turretAngle: -Math.PI * 0.75,
                 order: 'ASSAULT',
-                targetX: -30,
-                targetZ: -30,
+                targetX: -40,
+                targetZ: -40,
                 walkCycle: 0,
                 overdriveTime: 0,
                 stunnedTime: 0,
@@ -12197,7 +12204,7 @@ const WorldForgeBattle3D = {
         });
 
         // 2. Scav-Buggies (x2)
-        const buggyCoords = [[90, 30], [30, 95]];
+        const buggyCoords = [[140, 35], [50, 140]];
         buggyCoords.forEach((pt, idx) => {
             this.units.push({
                 id: `raider-buggy-${idx + 1}`,
@@ -12218,15 +12225,15 @@ const WorldForgeBattle3D = {
                 shield: 0,
                 maxShield: 0,
                 speed: 28,
-                range: 100,
+                range: 105,
                 cooldown: idx * 0.4,
                 fireRate: 0.9,
                 weaponType: 'plasma',
                 angle: -Math.PI * 0.75,
                 turretAngle: -Math.PI * 0.75,
                 order: 'FLANK',
-                targetX: -40,
-                targetZ: -40,
+                targetX: -60,
+                targetZ: -60,
                 walkCycle: 0,
                 overdriveTime: 0,
                 stunnedTime: 0,
@@ -12235,8 +12242,8 @@ const WorldForgeBattle3D = {
 
         // 3. Raider Berzerkers (x8)
         const berzerkerCoords = [
-            [50, 40], [60, 30], [40, 50], [70, 20],
-            [30, 60], [55, 45], [45, 65], [65, 35],
+            [65, 30], [85, 50], [50, 70], [40, 90],
+            [75, 20], [95, 40], [60, 60], [45, 80],
         ];
         berzerkerCoords.forEach((pt, idx) => {
             this.units.push({
@@ -12265,8 +12272,8 @@ const WorldForgeBattle3D = {
                 angle: -Math.PI * 0.75,
                 turretAngle: -Math.PI * 0.75,
                 order: 'CHARGE',
-                targetX: -50,
-                targetZ: -50,
+                targetX: -70,
+                targetZ: -70,
                 walkCycle: Math.random() * Math.PI * 2,
                 overdriveTime: 0,
                 stunnedTime: 0,
@@ -13369,12 +13376,12 @@ const WorldForgeBattle3D = {
         ctx.lineWidth = 1;
 
         // Concentric circular radar lines on the ground
-        const radarRadii = [40, 80, 120, 160, 200, 240];
+        const radarRadii = [40, 80, 140, 200, 280, 360];
         radarRadii.forEach(r => {
-            ctx.strokeStyle = r === 120 ? 'rgba(56, 189, 248, 0.28)' : 'rgba(56, 189, 248, 0.1)';
+            ctx.strokeStyle = r === 140 ? 'rgba(56, 189, 248, 0.42)' : (r === 280 ? 'rgba(56, 189, 248, 0.22)' : 'rgba(56, 189, 248, 0.12)');
             ctx.beginPath();
             let first = true;
-            for (let a = 0; a <= Math.PI * 2 + 0.1; a += Math.PI / 16) {
+            for (let a = 0; a <= Math.PI * 2 + 0.1; a += Math.PI / 24) {
                 const gx = Math.cos(a) * r;
                 const gz = Math.sin(a) * r;
                 const pt = this.project(gx, 0, gz, w, h);
@@ -13387,9 +13394,9 @@ const WorldForgeBattle3D = {
         });
 
         // Rectilinear ground perspective grid lines
-        const step = 20;
-        const bound = 160;
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
+        const step = 25;
+        const bound = 250;
+        ctx.strokeStyle = 'rgba(56, 189, 248, 0.07)';
 
         for (let gx = -bound; gx <= bound; gx += step) {
             ctx.beginPath();
@@ -13414,6 +13421,16 @@ const WorldForgeBattle3D = {
                     else { ctx.lineTo(pt.sx, pt.sy); }
                 }
             }
+            ctx.stroke();
+        }
+
+        // Center origin marker
+        const centerPt = this.project(0, 0, 0, w, h);
+        if (centerPt) {
+            ctx.strokeStyle = 'rgba(56, 189, 248, 0.55)';
+            ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            ctx.arc(centerPt.sx, centerPt.sy, 8 * centerPt.scale, 0, Math.PI * 2);
             ctx.stroke();
         }
 
@@ -13663,11 +13680,11 @@ const WorldForgeBattle3D = {
             ctx.fillRect(sx - barW / 2, barY - 2.5 * sc, barW * shPct, 1.8 * sc);
         }
 
-        // Unit Role Tag
-        if (isSelected || isTargeted || sc > 1.2) {
-            ctx.font = `bold ${Math.max(8, Math.round(9 * sc))}px ${FONT_SANS}`;
+        // Unit Name & Role Tag (only when selected, targeted, or focused)
+        if (isSelected || isTargeted || (this.focusedUnit && this.focusedUnit.id === u.id)) {
+            ctx.font = `bold ${Math.max(9, Math.round(10 * sc))}px ${FONT_SANS}`;
             ctx.textAlign = 'center';
-            ctx.fillStyle = '#f8fafc';
+            ctx.fillStyle = isFriendly ? '#67e8f9' : '#fca5a5';
             ctx.fillText(u.name, sx, barY - 4);
         }
 
