@@ -4042,9 +4042,44 @@ const WorldForgeCG = {
             if (tag === 'input' || tag === 'textarea' || tag === 'select') return;
 
             const key = e.key.toLowerCase();
-            if (key === 'escape' && this.perspectiveMode !== 'strategic') {
+            if (key === 'escape') {
+                if (this.radialMenu && this.radialMenu.active) {
+                    e.preventDefault();
+                    this.closeRadialMenu();
+                    return;
+                }
+                if (this.placementBuilding) {
+                    e.preventDefault();
+                    this.setPlacementBuilding(null);
+                    return;
+                }
+                if (this.perspectiveMode !== 'strategic') {
+                    e.preventDefault();
+                    this.setViewMode('cg');
+                    return;
+                }
+            }
+            if (key === 'q') {
                 e.preventDefault();
-                this.setViewMode('cg');
+                if (this.radialMenu && this.radialMenu.active) {
+                    this.closeRadialMenu();
+                } else {
+                    const c = this.canvas;
+                    const w = c ? c.clientWidth : window.innerWidth;
+                    const h = c ? c.clientHeight : window.innerHeight;
+                    const qx = (this.lastPointerX != null && this.lastPointerX > 0) ? this.lastPointerX : w / 2;
+                    const qy = (this.lastPointerY != null && this.lastPointerY > 0) ? this.lastPointerY : h / 2;
+                    if (this.worldLens === 'realm') {
+                        const realmHit = this.getRealmEntityAt(qx, qy);
+                        if (realmHit) {
+                            this.openRadialMenu(qx, qy, 'entity', realmHit);
+                        } else {
+                            this.openRadialMenu(qx, qy, 'atlas');
+                        }
+                    } else if (this.worldLens === 'city') {
+                        this.openRadialMenu(qx, qy, 'city');
+                    }
+                }
                 return;
             }
             if (this.perspectiveMode !== 'strategic' && ['w', 'a', 's', 'd', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright'].includes(key)) {
@@ -4083,10 +4118,6 @@ const WorldForgeCG = {
             } else if (key === 'm') {
                 e.preventDefault();
                 this.setViewMode(this.viewMode === 'cg' ? 'schematic' : 'cg');
-            } else if (key === 'escape' && this.placementBuilding) {
-                e.preventDefault();
-                this.setPlacementBuilding(null);
-                return;
             } else if (['1', '2', '3', '4', '5', '6', '7', '8', '9', '0', '-', '=', 'm'].includes(key)) {
                 if (this.worldLens === 'city') {
                     e.preventDefault();
@@ -4192,8 +4223,14 @@ const WorldForgeCG = {
 
         // Pointer / mouse drag
         c.addEventListener('pointerdown', e => {
+            if (this.radialMenu && this.radialMenu.active) {
+                if (e.button === 2) {
+                    e.preventDefault();
+                    this.closeRadialMenu();
+                }
+                return;
+            }
             if (e.button !== 0) return;
-            if (this.radialMenu && this.radialMenu.active) return;
             c.setPointerCapture(e.pointerId);
             this.camera.isDragging = true;
             this.camera.dragStartX = e.clientX;
@@ -4201,6 +4238,30 @@ const WorldForgeCG = {
             this.camera.camStartX = this.camera.targetX;
             this.camera.camStartY = this.camera.targetY;
             this.camera.headingStart = this.walker.heading;
+        });
+
+        // Contextmenu / Right-Click: Blooms Radial Command Wheel
+        c.addEventListener('contextmenu', e => {
+            e.preventDefault();
+            const rect = c.getBoundingClientRect();
+            const px = e.clientX - rect.left;
+            const py = e.clientY - rect.top;
+
+            if (this.radialMenu && this.radialMenu.active) {
+                this.closeRadialMenu();
+                return;
+            }
+
+            if (this.worldLens === 'realm') {
+                const realmHit = this.getRealmEntityAt(px, py);
+                if (realmHit) {
+                    this.openRadialMenu(px, py, 'entity', realmHit);
+                } else {
+                    this.openRadialMenu(px, py, 'atlas');
+                }
+            } else if (this.worldLens === 'city') {
+                this.openRadialMenu(px, py, 'city');
+            }
         });
 
         window.addEventListener('pointermove', e => {
@@ -4415,39 +4476,22 @@ const WorldForgeCG = {
                 const w = c.clientWidth;
                 const h = c.clientHeight;
 
-                // 1. Check top lens bar clicks
-                const tabW = 118;
-                const tabH = 30;
-                const gap = 8;
-                const totalW = 4 * tabW + 3 * gap;
-                const startX = (w - totalW) / 2;
-                const topY = 22;
-
-                if (py >= topY && py <= topY + tabH && px >= startX && px <= startX + totalW) {
-                    const idx = Math.floor((px - startX) / (tabW + gap));
-                    const lenses = ['geopolitics', 'trade', 'resources', 'threats'];
-                    if (idx >= 0 && idx < lenses.length) {
-                        this.realmMapLens = lenses[idx];
-                        this.audio.playBlip(780, 0.06);
-                        showToast('Map Lens Switched', `Tactical overlay: ${this.realmMapLens.toUpperCase()}`);
-                        return;
-                    }
+                // 1. Check top command HUD pill click -> opens Atlas Radial Command Wheel
+                const pillY = 18;
+                const pillH = 28;
+                if (py >= pillY - 4 && py <= pillY + pillH + 8 && Math.abs(px - w / 2) <= 260) {
+                    this.openRadialMenu(w / 2, 130, 'atlas');
+                    return;
                 }
 
-                // 2. Check Realm & Wonder clicks
+                // 2. Check Realm & Wonder clicks -> opens contextual Entity Radial Wheel
                 const realmHit = this.getRealmEntityAt(px, py);
                 if (realmHit) {
-                    if (realmHit.type === 'wonder') {
-                        this.audio.playUnlock();
-                        this.triggerFireworks(px, py, 4);
-                        spawnFloatingText(`✨ WONDER: ${realmHit.name.toUpperCase()}`, px, py, 'fx-surge');
-                        showToast(`Ancient Wonder: ${realmHit.name}`, `${realmHit.title} · ${realmHit.power}`, 'success');
-                    } else {
-                        openWarRoomModal();
-                        this.audio.playWarHorn();
-                        spawnFloatingText(`⚔️ ${realmHit.name.toUpperCase()}`, px, py, 'fx-surge');
-                    }
+                    this.openRadialMenu(px, py, 'entity', realmHit);
+                    return;
                 }
+
+                this.audio?.playBlip?.(640, 0.03);
                 return;
             }
 
