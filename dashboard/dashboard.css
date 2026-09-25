@@ -4163,7 +4163,693 @@ button, input, select, a { -webkit-tap-highlight-color: transparent; }
 .aar-footer-actions {
     display: flex;
     justify-content: flex-end;
+/* ==========================================================================
+   AAA Master Roadmap Suite: Radar, Pause, Codex, Skirmish, Studio, Profiler
+   ========================================================================== */
+
+/* 1. Header Profiler Live Button */
+.btn-header-profiler {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.72rem;
+    font-weight: 700;
+    padding: 6px 12px;
+    border: 1px solid rgba(56, 189, 248, 0.35);
+    background: rgba(14, 23, 42, 0.85);
+    color: #38bdf8;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+.btn-header-profiler:hover {
+    background: rgba(56, 189, 248, 0.2);
+    border-color: #38bdf8;
+    box-shadow: 0 0 12px rgba(56, 189, 248, 0.3);
+}
+.profiler-dot-live {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: #10b981;
+    box-shadow: 0 0 8px #10b981;
+    animation: profiler-pulse 1.4s ease-in-out infinite alternate;
+}
+@keyframes profiler-pulse {
+    0% { opacity: 0.4; transform: scale(0.8); }
+    100% { opacity: 1; transform: scale(1.2); }
+}
+
+/* 2. Tactical Radar Mini-Map in Battle Grid */
+.battle-radar-wrap {
+    position: absolute;
+    top: 60px;
+    right: 18px;
+    width: 148px;
+    background: rgba(11, 19, 34, 0.92);
+    border: 1px solid rgba(56, 189, 248, 0.4);
+    border-radius: 8px;
+    padding: 8px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6), 0 0 16px rgba(56, 189, 248, 0.15);
+    backdrop-filter: blur(8px);
+    z-index: 40;
+    cursor: crosshair;
+}
+.battle-radar-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.62rem;
+    font-weight: 800;
+    color: #38bdf8;
+    letter-spacing: 0.08em;
+    margin-bottom: 4px;
+}
+.radar-scan-line {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #38bdf8;
+    animation: radar-ping 1.2s infinite;
+}
+@keyframes radar-ping {
+    0% { transform: scale(0.8); opacity: 1; }
+    100% { transform: scale(2.2); opacity: 0; }
+}
+#battle-radar-canvas {
+    display: block;
+    width: 100%;
+    height: 85px;
+    background: #060b13;
+    border-radius: 4px;
+    border: 1px solid rgba(56, 189, 248, 0.2);
+}
+.battle-radar-legend {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.58rem;
+    color: #94a3b8;
+    margin-top: 4px;
+}
+.battle-radar-legend .dot {
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    margin-right: 2px;
+}
+.battle-radar-legend .dot.friendly { background: #38bdf8; }
+.battle-radar-legend .dot.hostile { background: #f43f5e; }
+.battle-radar-legend .dot.cover { background: #94a3b8; border-radius: 1px; }
+
+/* 3. Holographic Tactical Pause Banner */
+.battle-pause-overlay {
+    position: absolute;
+    top: 75px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 45;
+    pointer-events: none;
+    animation: pause-float 2.5s ease-in-out infinite alternate;
+}
+@keyframes pause-float {
+    0% { transform: translate(-50%, 0); }
+    100% { transform: translate(-50%, -4px); }
+}
+.pause-banner-card {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: rgba(15, 23, 42, 0.94);
+    border: 1.5px solid #fbbf24;
+    box-shadow: 0 0 25px rgba(251, 191, 36, 0.35), inset 0 0 15px rgba(251, 191, 36, 0.1);
+    border-radius: 30px;
+    padding: 8px 24px;
+    backdrop-filter: blur(10px);
+}
+.pause-icon { font-size: 1.3rem; }
+.pause-text strong {
+    display: block;
+    font-size: 0.88rem;
+    color: #fbbf24;
+    letter-spacing: 0.1em;
+}
+.pause-text small {
+    display: block;
+    font-size: 0.68rem;
+    color: #e2e8f0;
+}
+
+/* 4. Live Engine Profiler Dock (Pillar X, #100) */
+.engine-profiler-dock {
+    position: fixed;
+    bottom: 24px;
+    left: 24px;
+    width: 320px;
+    background: rgba(10, 15, 26, 0.95);
+    border: 1px solid rgba(56, 189, 248, 0.4);
+    border-radius: 8px;
+    padding: 12px;
+    box-shadow: 0 12px 36px rgba(0, 0, 0, 0.75), 0 0 20px rgba(56, 189, 248, 0.15);
+    backdrop-filter: blur(12px);
+    z-index: 9999;
+    font-family: var(--font-mono);
+}
+.profiler-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid rgba(56, 189, 248, 0.2);
+    padding-bottom: 8px;
+    margin-bottom: 8px;
+}
+.profiler-title {
+    font-size: 0.65rem;
+    font-weight: 800;
+    color: #38bdf8;
+    letter-spacing: 0.08em;
+}
+.profiler-fps {
+    font-size: 0.82rem;
+    font-weight: 800;
+    color: #10b981;
+}
+.profiler-close-btn {
+    background: none;
+    border: none;
+    color: #94a3b8;
+    font-size: 1.1rem;
+    cursor: pointer;
+    line-height: 1;
+}
+.profiler-close-btn:hover { color: #f43f5e; }
+.profiler-metrics-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+    font-size: 0.64rem;
+}
+.prof-metric {
+    display: flex;
+    flex-direction: column;
+    background: rgba(15, 23, 42, 0.6);
+    padding: 4px 6px;
+    border-radius: 4px;
+    border-left: 2px solid #38bdf8;
+}
+.prof-metric span { color: #64748b; font-size: 0.58rem; }
+.prof-metric strong { color: #e2e8f0; font-size: 0.72rem; }
+.prof-metric strong.highlight { color: #10b981; }
+
+/* 5. World Lore Codex & Chronicle Dialog */
+.chronicle-shell {
+    max-width: 900px;
+    width: 92vw;
+}
+.chronicle-tabs {
+    display: flex;
     gap: 8px;
+    margin-bottom: 16px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    padding-bottom: 8px;
+}
+.chronicle-tab {
+    background: transparent;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    color: #94a3b8;
+    padding: 8px 16px;
+    border-radius: 6px;
+    font-weight: 700;
+    font-size: 0.78rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+.chronicle-tab:hover {
+    color: #e2e8f0;
+    border-color: rgba(56, 189, 248, 0.5);
+}
+.chronicle-tab.active {
+    background: rgba(56, 189, 248, 0.15);
+    color: #38bdf8;
+    border-color: #38bdf8;
+}
+.chronicle-feed {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    max-height: 480px;
+    overflow-y: auto;
+    padding-right: 6px;
+}
+.chronicle-entry-card {
+    background: rgba(15, 23, 42, 0.75);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-left: 3px solid #38bdf8;
+    border-radius: 6px;
+    padding: 10px 14px;
+}
+.chronicle-entry-card.war { border-left-color: #f43f5e; }
+.chronicle-entry-card.crisis { border-left-color: #f59e0b; }
+.chronicle-entry-card.relic { border-left-color: #a855f7; }
+.chronicle-entry-card.dynasty { border-left-color: #10b981; }
+.entry-head {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.68rem;
+    margin-bottom: 4px;
+}
+.entry-era { color: #38bdf8; font-weight: 700; font-family: var(--font-mono); }
+.entry-time { color: #64748b; font-size: 0.62rem; }
+.entry-title { font-size: 0.85rem; font-weight: 700; color: #f1f5f9; margin-bottom: 3px; }
+.entry-desc { font-size: 0.74rem; color: #94a3b8; line-height: 1.4; }
+
+/* Precursor Relic Digs */
+.relic-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 14px;
+}
+.relic-card {
+    background: rgba(15, 23, 42, 0.8);
+    border: 1px solid rgba(168, 85, 247, 0.3);
+    border-radius: 8px;
+    padding: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+}
+.relic-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+.relic-icon { font-size: 1.6rem; }
+.relic-header strong { display: block; font-size: 0.86rem; color: #f3e8ff; }
+.relic-header small { color: #a855f7; font-size: 0.66rem; }
+.relic-status {
+    margin-left: auto;
+    font-size: 0.62rem;
+    padding: 2px 8px;
+    border-radius: 4px;
+    background: rgba(255, 255, 255, 0.08);
+    color: #cbd5e1;
+    font-family: var(--font-mono);
+}
+.relic-card p { font-size: 0.72rem; color: #94a3b8; line-height: 1.4; margin: 0; }
+.relic-progress-wrap {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-size: 0.62rem;
+    color: #cbd5e1;
+}
+.relic-progress-bar {
+    width: 100%;
+    height: 6px;
+    background: rgba(0, 0, 0, 0.5);
+    border-radius: 3px;
+    overflow: hidden;
+}
+.relic-progress-bar i {
+    display: block;
+    height: 100%;
+    background: linear-gradient(90deg, #a855f7, #c084fc);
+    transition: width 0.3s ease;
+}
+.relic-rewards {
+    background: rgba(168, 85, 247, 0.12);
+    border: 1px dashed rgba(168, 85, 247, 0.4);
+    border-radius: 4px;
+    padding: 6px 8px;
+    font-size: 0.68rem;
+    color: #e9d5ff;
+}
+.relic-dig-btn { width: 100%; font-size: 0.75rem; margin-top: auto; }
+
+/* Sovereign Council Ministers */
+.council-roster-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 14px;
+}
+.minister-card {
+    background: rgba(15, 23, 42, 0.8);
+    border: 1px solid rgba(56, 189, 248, 0.25);
+    border-radius: 8px;
+    padding: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+.minister-header { display: flex; align-items: center; gap: 10px; }
+.minister-avatar { font-size: 1.5rem; }
+.minister-header strong { display: block; font-size: 0.88rem; color: #f8fafc; }
+.minister-header small { color: #38bdf8; font-size: 0.66rem; }
+.minister-loyalty { margin-left: auto; font-size: 0.62rem; color: #10b981; font-weight: 700; }
+.minister-card p { font-size: 0.72rem; color: #94a3b8; line-height: 1.4; margin: 0; }
+.minister-doctrine-select { display: flex; flex-direction: column; gap: 4px; }
+.minister-doctrine-select label { font-size: 0.66rem; color: #cbd5e1; font-weight: 600; }
+.minister-select {
+    background: #090e17;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    color: #e2e8f0;
+    padding: 6px 8px;
+    border-radius: 4px;
+    font-size: 0.72rem;
+}
+.btn-minister-enact { width: 100%; font-size: 0.74rem; margin-top: auto; }
+
+/* 6. Daily Seeded Skirmish & Esports Hub */
+.skirmish-hub-shell { max-width: 880px; width: 92vw; }
+.daily-challenge-card {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 20px;
+    background: linear-gradient(135deg, rgba(14, 23, 42, 0.95), rgba(30, 41, 59, 0.85));
+    border: 1px solid rgba(56, 189, 248, 0.4);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5), inset 0 0 20px rgba(56, 189, 248, 0.08);
+    border-radius: 10px;
+    padding: 18px;
+    margin-bottom: 20px;
+    align-items: center;
+}
+.challenge-kicker { font-size: 0.65rem; font-weight: 800; color: #fbbf24; letter-spacing: 0.08em; }
+.daily-challenge-card h3 { font-size: 1.15rem; color: #f8fafc; margin: 4px 0 6px 0; }
+.daily-challenge-card p { font-size: 0.76rem; color: #cbd5e1; line-height: 1.45; margin: 0 0 10px 0; }
+.challenge-meta-row { display: flex; gap: 8px; flex-wrap: wrap; }
+.challenge-tag {
+    font-size: 0.64rem;
+    font-family: var(--font-mono);
+    padding: 3px 8px;
+    border-radius: 4px;
+    background: rgba(255, 255, 255, 0.08);
+    color: #cbd5e1;
+}
+.challenge-tag.mutator { background: rgba(245, 158, 11, 0.15); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.3); }
+.challenge-right { display: flex; flex-direction: column; gap: 10px; align-items: flex-end; }
+.challenge-reward-badge {
+    text-align: right;
+    background: rgba(16, 185, 129, 0.12);
+    border: 1px solid rgba(16, 185, 129, 0.3);
+    border-radius: 6px;
+    padding: 6px 12px;
+}
+.challenge-reward-badge span { display: block; font-size: 0.58rem; color: #6ee7b7; letter-spacing: 0.06em; }
+.challenge-reward-badge strong { font-size: 0.88rem; color: #10b981; }
+.btn-launch-challenge { font-size: 0.85rem; padding: 10px 18px; font-weight: 800; }
+
+.ladder-header-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+}
+.ladder-header-row h4 { font-size: 0.88rem; color: #f1f5f9; margin: 0; }
+.proof-tag-badge {
+    font-size: 0.62rem;
+    font-family: var(--font-mono);
+    color: #10b981;
+    background: rgba(16, 185, 129, 0.12);
+    border: 1px solid rgba(16, 185, 129, 0.3);
+    border-radius: 4px;
+    padding: 2px 8px;
+}
+.ladder-table-wrap {
+    overflow-x: auto;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 8px;
+}
+.ladder-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.74rem;
+}
+.ladder-table th {
+    background: #0f172a;
+    padding: 8px 12px;
+    text-align: left;
+    color: #94a3b8;
+    font-weight: 700;
+    font-size: 0.65rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+.ladder-table td {
+    padding: 10px 12px;
+    border-top: 1px solid rgba(255, 255, 255, 0.05);
+    color: #e2e8f0;
+}
+.ladder-row.highlight-player {
+    background: rgba(56, 189, 248, 0.1);
+    font-weight: 700;
+}
+.tier-pill {
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 0.64rem;
+    font-weight: 800;
+}
+.tier-pill.grandmaster { background: rgba(236, 72, 153, 0.2); color: #f472b6; border: 1px solid #ec4899; }
+.tier-pill.diamond { background: rgba(56, 189, 248, 0.2); color: #38bdf8; border: 1px solid #38bdf8; }
+.tier-pill.platinum { background: rgba(45, 212, 191, 0.2); color: #2dd4bf; border: 1px solid #2dd4bf; }
+.status-online { color: #10b981; font-weight: 700; }
+
+/* 7. Scenario & Unit Chassis Studio */
+.scenario-studio-shell { max-width: 960px; width: 94vw; }
+.studio-layout {
+    display: grid;
+    grid-template-columns: 1fr 340px;
+    gap: 18px;
+}
+.studio-controls-column {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+.studio-card {
+    background: rgba(15, 23, 42, 0.75);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 8px;
+    padding: 12px;
+}
+.studio-card-title {
+    display: block;
+    font-size: 0.72rem;
+    font-weight: 800;
+    color: #38bdf8;
+    letter-spacing: 0.06em;
+    margin-bottom: 8px;
+}
+.chassis-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+}
+.chassis-btn {
+    background: rgba(30, 41, 59, 0.6);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 6px;
+    padding: 10px 8px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+}
+.chassis-btn:hover { border-color: rgba(56, 189, 248, 0.4); }
+.chassis-btn.active {
+    background: rgba(56, 189, 248, 0.18);
+    border-color: #38bdf8;
+    box-shadow: 0 0 12px rgba(56, 189, 248, 0.2);
+}
+.chassis-icon { font-size: 1.6rem; }
+.chassis-btn strong { font-size: 0.76rem; color: #f1f5f9; }
+.chassis-btn small { font-size: 0.62rem; color: #94a3b8; }
+
+.weapon-grid, .electronics-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+}
+.weapon-btn, .electronic-btn {
+    background: rgba(30, 41, 59, 0.6);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 6px;
+    padding: 8px 10px;
+    text-align: left;
+    font-size: 0.70rem;
+    color: #cbd5e1;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+.weapon-btn:hover, .electronic-btn:hover { border-color: rgba(56, 189, 248, 0.35); }
+.weapon-btn.active, .electronic-btn.active {
+    background: rgba(56, 189, 248, 0.15);
+    border-color: #38bdf8;
+    color: #38bdf8;
+    font-weight: 700;
+}
+
+.blueprint-card {
+    background: rgba(10, 16, 26, 0.95);
+    border: 1px solid rgba(56, 189, 248, 0.35);
+    border-radius: 8px;
+    padding: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+.blueprint-canvas-wrap {
+    position: relative;
+    border: 1px solid rgba(56, 189, 248, 0.25);
+    border-radius: 6px;
+    background: #040812;
+    overflow: hidden;
+}
+#blueprint-canvas { display: block; width: 100%; height: 160px; }
+.blueprint-badge {
+    position: absolute;
+    top: 6px;
+    left: 8px;
+    font-size: 0.55rem;
+    font-weight: 800;
+    color: #38bdf8;
+    background: rgba(14, 23, 42, 0.85);
+    padding: 2px 6px;
+    border-radius: 3px;
+    border: 1px solid rgba(56, 189, 248, 0.3);
+}
+.blueprint-stats {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    font-size: 0.70rem;
+}
+.bp-stat {
+    display: flex;
+    justify-content: space-between;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    padding-bottom: 3px;
+}
+.bp-stat span { color: #64748b; }
+.bp-stat strong { color: #f1f5f9; font-family: var(--font-mono); }
+.blueprint-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 4px;
+}
+.blueprint-actions button { width: 100%; font-size: 0.78rem; font-weight: 700; }
+
+/* 8. Accessibility Suite & Colorblind Modes */
+.accessibility-shell { max-width: 780px; width: 90vw; }
+.access-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin-bottom: 20px;
+}
+.access-card {
+    background: rgba(15, 23, 42, 0.75);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 8px;
+    padding: 14px;
+}
+.access-card-title {
+    display: block;
+    font-size: 0.75rem;
+    font-weight: 800;
+    color: #38bdf8;
+    margin-bottom: 10px;
+}
+.vision-mode-btns, .ui-scale-btns {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+.vision-btn, .scale-btn {
+    background: rgba(30, 41, 59, 0.6);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: #cbd5e1;
+    padding: 7px 10px;
+    border-radius: 5px;
+    text-align: left;
+    font-size: 0.72rem;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+.vision-btn:hover, .scale-btn:hover { border-color: rgba(56, 189, 248, 0.4); }
+.vision-btn.active, .scale-btn.active {
+    background: rgba(56, 189, 248, 0.18);
+    border-color: #38bdf8;
+    color: #38bdf8;
+    font-weight: 700;
+}
+.access-toggles {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 14px;
+    padding-top: 10px;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+.access-toggle-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.70rem;
+    color: #e2e8f0;
+    cursor: pointer;
+}
+
+.keybinds-section h4 { font-size: 0.82rem; color: #f1f5f9; margin: 0 0 10px 0; }
+.keybinds-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+}
+.keybind-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: rgba(15, 23, 42, 0.5);
+    padding: 5px 8px;
+    border-radius: 4px;
+    font-size: 0.68rem;
+    color: #94a3b8;
+}
+.keybind-item kbd {
+    background: #1e293b;
+    border: 1px solid #475569;
+    border-radius: 3px;
+    padding: 1px 6px;
+    font-family: var(--font-mono);
+    color: #38bdf8;
+    font-weight: 800;
+    font-size: 0.64rem;
+}
+
+/* Colorblind Simulation Filters applied to #app */
+body.cb-protanopia #app {
+    filter: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg"><filter id="protanopia"><feColorMatrix type="matrix" values="0.567, 0.433, 0, 0, 0, 0.558, 0.442, 0, 0, 0, 0, 0.242, 0.758, 0, 0, 0, 0, 0, 1, 0"/></filter></svg>#protanopia');
+}
+body.cb-deuteranopia #app {
+    filter: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg"><filter id="deuteranopia"><feColorMatrix type="matrix" values="0.625, 0.375, 0, 0, 0, 0.7, 0.3, 0, 0, 0, 0, 0.3, 0.7, 0, 0, 0, 0, 0, 1, 0"/></filter></svg>#deuteranopia');
+}
+body.cb-tritanopia #app {
+    filter: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg"><filter id="tritanopia"><feColorMatrix type="matrix" values="0.95, 0.05, 0, 0, 0, 0, 0.433, 0.567, 0, 0, 0, 0.475, 0.525, 0, 0, 0, 0, 0, 1, 0"/></filter></svg>#tritanopia');
+}
+body.cb-high-contrast #app {
+    filter: contrast(135%) brightness(105%);
+}
+body.ui-scale-115 {
+    font-size: 115%;
+}
+body.ui-scale-130 {
+    font-size: 130%;
 }
 
 @media (prefers-reduced-motion: reduce) {

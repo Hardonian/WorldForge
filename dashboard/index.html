@@ -98,6 +98,34 @@
                             <span class="nav-copy"><strong>Benchmarks</strong><small>Engine throughput</small></span>
                             <span class="nav-arrow" aria-hidden="true">→</span>
                         </button>
+                        <button class="nav-item nav-chronicle" id="nav-chronicle" type="button">
+                            <span class="nav-icon" aria-hidden="true">
+                                <svg viewBox="0 0 24 24"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1-2.5-2.5Z"/><path d="M6 6h10M6 10h10M6 14h6"/></svg>
+                            </span>
+                            <span class="nav-copy"><strong>World Codex &amp; Lore</strong><small>Chronicle &amp; Relics</small></span>
+                            <span class="nav-arrow" aria-hidden="true">→</span>
+                        </button>
+                        <button class="nav-item nav-skirmish" id="nav-skirmish" type="button">
+                            <span class="nav-icon" aria-hidden="true">
+                                <svg viewBox="0 0 24 24"><path d="m14.5 17.5 5 5M2 2l5 5M12 5V2M5 12H2M19 12h3M12 19v3M7 7l10 10M17 7 7 17"/></svg>
+                            </span>
+                            <span class="nav-copy"><strong>Daily Skirmish &amp; Ladder</strong><small>Seeded Challenges</small></span>
+                            <span class="nav-arrow" aria-hidden="true">→</span>
+                        </button>
+                        <button class="nav-item nav-scenario" id="nav-scenario" type="button">
+                            <span class="nav-icon" aria-hidden="true">
+                                <svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18M15 9h6M15 15h6M3 9h6M3 15h6"/></svg>
+                            </span>
+                            <span class="nav-copy"><strong>Scenario &amp; Unit Studio</strong><small>3D Chassis Builder</small></span>
+                            <span class="nav-arrow" aria-hidden="true">→</span>
+                        </button>
+                        <button class="nav-item nav-accessibility" id="nav-accessibility" type="button">
+                            <span class="nav-icon" aria-hidden="true">
+                                <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z"/></svg>
+                            </span>
+                            <span class="nav-copy"><strong>Accessibility &amp; HUD</strong><small>Colorblind &amp; Scales</small></span>
+                            <span class="nav-arrow" aria-hidden="true">→</span>
+                        </button>
                     </div>
                 </section>
 
@@ -178,6 +206,10 @@
                     <button id="export-btn" class="button button-secondary" type="button" disabled>
                         <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 3v9m0 0 3-3m-3 3L7 9M4 14v2h12v-2"/></svg>
                         Export
+                    </button>
+                    <button id="btn-header-profiler" class="button button-quiet btn-header-profiler" type="button" title="Toggle Engine Microsecond Profiler &amp; Telemetry Dock [F3]">
+                        <span class="profiler-dot-live"></span>
+                        <span>⚡ Profiler [F3]</span>
                     </button>
                 </form>
             </header>
@@ -1001,6 +1033,9 @@
 
                                     <!-- Tactical Battle Controls & Hotkeys -->
                                     <div class="battle-actions-bar">
+                                        <button type="button" class="battle-ctrl-btn" id="btn-battle-pause" title="Toggle Tactical Pause &amp; Order Queuing [Space]">
+                                            <span>⏸️ Pause [Space]</span>
+                                        </button>
                                         <button type="button" class="battle-ctrl-btn" id="btn-battle-bullet-time" title="Toggle Bullet Time Slow-Motion (0.25x speed) [T]">
                                             <span>⏱️ Bullet Time [T]</span>
                                         </button>
@@ -1016,6 +1051,31 @@
                                         <button type="button" class="battle-ctrl-btn exit" id="btn-battle-exit" title="Return to Realm Atlas">
                                             <span>✖ Return [Esc]</span>
                                         </button>
+                                    </div>
+                                </div>
+
+                                <!-- Tactical Radar Mini-Map (Interactive Radar Blips & Click-to-Warp) -->
+                                <div class="battle-radar-wrap" id="battle-radar-wrap" title="Tactical 3D Radar — Click anywhere to warp camera">
+                                    <div class="battle-radar-header">
+                                        <span>TACTICAL RADAR</span>
+                                        <span class="radar-scan-line"></span>
+                                    </div>
+                                    <canvas id="battle-radar-canvas" width="140" height="90"></canvas>
+                                    <div class="battle-radar-legend">
+                                        <span><i class="dot friendly"></i> Vanguard</span>
+                                        <span><i class="dot hostile"></i> Hostile</span>
+                                        <span><i class="dot cover"></i> Cover</span>
+                                    </div>
+                                </div>
+
+                                <!-- Holographic Tactical Pause Banner -->
+                                <div class="battle-pause-overlay hidden" id="battle-pause-overlay">
+                                    <div class="pause-banner-card">
+                                        <div class="pause-icon">⏸️</div>
+                                        <div class="pause-text">
+                                            <strong>TACTICAL PAUSE ENGAGED</strong>
+                                            <small>Right-click ground or targets to queue synchronized orders · Press [Space] to resume</small>
+                                        </div>
                                     </div>
                                 </div>
 
@@ -1660,7 +1720,412 @@
         </div>
     </dialog>
 
-    <div class="level-up-banner hidden" id="level-up-banner" aria-live="assertive">
+    <!-- World Lore Codex, Historical Chronicle & Precursor Relics Dialog (Pillars IV & VII) -->
+    <dialog class="tool-dialog chronicle-dialog" id="chronicle-dialog" aria-labelledby="chronicle-title">
+        <div class="dialog-shell chronicle-shell">
+            <header class="dialog-header chronicle-header">
+                <div>
+                    <div class="panel-kicker">Planetary Archives &amp; Precursor Relics</div>
+                    <h2 id="chronicle-title">World Codex &amp; Historical Chronicle</h2>
+                    <p>Procedural dynasties, recorded epoch chronicles, sovereign council policies, and precursor dig expeditions.</p>
+                </div>
+                <button class="icon-button dialog-close" id="chronicle-close" type="button" aria-label="Close Codex"><svg viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></svg></button>
+            </header>
+            <div class="dialog-body chronicle-body">
+                <div class="chronicle-tabs" role="tablist">
+                    <button type="button" class="chronicle-tab active" id="tab-codex-chronicle" data-pane="codex-timeline">📜 Historical Chronicle</button>
+                    <button type="button" class="chronicle-tab" id="tab-codex-relics" data-pane="codex-relics">🏺 Precursor Relic Digs (3)</button>
+                    <button type="button" class="chronicle-tab" id="tab-codex-council" data-pane="codex-council">👑 Sovereign Council</button>
+                </div>
+
+                <!-- Pane 1: Historical Chronicle Timeline -->
+                <div class="chronicle-pane active" id="pane-codex-timeline">
+                    <div class="chronicle-feed" id="chronicle-feed-list">
+                        <!-- Populated dynamically via WorldCodex.renderTimeline() -->
+                    </div>
+                </div>
+
+                <!-- Pane 2: Precursor Relic Digs -->
+                <div class="chronicle-pane hidden" id="pane-codex-relics">
+                    <div class="relic-grid" id="codex-relic-grid">
+                        <article class="relic-card" data-relic="titan-core">
+                            <div class="relic-header">
+                                <span class="relic-icon">🤖</span>
+                                <div><strong>Precursor Titan Core</strong><small>Excavation Site: Dune Ridge Alpha</small></div>
+                                <span class="relic-status" id="relic-status-1">Unexcavated</span>
+                            </div>
+                            <p>An intact hyper-dense antimatter power plant from an ancient planetary war.</p>
+                            <div class="relic-progress-wrap">
+                                <div class="relic-progress-bar"><i id="relic-progress-1" style="width: 0%;"></i></div>
+                                <span id="relic-pct-1">0% Excavated</span>
+                            </div>
+                            <div class="relic-rewards"><span>Reward: +100MW Power &amp; Titan Chassis Blueprints</span></div>
+                            <button type="button" class="button button-accent relic-dig-btn" id="btn-dig-relic-1" data-site="1">⛏️ Dispatch Archaeological Team (120 🪙)</button>
+                        </article>
+
+                        <article class="relic-card" data-relic="quantum-monolith">
+                            <div class="relic-header">
+                                <span class="relic-icon">🔷</span>
+                                <div><strong>Sub-Terra Quantum Monolith</strong><small>Excavation Site: Cyber Fissure-9</small></div>
+                                <span class="relic-status" id="relic-status-2">Unexcavated</span>
+                            </div>
+                            <p>Monolithic zero-point processing cluster vibrating at quantum harmonic frequencies.</p>
+                            <div class="relic-progress-wrap">
+                                <div class="relic-progress-bar"><i id="relic-progress-2" style="width: 0%;"></i></div>
+                                <span id="relic-pct-2">0% Excavated</span>
+                            </div>
+                            <div class="relic-rewards"><span>Reward: +250 Science Research &amp; Instant Tier Advancement</span></div>
+                            <button type="button" class="button button-accent relic-dig-btn" id="btn-dig-relic-2" data-site="2">⛏️ Dispatch Archaeological Team (150 🪙)</button>
+                        </article>
+
+                        <article class="relic-card" data-relic="biosphere-vault">
+                            <div class="relic-header">
+                                <span class="relic-icon">🌱</span>
+                                <div><strong>Bioluminescent Seed Vault</strong><small>Excavation Site: Glacial Crevasse</small></div>
+                                <span class="relic-status" id="relic-status-3">Unexcavated</span>
+                            </div>
+                            <p>Cryo-preserved genetic seeds of extinct mega-flora with nitrogen-fixing soil symbiotes.</p>
+                            <div class="relic-progress-wrap">
+                                <div class="relic-progress-bar"><i id="relic-progress-3" style="width: 0%;"></i></div>
+                                <span id="relic-pct-3">0% Excavated</span>
+                            </div>
+                            <div class="relic-rewards"><span>Reward: +45 Food/tick &amp; Permanent Drought Immunity</span></div>
+                            <button type="button" class="button button-accent relic-dig-btn" id="btn-dig-relic-3" data-site="3">⛏️ Dispatch Archaeological Team (100 🪙)</button>
+                        </article>
+                    </div>
+                </div>
+
+                <!-- Pane 3: Sovereign Council -->
+                <div class="chronicle-pane hidden" id="pane-codex-council">
+                    <div class="council-roster-grid">
+                        <article class="minister-card" id="minister-war">
+                            <div class="minister-header">
+                                <span class="minister-avatar">⚔️</span>
+                                <div><strong id="minister-war-name">General Korba</strong><small>Minister of War &amp; Defense</small></div>
+                                <span class="minister-loyalty">Loyalty: 88%</span>
+                            </div>
+                            <p>Oversees garrison drills, artillery munitions production, and perimeter fortification lines.</p>
+                            <div class="minister-doctrine-select">
+                                <label>Active Military Doctrine:</label>
+                                <select id="select-doctrine-war" class="minister-select">
+                                    <option value="iron-wall">Iron Wall (+30% Defense, -10% Speed)</option>
+                                    <option value="blitz-spear">Blitz Spear (+25% Collision Ramming, +15% Speed)</option>
+                                    <option value="conscription">Conscription (+40% Infantry HP, -10% Happiness)</option>
+                                </select>
+                            </div>
+                            <button type="button" class="button button-secondary btn-minister-enact" id="btn-enact-war">Enact Doctrine (50 🪙)</button>
+                        </article>
+
+                        <article class="minister-card" id="minister-commerce">
+                            <div class="minister-header">
+                                <span class="minister-avatar">⚖️</span>
+                                <div><strong id="minister-commerce-name">High Chancellor Lin</strong><small>Minister of Commerce &amp; Trade</small></div>
+                                <span class="minister-loyalty">Loyalty: 94%</span>
+                            </div>
+                            <p>Directs inter-regional freight corridors, currency reserve minting, and trade tariffs.</p>
+                            <div class="minister-doctrine-select">
+                                <label>Active Economic Policy:</label>
+                                <select id="select-doctrine-commerce" class="minister-select">
+                                    <option value="free-market">Free Trade Corridors (+25% Credit Output)</option>
+                                    <option value="war-tariffs">Strategic Tariffs (+40% Materials Output, -10% Happiness)</option>
+                                    <option value="subsidy">Citizen Subsidies (+20% Happiness, -15% Credits)</option>
+                                </select>
+                            </div>
+                            <button type="button" class="button button-secondary btn-minister-enact" id="btn-enact-commerce">Enact Policy (50 🪙)</button>
+                        </article>
+
+                        <article class="minister-card" id="minister-science">
+                            <div class="minister-header">
+                                <span class="minister-avatar">🔬</span>
+                                <div><strong id="minister-science-name">Chief Engineer Vex</strong><small>Minister of Technology &amp; Energy</small></div>
+                                <span class="minister-loyalty">Loyalty: 91%</span>
+                            </div>
+                            <p>Spearheads fusion breakthroughs, quantum computing clusters, and automation patents.</p>
+                            <div class="minister-doctrine-select">
+                                <label>Active Research Directive:</label>
+                                <select id="select-doctrine-science" class="minister-select">
+                                    <option value="clean-fusion">Clean Fusion Overclock (+20MW Power Capacity)</option>
+                                    <option value="nanotech-synth">Nanotech Synthesis (+30% Science Speed)</option>
+                                    <option value="cyber-mesh">Cybernetic Augmentation (+15% Worker Efficiency)</option>
+                                </select>
+                            </div>
+                            <button type="button" class="button button-secondary btn-minister-enact" id="btn-enact-science">Enact Directive (50 🪙)</button>
+                        </article>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </dialog>
+
+    <!-- Competitive Skirmish, Esports Ladder & BLAKE3 Determinism Proof (Pillar IX) -->
+    <dialog class="tool-dialog skirmish-hub-dialog" id="skirmish-hub-dialog" aria-labelledby="skirmish-hub-title">
+        <div class="dialog-shell skirmish-hub-shell">
+            <header class="dialog-header skirmish-hub-header">
+                <div>
+                    <div class="panel-kicker">Multiplayer &amp; Ranked Skirmishes</div>
+                    <h2 id="skirmish-hub-title">Daily Seeded Skirmish &amp; Ranked Ladder</h2>
+                    <p>Cryptographic BLAKE3 deterministic game state verification, daily tactical puzzles, and competitive leaderboard.</p>
+                </div>
+                <button class="icon-button dialog-close" id="skirmish-hub-close" type="button" aria-label="Close Skirmish Hub"><svg viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></svg></button>
+            </header>
+            <div class="dialog-body skirmish-hub-body">
+                <!-- Daily Seeded Challenge Banner -->
+                <div class="daily-challenge-card">
+                    <div class="challenge-left">
+                        <span class="challenge-kicker">DAILY SEEDED TACTICAL PUZZLE</span>
+                        <h3 id="daily-challenge-name">Operation Ion Tempest</h3>
+                        <p id="daily-challenge-desc">Dunes theater swept by continuous Ion Storms. Ballistic weapons gain +30% splash radius; electronics suffer random 2s EMP surges. Defend with 4 squads against 18 Berzerkers.</p>
+                        <div class="challenge-meta-row">
+                            <span class="challenge-tag" id="daily-challenge-seed">Seed: BLAKE3-7F2A90D1</span>
+                            <span class="challenge-tag mutator">⚡ Ion Storm Active</span>
+                            <span class="challenge-tag mutator">💥 +30% Explosive Radius</span>
+                        </div>
+                    </div>
+                    <div class="challenge-right">
+                        <div class="challenge-reward-badge">
+                            <span>COMPLETION SALVAGE</span>
+                            <strong>+600 🪙 · +150 XP</strong>
+                        </div>
+                        <button type="button" class="button button-accent btn-launch-challenge" id="btn-launch-daily-challenge">🚀 Launch Daily Skirmish</button>
+                    </div>
+                </div>
+
+                <!-- Competitive Ranked Ladder Standings -->
+                <div class="ranked-ladder-section">
+                    <div class="ladder-header-row">
+                        <h4>Global Grandmaster Standings (Deterministic ELO)</h4>
+                        <span class="proof-tag-badge" id="ladder-blake3-badge">Verified by BLAKE3 Determinism Chain</span>
+                    </div>
+                    <div class="ladder-table-wrap">
+                        <table class="ladder-table">
+                            <thead>
+                                <tr>
+                                    <th>Rank</th>
+                                    <th>Commander</th>
+                                    <th>Tier Bracket</th>
+                                    <th>Win Rate</th>
+                                    <th>ELO Score</th>
+                                    <th>Status</th>
+                                </tr>
+                            </thead>
+                            <tbody id="ladder-table-body">
+                                <tr class="ladder-row highlight-player">
+                                    <td><strong>#1</strong></td>
+                                    <td>Sanctuary Sovereign (You)</td>
+                                    <td><span class="tier-pill grandmaster">Grandmaster</span></td>
+                                    <td>94.2%</td>
+                                    <td>2,480</td>
+                                    <td><span class="status-online">● Defending</span></td>
+                                </tr>
+                                <tr>
+                                    <td>#2</td>
+                                    <td>Warlord Vane (Dust Raiders)</td>
+                                    <td><span class="tier-pill diamond">Diamond I</span></td>
+                                    <td>88.6%</td>
+                                    <td>2,340</td>
+                                    <td><span>Offline</span></td>
+                                </tr>
+                                <tr>
+                                    <td>#3</td>
+                                    <td>Legate Decimus (Iron Mandate)</td>
+                                    <td><span class="tier-pill diamond">Diamond II</span></td>
+                                    <td>84.1%</td>
+                                    <td>2,210</td>
+                                    <td><span>Offline</span></td>
+                                </tr>
+                                <tr>
+                                    <td>#4</td>
+                                    <td>Guildmaster Orlov (Mercantile)</td>
+                                    <td><span class="tier-pill platinum">Platinum I</span></td>
+                                    <td>79.5%</td>
+                                    <td>2,090</td>
+                                    <td><span>Offline</span></td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </dialog>
+
+    <!-- In-Game Visual 3D Scenario & Unit Chassis Creator (Pillar X, #91, #92) -->
+    <dialog class="tool-dialog scenario-studio-dialog" id="scenario-studio-dialog" aria-labelledby="scenario-studio-title">
+        <div class="dialog-shell scenario-studio-shell">
+            <header class="dialog-header scenario-studio-header">
+                <div>
+                    <div class="panel-kicker">Modding &amp; UGC Engineering Lab</div>
+                    <h2 id="scenario-studio-title">Scenario &amp; Unit Chassis Studio</h2>
+                    <p>Build custom mechanical chassis, balance weapon DPS and armor loadouts, and deploy prototypes into battle.</p>
+                </div>
+                <button class="icon-button dialog-close" id="scenario-studio-close" type="button" aria-label="Close Studio"><svg viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></svg></button>
+            </header>
+            <div class="dialog-body scenario-studio-body">
+                <div class="studio-layout">
+                    <!-- Left: Chassis & Weapon Loadout Config -->
+                    <div class="studio-controls-column">
+                        <div class="studio-card">
+                            <span class="studio-card-title">1. Base Chassis Frame</span>
+                            <div class="chassis-grid">
+                                <button type="button" class="chassis-btn active" data-chassis="titan">
+                                    <span class="chassis-icon">🤖</span>
+                                    <strong>Titan Siege Mech</strong>
+                                    <small>Heavy Quad-Pedal</small>
+                                </button>
+                                <button type="button" class="chassis-btn" data-chassis="tank">
+                                    <span class="chassis-icon">🛸</span>
+                                    <strong>Hover Rail-Tank</strong>
+                                    <small>Ion Repulsorlift</small>
+                                </button>
+                                <button type="button" class="chassis-btn" data-chassis="skimmer">
+                                    <span class="chassis-icon">🏎️</span>
+                                    <strong>Fast Skimmer</strong>
+                                    <small>High Speed Flanker</small>
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="studio-card">
+                            <span class="studio-card-title">2. Primary Armament</span>
+                            <div class="weapon-grid">
+                                <button type="button" class="weapon-btn active" data-weapon="railgun">
+                                    <span>⚡ Hyper Railgun (180 DMG · 340 Vel)</span>
+                                </button>
+                                <button type="button" class="weapon-btn" data-weapon="ion">
+                                    <span>🔵 Ion Cannon (110 DMG · 260 Vel)</span>
+                                </button>
+                                <button type="button" class="weapon-btn" data-weapon="mortar">
+                                    <span>💣 Heavy Mortar (120 DMG · Ballistic AoE)</span>
+                                </button>
+                                <button type="button" class="weapon-btn" data-weapon="plasma">
+                                    <span>🔥 Rapid Plasma (32 DMG · 0.65s Cooldown)</span>
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="studio-card">
+                            <span class="studio-card-title">3. Defensive Electronics</span>
+                            <div class="electronics-grid">
+                                <button type="button" class="electronic-btn active" data-support="chaff">
+                                    <span>✨ Chaff Dispenser (Countermeasure)</span>
+                                </button>
+                                <button type="button" class="electronic-btn" data-support="barrier">
+                                    <span>🛡️ Kinetic Deflector (Aegis Shield)</span>
+                                </button>
+                                <button type="button" class="electronic-btn" data-support="overdrive">
+                                    <span>🚀 Ramming Afterburners (Overdrive)</span>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Right: Live Blueprint & Calculated Telemetry -->
+                    <div class="studio-preview-column">
+                        <div class="blueprint-card">
+                            <div class="blueprint-canvas-wrap">
+                                <canvas id="blueprint-canvas" width="280" height="200"></canvas>
+                                <span class="blueprint-badge">PROTOTYPE SCHEMATIC</span>
+                            </div>
+                            <div class="blueprint-stats">
+                                <div class="bp-stat"><span>Hull Durability:</span><strong id="bp-hp">650 HP</strong></div>
+                                <div class="bp-stat"><span>Shield Capacity:</span><strong id="bp-shield">250 SHIELD</strong></div>
+                                <div class="bp-stat"><span>Weapon Output:</span><strong id="bp-dps">90 DPS</strong></div>
+                                <div class="bp-stat"><span>Cruising Velocity:</span><strong id="bp-speed">15 m/s</strong></div>
+                                <div class="bp-stat"><span>Unit Mass:</span><strong id="bp-mass">920 kg</strong></div>
+                                <div class="bp-stat"><span>Build Cost:</span><strong id="bp-cost">450 Credits · 65 Materials</strong></div>
+                            </div>
+                            <div class="blueprint-actions">
+                                <button type="button" class="button button-accent" id="btn-deploy-prototype">🚀 Deploy Prototype to Battle Grid</button>
+                                <button type="button" class="button button-secondary" id="btn-export-spec">💾 Export Spec (JSON)</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </dialog>
+
+    <!-- Colorblind, UI Scaling & Accessibility Suite Dialog (Pillar VIII, #77) -->
+    <dialog class="tool-dialog accessibility-dialog" id="accessibility-dialog" aria-labelledby="accessibility-title">
+        <div class="dialog-shell accessibility-shell">
+            <header class="dialog-header accessibility-header">
+                <div>
+                    <div class="panel-kicker">Display &amp; Sensory Preferences</div>
+                    <h2 id="accessibility-title">Accessibility &amp; UI Suite</h2>
+                    <p>Colorblind palettes, high-contrast monochrome, interface scaling, and keybinding cheatsheet.</p>
+                </div>
+                <button class="icon-button dialog-close" id="accessibility-close" type="button" aria-label="Close Accessibility"><svg viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></svg></button>
+            </header>
+            <div class="dialog-body accessibility-body">
+                <div class="access-grid">
+                    <div class="access-card">
+                        <span class="access-card-title">Colorblind Vision Simulation</span>
+                        <div class="vision-mode-btns">
+                            <button type="button" class="vision-btn active" data-vision="standard">Full Spectrum (Standard)</button>
+                            <button type="button" class="vision-btn" data-vision="protanopia">Protanopia (Red-Blind)</button>
+                            <button type="button" class="vision-btn" data-vision="deuteranopia">Deuteranopia (Green-Blind)</button>
+                            <button type="button" class="vision-btn" data-vision="tritanopia">Tritanopia (Blue-Blind)</button>
+                            <button type="button" class="vision-btn" data-vision="high-contrast">High-Contrast Monochrome</button>
+                        </div>
+                    </div>
+
+                    <div class="access-card">
+                        <span class="access-card-title">Interface Ergonomics &amp; Scale</span>
+                        <div class="ui-scale-btns">
+                            <button type="button" class="scale-btn active" data-scale="1.0">Standard 100%</button>
+                            <button type="button" class="scale-btn" data-scale="1.15">Comfortable 115%</button>
+                            <button type="button" class="scale-btn" data-scale="1.3">Large Display 130%</button>
+                        </div>
+                        <div class="access-toggles">
+                            <label class="access-toggle-item">
+                                <input type="checkbox" id="toggle-floaties" checked>
+                                <span>Floating Combat Damage Numbers</span>
+                            </label>
+                            <label class="access-toggle-item">
+                                <input type="checkbox" id="toggle-screenshake" checked>
+                                <span>Cinematic Shockwave Screen-Shake</span>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Complete Keybindings Cheatsheet -->
+                <div class="keybinds-section">
+                    <h4>Tactical &amp; Strategic Keybindings</h4>
+                    <div class="keybinds-grid">
+                        <div class="keybind-item"><kbd>Space</kbd><span>Tactical Pause &amp; Order Queue</span></div>
+                        <div class="keybind-item"><kbd>1 - 5</kbd><span>Commander Support Abilities</span></div>
+                        <div class="keybind-item"><kbd>T</kbd><span>Bullet Time (0.25x Cinematic Speed)</span></div>
+                        <div class="keybind-item"><kbd>F</kbd><span>Chase Cam / Follow Unit</span></div>
+                        <div class="keybind-item"><kbd>H</kbd><span>Toggle Threat Heatmap</span></div>
+                        <div class="keybind-item"><kbd>C</kbd><span>Toggle Cover Overlay</span></div>
+                        <div class="keybind-item"><kbd>K</kbd><span>Toggle Cinematic Action Cam</span></div>
+                        <div class="keybind-item"><kbd>P</kbd><span>Open After-Action Report (AAR)</span></div>
+                        <div class="keybind-item"><kbd>F3</kbd><span>Toggle Microsecond Profiler Dock</span></div>
+                        <div class="keybind-item"><kbd>Esc</kbd><span>Return to Orbital Realm Atlas</span></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </dialog>
+
+    <!-- Live Engine Microsecond Performance Profiler Dock (Pillar X, #100) -->
+    <div class="engine-profiler-dock hidden" id="engine-profiler-dock" role="region" aria-label="Live Engine Telemetry">
+        <div class="profiler-header">
+            <span class="profiler-title">⚡ WORLDFORGE ENGINE TELEMETRY</span>
+            <span class="profiler-fps" id="prof-fps">60 FPS</span>
+            <button type="button" class="profiler-close-btn" id="btn-close-profiler" aria-label="Close Profiler">×</button>
+        </div>
+        <div class="profiler-metrics-grid">
+            <div class="prof-metric"><span>Frame Time:</span><strong id="prof-frametime">8.3 ms</strong></div>
+            <div class="prof-metric"><span>Physics Engine:</span><strong id="prof-physics">1.9 ms</strong></div>
+            <div class="prof-metric"><span>3D Projection:</span><strong id="prof-projection">2.6 ms</strong></div>
+            <div class="prof-metric"><span>Particle Compute:</span><strong id="prof-particles">1.2 ms</strong></div>
+            <div class="prof-metric"><span>Living Combatants:</span><strong id="prof-units">14 Units</strong></div>
+            <div class="prof-metric"><span>Physics Debris:</span><strong id="prof-debris">18 Objects</strong></div>
+            <div class="prof-metric"><span>BLAKE3 Integrity:</span><strong class="highlight" id="prof-hash">VERIFIED</strong></div>
+        </div>
+    </div>
         <div class="level-up-card">
             <div class="level-up-stars">✦ ✦ ✦</div>
             <span class="level-up-kicker">ERA ADVANCEMENT</span>
