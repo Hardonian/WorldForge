@@ -168,7 +168,11 @@ impl SteamWorkshopManager {
 
     /// Unsubscribes from a workshop item.
     pub fn unsubscribe(&mut self, published_id: u64) -> bool {
-        if let Some(pos) = self.subscribed_ids.iter().position(|&id| id == published_id) {
+        if let Some(pos) = self
+            .subscribed_ids
+            .iter()
+            .position(|&id| id == published_id)
+        {
             self.subscribed_ids.remove(pos);
             if let Some(item) = self.items.get_mut(&published_id) {
                 item.subscribers_count = item.subscribers_count.saturating_sub(1);
@@ -180,7 +184,7 @@ impl SteamWorkshopManager {
 
     pub fn list_all(&self) -> Vec<WorkshopItem> {
         let mut list: Vec<_> = self.items.values().cloned().collect();
-        list.sort_by(|a, b| b.subscribers_count.cmp(&a.subscribers_count));
+        list.sort_by_key(|i| std::cmp::Reverse(i.subscribers_count));
         list
     }
 

@@ -197,6 +197,7 @@ impl SteamInputProfile {
             }
         }
     }
-}"##.to_string()
+}"##
+        .to_string()
     }
 }

@@ -25,7 +25,7 @@ pub struct SteamCloudStorage {
 impl Default for SteamCloudStorage {
     fn default() -> Self {
         Self {
-            app_id: 480, // Default Spacewar / WorldForge Dev AppID
+            app_id: 480,                          // Default Spacewar / WorldForge Dev AppID
             total_quota_bytes: 100 * 1024 * 1024, // 100 MB Steam Auto-Cloud quota
             used_quota_bytes: 0,
             files: HashMap::new(),
@@ -42,7 +42,10 @@ impl SteamCloudStorage {
     }
 
     /// Scans a local directory (e.g. `.worldforge/saves/`) and stages all save files for cloud sync.
-    pub fn sync_from_local_dir(&mut self, local_dir: &Path) -> std::io::Result<Vec<CloudFileMetadata>> {
+    pub fn sync_from_local_dir(
+        &mut self,
+        local_dir: &Path,
+    ) -> std::io::Result<Vec<CloudFileMetadata>> {
         let mut synced_files = Vec::new();
         if !local_dir.exists() {
             return Ok(synced_files);
@@ -90,7 +93,7 @@ impl SteamCloudStorage {
     /// Lists all cloud files currently backed up.
     pub fn list_files(&self) -> Vec<CloudFileMetadata> {
         let mut list: Vec<_> = self.files.values().cloned().collect();
-        list.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
+        list.sort_by_key(|m| std::cmp::Reverse(m.timestamp));
         list
     }
 
@@ -101,15 +104,14 @@ impl SteamCloudStorage {
 
     /// Generates Steam Auto-Cloud VDF configuration section for `app_build.vdf`.
     pub fn generate_steam_auto_cloud_vdf(&self) -> String {
-        format!(
-            r#""AutoCloud"
-{{
+        r#""AutoCloud"
+{
     "RootPath"    "%USERPROFILE%\\.worldforge\\saves"
     "Pattern"     "*.json"
     "Pattern"     "*.wfslot"
     "OS"          "All"
     "Recursive"   "0"
-}}"#
-        )
+}"#
+        .to_string()
     }
 }

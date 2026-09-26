@@ -55,12 +55,20 @@ jobs:
       - run: cargo clippy --workspace --all-targets -- -D warnings
 
   package:
-    name: Package manifests
+    name: Manifest validation
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@1.88.0
-      - run: cargo package --workspace --no-verify
+      # `cargo package` cannot be used here: every crate declares both a
+      # `path` and a `version` for its siblings, so packaging forces registry
+      # resolution and fails with "no matching package named `worldforge-core`
+      # found" because these crates are not published to crates.io. Validate the
+      # manifests directly instead, which needs no registry access.
+      - name: Validate workspace manifests
+        run: cargo verify-project --workspace
+      - name: Validate crate manifests resolve
+        run: cargo metadata --no-deps --format-version 1 > /dev/null
 
   security:
     name: Dependency audit

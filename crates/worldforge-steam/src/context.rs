@@ -45,7 +45,8 @@ impl Default for SteamContext {
 impl SteamContext {
     pub fn new(app_id: u32) -> Self {
         let is_deck = Self::detect_steam_deck();
-        let status = if std::env::var("STEAM_APP_ID").is_ok() || std::env::var("SteamAppId").is_ok() {
+        let status = if std::env::var("STEAM_APP_ID").is_ok() || std::env::var("SteamAppId").is_ok()
+        {
             SteamConnectionStatus::Connected
         } else {
             SteamConnectionStatus::StandaloneSimulated
@@ -53,7 +54,11 @@ impl SteamContext {
 
         let profile = SteamUserProfile {
             steam_id: 76561198000000000 + (app_id as u64),
-            persona_name: if is_deck { "SteamDeck Commander".into() } else { "Forge Commander".into() },
+            persona_name: if is_deck {
+                "SteamDeck Commander".into()
+            } else {
+                "Forge Commander".into()
+            },
             is_steam_deck: is_deck,
             language: "english".into(),
             beta_branch: "public".into(),
@@ -78,10 +83,16 @@ impl SteamContext {
 
     /// Detects if the current system environment is a Steam Deck handheld.
     pub fn detect_steam_deck() -> bool {
-        if std::env::var("SteamDeck").map(|v| v == "1").unwrap_or(false) {
+        if std::env::var("SteamDeck")
+            .map(|v| v == "1")
+            .unwrap_or(false)
+        {
             return true;
         }
-        if std::env::var("STEAM_DECK").map(|v| v == "1").unwrap_or(false) {
+        if std::env::var("STEAM_DECK")
+            .map(|v| v == "1")
+            .unwrap_or(false)
+        {
             return true;
         }
         #[cfg(target_os = "linux")]
