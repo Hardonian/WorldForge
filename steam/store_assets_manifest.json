@@ -1,0 +1,58 @@
+{
+  "appId": 480,
+  "gameTitle": "WorldForge",
+  "storePageMetadata": {
+    "shortDescription": "Deterministic sovereign simulation studio. Commanded by deep-Q neural models, orbital Dyson swarms, real-time Coriolis stormfronts, and 15 interconnected tactical eras.",
+    "supportedLanguages": [
+      "english",
+      "german",
+      "french",
+      "spanish",
+      "schinese",
+      "japanese"
+    ],
+    "steamDeckCompatibility": "Verified",
+    "genres": ["Simulation", "Strategy", "4X", "Sci-Fi", "Indie"],
+    "tags": [
+      "Deterministic",
+      "City Builder",
+      "Grand Strategy",
+      "Artificial Intelligence",
+      "Space",
+      "Moddable",
+      "Automation"
+    ]
+  },
+  "assetCapsules": {
+    "headerImage": {
+      "dimensions": "460x215",
+      "format": "PNG",
+      "path": "steam/assets/header_460x215.png"
+    },
+    "smallCapsule": {
+      "dimensions": "231x87",
+      "format": "PNG",
+      "path": "steam/assets/small_231x87.png"
+    },
+    "mainCapsule": {
+      "dimensions": "616x353",
+      "format": "PNG",
+      "path": "steam/assets/main_616x353.png"
+    },
+    "verticalLibraryCapsule": {
+      "dimensions": "600x900",
+      "format": "PNG",
+      "path": "steam/assets/library_600x900.png"
+    },
+    "libraryHero": {
+      "dimensions": "3840x1240",
+      "format": "PNG",
+      "path": "steam/assets/hero_3840x1240.png"
+    },
+    "communityIcon": {
+      "dimensions": "184x184",
+      "format": "PNG",
+      "path": "steam/assets/icon_184x184.png"
+    }
+  }
+}

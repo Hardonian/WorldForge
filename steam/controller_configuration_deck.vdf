@@ -1,0 +1,78 @@
+"controller_mappings"
+{
+	"version" "3"
+	"game" "WorldForge"
+	"title" "Official WorldForge Steam Deck & Gamepad Layout"
+	"description" "Dual-analog tactical camera navigation with Left Bumper Radial Command Wheel to trigger all 15 simulation suites."
+	"creator" "Hardonian WorldForge Team"
+	"group"
+	{
+		"id" "0"
+		"mode" "four_buttons"
+		"bindings"
+		{
+			"button_a" "InteractSelect"
+			"button_b" "CancelClose"
+			"button_x" "BulletTimeToggle"
+			"button_y" "CycleCameraView"
+		}
+	}
+	"group"
+	{
+		"id" "1"
+		"mode" "dpad"
+		"bindings"
+		{
+			"dpad_north" "SelectSquad1"
+			"dpad_east" "SelectSquad2"
+			"dpad_south" "SelectSquad3"
+			"dpad_west" "SelectSquad4"
+		}
+	}
+	"group"
+	{
+		"id" "2"
+		"mode" "joystick"
+		"bindings"
+		{
+			"stick" "CameraPan"
+		}
+	}
+	"group"
+	{
+		"id" "3"
+		"mode" "joystick"
+		"bindings"
+		{
+			"stick" "CameraOrbit"
+		}
+	}
+	"group"
+	{
+		"id" "4"
+		"mode" "trigger"
+		"bindings"
+		{
+			"trigger" "TacticalAbility1"
+		}
+	}
+	"group"
+	{
+		"id" "5"
+		"mode" "trigger"
+		"bindings"
+		{
+			"trigger" "TacticalAbility2"
+		}
+	}
+	"group"
+	{
+		"id" "6"
+		"mode" "bumper"
+		"bindings"
+		{
+			"bumper_l" "RadialCommandWheel"
+			"bumper_r" "CycleMilestoneForward"
+		}
+	}
+}

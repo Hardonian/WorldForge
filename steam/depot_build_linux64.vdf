@@ -1,0 +1,24 @@
+"DepotBuildConfig"
+{
+	"DepotID" "482"
+	"ContentRoot" "..\target\release"
+	"FileMapping"
+	{
+		"LocalPath" "worldforge"
+		"DepotPath" "."
+		"recursive" "0"
+	}
+	"FileMapping"
+	{
+		"LocalPath" "..\..\examples\*"
+		"DepotPath" "examples\"
+		"recursive" "1"
+	}
+	"FileMapping"
+	{
+		"LocalPath" "..\..\steam\steam_appid.txt"
+		"DepotPath" "."
+		"recursive" "0"
+	}
+	"FileExclusion" "*.d"
+}
