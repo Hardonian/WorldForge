@@ -2249,7 +2249,7 @@
                             <span class="mp-card-title">2. P2P Direct Signaling Ticket</span>
                             <div class="mp-signaling-box">
                                 <button type="button" class="button button-accent" id="btn-mp-host">Host Match (Create Ticket)</button>
-                                <label class="field" style="margin-top: 8px;">
+                                <label class="field mt-8">
                                     <span>Paste Remote Peer Ticket:</span>
                                     <textarea id="mp-remote-ticket" rows="3" placeholder="Paste remote player offer/answer JSON ticket here..."></textarea>
                                 </label>
@@ -2750,7 +2750,7 @@
                                 <span>Current Commodity Hold: <strong id="economy-player-hold">80 Units</strong></span>
                             </div>
                             <div class="order-form-row">
-                                <label class="field" style="flex: 1;">
+                                <label class="field flex-1">
                                     <span>Order Quantity:</span>
                                     <input type="number" id="economy-order-qty" value="10" min="1" max="1000" class="input">
                                 </label>
@@ -2954,7 +2954,7 @@
                     <div class="climate-controls-col">
                         <div class="climate-card">
                             <span class="nemesis-card-title">Atmospheric Front Presets</span>
-                            <select id="weather-preset-select" class="select" style="width: 100%;">
+                            <select id="weather-preset-select" class="select w-full">
                                 <option value="supercell">Supercell Lightning Hurricane (EMP Storm)</option>
                                 <option value="blizzard">Cryo-Blizzard Permafrost (Sub-Zero Drift)</option>
                                 <option value="acidrain">Acid Rain Chemical Deluge (Armor Corrosion)</option>
@@ -3025,7 +3025,7 @@
                         <div class="diplomacy-card">
                             <span class="nemesis-card-title">Diplomatic Envoy &amp; Treaty Proposal Desk</span>
                             <div class="treaty-form-row">
-                                <label class="field" style="flex: 1;">
+                                <label class="field flex-1">
                                     <span>Target Sovereign Power:</span>
                                     <select id="diplo-faction-select" class="select">
                                         <option value="iron">Iron Dominion (Militaristic - Standing: Hostile -70)</option>
@@ -3084,7 +3084,7 @@
                                 </div>
                             </div>
 
-                            <span class="nemesis-card-title" style="margin-top: 10px;">Interception Intelligence Wire</span>
+                            <span class="nemesis-card-title mt-10">Interception Intelligence Wire</span>
                             <pre class="intel-wire-log" id="intel-wire-log">[INTEL_FEED] Iron Dominion mobilizing heavy walker vanguard in Sector 7.
 [INTEL_FEED] Solaris Technocracy dispatched diplomatic courier offering hyper-energy pact.
 [INTEL_FEED] Covert operative successfully compromised Vesper transport routing.</pre>
@@ -3144,8 +3144,8 @@
                                 <input type="range" id="mc-rollouts-slider" min="1000" max="25000" step="1000" value="10000">
                             </label>
                             <div class="quantum-actions-row">
-                                <button type="button" class="button button-accent" id="btn-quantum-run" style="flex: 1;">⚡ Execute 10,000 Rollouts</button>
-                                <button type="button" class="button button-primary" id="btn-quantum-apply" style="flex: 1;">🎯 Apply Branch Vector</button>
+                                <button type="button" class="button button-accent flex-1" id="btn-quantum-run">⚡ Execute 10,000 Rollouts</button>
+                                <button type="button" class="button button-primary flex-1" id="btn-quantum-apply">🎯 Apply Branch Vector</button>
                             </div>
                         </div>
                     </div>
@@ -3184,7 +3184,7 @@
                     <div class="megastructure-controls-col">
                         <div class="ms-card">
                             <span class="nemesis-card-title">Orbital Megastructure Catalog</span>
-                            <select id="ms-project-select" class="select" style="width: 100%;">
+                            <select id="ms-project-select" class="select w-full">
                                 <option value="dyson">Dyson Swarm Collector (+2,500 MW Power &amp; Stellar Beams)</option>
                                 <option value="elevator">Space Elevator Orbital Tether (+1,200 Trade Logistics)</option>
                                 <option value="shield">Planetary Aegis Defense Grid (100% Bombardment Shield)</option>
@@ -3262,7 +3262,7 @@
                                     <input type="range" id="stem-drums-vol" min="0" max="100" value="80">
                                 </label>
                             </div>
-                            <label class="field" style="margin-top: 6px;">
+                            <label class="field mt-6">
                                 <span>Global Battlefield Tension Curve: <b id="audio-tension-val">0.65 (High Combat)</b></span>
                                 <input type="range" id="audio-tension-slider" min="0" max="100" value="65">
                             </label>
@@ -3285,14 +3285,14 @@
 
                         <div class="audio-card">
                             <span class="nemesis-card-title">Spatial Acoustic Room Impulse Models</span>
-                            <select id="audio-reverb-select" class="select" style="width: 100%;">
+                            <select id="audio-reverb-select" class="select w-full">
                                 <option value="canyon">Deep Basalt Canyon (Long Echo, High HF Decay)</option>
                                 <option value="hangar">Reinforced Metal Hangar (Bright Flutters, Metallic)</option>
                                 <option value="dunes">Open Arid Dunes (Minimal Reflection, Air Absorption)</option>
                                 <option value="vault">Subterranean Concrete Vault (Heavy Bass Resonances)</option>
                             </select>
                             <div class="spatial-toggles">
-                                <label class="mod-toggle-label" style="margin-top: 8px;">
+                                <label class="mod-toggle-label mt-8">
                                     <input type="checkbox" checked id="audio-doppler-toggle">
                                     <span>3D Velocity Doppler Shift Simulation</span>
                                 </label>
