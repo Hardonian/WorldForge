@@ -14,6 +14,7 @@ members = [
     "crates/worldforge-proof",
     "crates/worldforge-cli",
     "crates/worldforge-bench",
+    "crates/worldforge-steam",
 ]
 
 [workspace.package]
@@ -36,6 +37,7 @@ worldforge-mod-runtime = { version = "0.2.0", path = "crates/worldforge-mod-runt
 worldforge-economy = { version = "0.2.0", path = "crates/worldforge-economy" }
 worldforge-agent = { version = "0.2.0", path = "crates/worldforge-agent" }
 worldforge-proof = { version = "0.2.0", path = "crates/worldforge-proof" }
+worldforge-steam = { version = "0.2.0", path = "crates/worldforge-steam" }
 
 # Serialization
 serde = { version = "1", features = ["derive"] }

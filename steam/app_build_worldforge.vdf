@@ -1,0 +1,16 @@
+"appbuild"
+{
+	"appid"	"480"
+	"desc" "WorldForge AAA Steam Release Build (Windows, Linux/SteamDeck, macOS)"
+	"buildoutput" "..\build_output\"
+	"contentroot" "..\content\"
+	"setlive" "beta"
+	"preview" "0"
+	"local" ""
+	"depots"
+	{
+		"481" "depot_build_windows64.vdf"
+		"482" "depot_build_linux64.vdf"
+		"483" "depot_build_macos.vdf"
+	}
+}

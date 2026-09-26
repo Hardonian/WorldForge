@@ -1,0 +1,22 @@
+[package]
+name = "worldforge-steam"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+description = "Steamworks SDK integration, Cloud Saves, Achievements, Workshop, and Steam Deck support for WorldForge"
+
+[dependencies]
+worldforge-core = { workspace = true }
+worldforge-package = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+chrono = { workspace = true }
+tracing = { workspace = true }
+thiserror = { workspace = true }
+uuid = { workspace = true }
+blake3 = { workspace = true }
+
+[dev-dependencies]
+tempfile = "3"
