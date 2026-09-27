@@ -1,5 +1,14 @@
 # Changelog
 
+## [Unreleased]
+
+### Fixed
+
+- Completed manifest-mod inheritance by resolving each module relative to the base or derived world that declares it.
+- Fingerprinted ordered module bytes and capability grants into run proofs and replay artifacts, enabling deterministic local re-execution of modded runs.
+- Hardened capability-grant loading against symlink escapes and added package, runtime, and CLI regression coverage for inherited mods and modded replays.
+- Added explicit proof-chain events and replay reconstruction for building upgrades, demolitions, and geopolitical commands.
+
 ## [0.2.0] - 2026-09-24
 
 ### Environmental, climate & biosphere engine

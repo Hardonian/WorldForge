@@ -65,7 +65,7 @@ cargo run -p worldforge-cli -- dashboard
 
 ## Architecture
 
-World Forge is a Rust workspace of 13 crates (12 product crates plus the benchmark harness):
+World Forge is a Rust workspace of 14 crates (13 product crates plus the benchmark harness):
 
 ```
 worldforge-core        Foundation: typed IDs, Fixed64, Tick, RNG, BLAKE3, errors
@@ -79,6 +79,7 @@ worldforge-agent       Rule-based and utility-based agent policies
 worldforge-mod-api     Capability-based mod API (deny-by-default)
 worldforge-mod-runtime Sandboxed Wasmtime lifecycle with capability-gated host ABI
 worldforge-package     .world package format with reproducible fingerprints
+worldforge-steam       Achievements, cloud saves, input, and Workshop integration
 worldforge-cli         Command-line interface
 worldforge-bench       Criterion simulation and stress benchmarks
 ```
@@ -160,7 +161,19 @@ minimum = 50.0
 
 ## Modding
 
-Mods declare capabilities in their manifest and receive only those capabilities at runtime:
+World manifests load local core-Wasm modules relative to the declaring world. A
+sidecar grant file explicitly selects the host capabilities available to each
+module; an absent sidecar grants nothing:
+
+```toml
+# world.toml
+mods = ["mods/weather.wat"]
+
+# mods/weather.mod.toml
+capabilities = ["world.resource.read", "world.event.emit"]
+```
+
+Capability policies remain deny-by-default at runtime:
 
 ```rust
 use worldforge_mod_api::{Capability, CapabilityPolicy};
@@ -175,7 +188,7 @@ let policy = CapabilityPolicy::with_capabilities(vec![
 assert!(!policy.check(&Capability::EntityWrite));
 ```
 
-WIT interfaces for the Component Model are defined in `wit/worldforge/`. The executable v0 runtime loads core WebAssembly modules without WASI, enforces fuel and memory limits, and exposes only capability-checked `read_resource` and `emit_event` host calls. See `examples/mods/read-emit.wat` and `docs/architecture/mod-security.md`.
+WIT interfaces for the Component Model are defined in `wit/worldforge/`. The executable v0 runtime loads core WebAssembly modules without WASI, enforces fuel and memory limits, and exposes only capability-checked `read_resource` and `emit_event` host calls. Inherited declarations resolve against the base world that owns them. Module bytes and grant files are fingerprinted into proofs and replay artifacts, and local replay refuses a changed mod set. See `examples/mods/read-emit.wat` and `docs/architecture/mod-security.md`.
 
 ## Simulation Studio and exports
 

@@ -20,6 +20,16 @@ pub struct ResolvedDependency {
     pub fingerprint: Fingerprint,
 }
 
+/// A mod declaration paired with the world directory that owns it.
+///
+/// Mod paths are relative to the manifest that declares them. Keeping that
+/// origin is required when a derived world inherits mods from a sibling base.
+#[derive(Debug, Clone)]
+pub struct ResolvedMod {
+    pub world_root: PathBuf,
+    pub reference: String,
+}
+
 /// The effective content used by validation and simulation after inheritance.
 #[derive(Debug, Clone)]
 pub struct ResolvedWorld {
@@ -29,7 +39,7 @@ pub struct ResolvedWorld {
     pub entities: EntitiesConfig,
     pub city: Option<CityConfig>,
     pub dependencies: Vec<ResolvedDependency>,
-    pub effective_mods: Vec<String>,
+    pub effective_mods: Vec<ResolvedMod>,
     pub fingerprint: Fingerprint,
 }
 
@@ -168,7 +178,13 @@ fn resolve_internal(
             city.validate(&entities)?;
         }
         scenario.validate_against(&manifest, &entities)?;
-        extend_unique(&mut effective_mods, manifest.mods.clone());
+        extend_unique(
+            &mut effective_mods,
+            manifest.mods.iter().cloned().map(|reference| ResolvedMod {
+                world_root: canonical.clone(),
+                reference,
+            }),
+        );
         validate_existing_lock(&canonical, &dependencies)?;
         let fingerprint = fingerprint_with_dependencies(&canonical, &dependencies)?;
 
@@ -210,9 +226,14 @@ fn validate_dependency_reference(reference: &str) -> Result<(), WorldForgeError>
     Ok(())
 }
 
-fn extend_unique(target: &mut Vec<String>, values: Vec<String>) {
+fn extend_unique(target: &mut Vec<ResolvedMod>, values: impl IntoIterator<Item = ResolvedMod>) {
     for value in values {
-        if !target.contains(&value) {
+        // Preserve the original parent-first overlay behavior: the first
+        // declaration of a reference wins across the inheritance graph.
+        if !target
+            .iter()
+            .any(|existing| existing.reference == value.reference)
+        {
             target.push(value);
         }
     }

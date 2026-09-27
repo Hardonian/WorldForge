@@ -432,18 +432,18 @@ pub fn replay_run(file: &Path) -> Result<(), WorldForgeError> {
             "world content does not match the replay",
         ));
     }
-    if !replay.mod_fingerprints.is_empty() {
-        return Err(WorldForgeError::new(
-            worldforge_core::error::ErrorCode::ReplayFingerprintMismatch,
-            "recorded mod set is unavailable for local replay",
-        ));
-    }
-
     let mut runtime = worldforge_runtime::SimulationRuntime::load(
         world_path,
         replay.seed,
         Some(replay.total_ticks),
     )?;
+    let current_mod_fingerprints = runtime.mod_fingerprints();
+    if current_mod_fingerprints != replay.mod_fingerprints {
+        return Err(WorldForgeError::new(
+            worldforge_core::error::ErrorCode::ReplayFingerprintMismatch,
+            "loaded mod set does not match the replay",
+        ));
+    }
     let initial_state = runtime.current_progress().state_fingerprint;
     let player_actions = replay
         .events
@@ -453,8 +453,11 @@ pub fn replay_run(file: &Path) -> Result<(), WorldForgeError> {
                 event.event_type,
                 EventType::PlayerCapacityChanged { .. }
                     | EventType::BuildingConstructed { .. }
+                    | EventType::BuildingUpgraded { .. }
+                    | EventType::BuildingDemolished { .. }
                     | EventType::TechnologyUnlocked { .. }
                     | EventType::PlayerCivicDecision { .. }
+                    | EventType::PlayerGeopoliticalAction { .. }
                     | EventType::PlayerIntrigueAction { .. }
             )
         })
@@ -484,11 +487,26 @@ pub fn replay_run(file: &Path) -> Result<(), WorldForgeError> {
             } => {
                 runtime.construct_building(building, district)?;
             }
+            EventType::BuildingUpgraded { building, .. } => {
+                runtime.upgrade_city_building(building)?;
+            }
+            EventType::BuildingDemolished {
+                building, district, ..
+            } => {
+                runtime.demolish_city_building(building, district)?;
+            }
             EventType::TechnologyUnlocked { technology, .. } => {
                 runtime.research_technology(technology)?;
             }
             EventType::PlayerCivicDecision { dilemma, option } => {
                 runtime.make_civic_decision(dilemma, option)?;
+            }
+            EventType::PlayerGeopoliticalAction {
+                action,
+                target,
+                option,
+            } => {
+                runtime.execute_geopolitical_action(action, target, option.as_deref())?;
             }
             EventType::PlayerIntrigueAction {
                 action,
@@ -694,6 +712,22 @@ fn simulation_export_with_event_limit(
                     building.clone(),
                     f64::from(*count),
                 ),
+                EventType::BuildingUpgraded { building, level } => (
+                    "construction",
+                    "city".to_string(),
+                    building.clone(),
+                    f64::from(*level),
+                ),
+                EventType::BuildingDemolished {
+                    building,
+                    district,
+                    remaining,
+                } => (
+                    "construction",
+                    district.clone(),
+                    building.clone(),
+                    f64::from(*remaining),
+                ),
                 EventType::TechnologyUnlocked { technology, branch } => {
                     ("research", branch.clone(), technology.clone(), 0.0)
                 }
@@ -732,6 +766,9 @@ fn simulation_export_with_event_limit(
                 }
                 EventType::GeopoliticalStanceChanged { entity, from, to } => {
                     ("geopolitics", entity.clone(), format!("{from}→{to}"), 0.0)
+                }
+                EventType::PlayerGeopoliticalAction { action, target, .. } => {
+                    ("geopolitics", target.clone(), action.clone(), 1.0)
                 }
                 EventType::TributeCollected { entity, resources } => {
                     let total = resources.values().sum::<f64>();
@@ -1100,7 +1137,14 @@ mod tests {
         runtime
             .construct_building("solar-canopy", "sun-belt")
             .unwrap();
+        runtime.upgrade_city_building("solar-canopy").unwrap();
+        runtime
+            .demolish_city_building("solar-canopy", "sun-belt")
+            .unwrap();
         runtime.set_capacity("coal-plant", 0.75).unwrap();
+        runtime
+            .execute_geopolitical_action("posture", "defense-garrison", Some("fortified"))
+            .unwrap();
         runtime.step(5).unwrap();
         runtime
             .make_civic_decision("growth-charter", "civic-land-trust")
@@ -1125,6 +1169,57 @@ mod tests {
         replay.save(&path).unwrap();
         let result = replay_run(&path);
         std::fs::remove_file(path).unwrap();
+        result.unwrap();
+    }
+
+    #[test]
+    fn replay_run_reexecutes_manifest_mods() {
+        let world = std::env::temp_dir().join(format!(
+            "worldforge-cli-mod-replay-{}",
+            uuid::Uuid::new_v4().simple()
+        ));
+        std::fs::create_dir_all(&world).unwrap();
+        std::fs::write(
+            world.join("world.toml"),
+            "name = \"mod-replay\"\nmods = [\"pulse.wat\"]\n",
+        )
+        .unwrap();
+        std::fs::write(
+            world.join("scenario.toml"),
+            "world = \"mod-replay\"\nduration_ticks = 2\n",
+        )
+        .unwrap();
+        std::fs::write(
+            world.join("entities.toml"),
+            "[[entities]]\nname = \"observer\"\nentity_type = \"system\"\nregion = \"test\"\n",
+        )
+        .unwrap();
+        std::fs::write(
+            world.join("pulse.mod.toml"),
+            "capabilities = [\"world.event.emit\"]\n",
+        )
+        .unwrap();
+        std::fs::write(
+            world.join("pulse.wat"),
+            r#"(module
+                (import "worldforge" "emit_event" (func $emit (param i64)))
+                (func (export "init"))
+                (func (export "on_event") (param i64))
+                (func (export "on_tick") (param i64)
+                    i64.const 23
+                    call $emit))"#,
+        )
+        .unwrap();
+
+        let mut runtime = worldforge_runtime::SimulationRuntime::load(&world, 17, None).unwrap();
+        runtime.run().unwrap();
+        let replay = runtime.take_replay().unwrap();
+        assert_eq!(replay.mod_fingerprints.len(), 1);
+        let replay_path = world.join("modded.replay");
+        replay.save(&replay_path).unwrap();
+
+        let result = replay_run(&replay_path);
+        std::fs::remove_dir_all(&world).unwrap();
         result.unwrap();
     }
 }

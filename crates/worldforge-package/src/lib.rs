@@ -11,7 +11,7 @@ use worldforge_core::hash::{Fingerprint, FingerprintBuilder};
 use worldforge_world::WorldManifest;
 
 mod resolver;
-pub use resolver::{resolve_world, ResolvedDependency, ResolvedWorld};
+pub use resolver::{resolve_world, ResolvedDependency, ResolvedMod, ResolvedWorld};
 
 /// Metadata about a built package.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -427,6 +427,36 @@ max_per_tick = 1.0
             fingerprint_resolved_world(&derived).unwrap(),
             first_fingerprint
         );
+        fs::remove_dir_all(catalog).unwrap();
+    }
+
+    #[test]
+    fn inherited_mods_keep_their_declaring_world_origin() {
+        let catalog = temp_catalog("inherited-mod-origin");
+        let base = catalog.join("base-world");
+        let derived = catalog.join("derived-world");
+        write_world(
+            &base,
+            "name = \"base-world\"\nmods = [\"pulse.wat\"]\n",
+            "world = \"base-world\"\nduration_ticks = 1\n",
+            "[[entities]]\nname = \"observer\"\nentity_type = \"system\"\nregion = \"base\"\n",
+        );
+        write_world(
+            &derived,
+            "name = \"derived-world\"\nextends = [\"base-world\"]\n",
+            "world = \"derived-world\"\nduration_ticks = 1\n",
+            "",
+        );
+        fs::write(base.join("pulse.wat"), "(module)").unwrap();
+
+        let resolved = resolve_world(&derived).unwrap();
+        assert_eq!(resolved.effective_mods.len(), 1);
+        assert_eq!(resolved.effective_mods[0].reference, "pulse.wat");
+        assert_eq!(
+            resolved.effective_mods[0].world_root,
+            base.canonicalize().unwrap()
+        );
+
         fs::remove_dir_all(catalog).unwrap();
     }
 

@@ -15,3 +15,7 @@ updates:
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 3
+    ignore:
+      # This action's tag is the Rust toolchain under test, not the action's
+      # implementation version. Keep it aligned with workspace rust-version.
+      - dependency-name: "dtolnay/rust-toolchain"

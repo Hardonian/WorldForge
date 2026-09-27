@@ -95,7 +95,9 @@ impl RunEventCounts {
             | EventType::ObjectiveUpdated { .. }
             | EventType::PopulationChanged { .. }
             | EventType::SimulationDegraded { .. } => self.system += 1,
-            EventType::BuildingConstructed { .. } => self.construction += 1,
+            EventType::BuildingConstructed { .. }
+            | EventType::BuildingUpgraded { .. }
+            | EventType::BuildingDemolished { .. } => self.construction += 1,
             EventType::TechnologyUnlocked { .. } | EventType::CivilizationEraAdvanced { .. } => {
                 self.research += 1
             }
@@ -103,7 +105,8 @@ impl RunEventCounts {
             | EventType::PlayerCivicDecision { .. }
             | EventType::CivicDecisionResolved { .. }
             | EventType::TrajectoryShifted { .. } => self.governance += 1,
-            EventType::GeopoliticalStanceChanged { .. }
+            EventType::PlayerGeopoliticalAction { .. }
+            | EventType::GeopoliticalStanceChanged { .. }
             | EventType::TributeCollected { .. }
             | EventType::WarlordIncursion { .. }
             | EventType::RefugeeWaveArrived { .. } => self.geopolitics += 1,
@@ -567,6 +570,7 @@ impl worldforge_ecs::Component for CityRuntimeState {
 
 struct LoadedWorldMod {
     id: String,
+    fingerprint: Fingerprint,
     instance: WasmModInstance,
 }
 
@@ -577,24 +581,24 @@ struct ModGrantManifest {
 }
 
 fn load_manifest_mods(
-    world_root: &Path,
-    references: &[String],
+    references: &[worldforge_package::ResolvedMod],
 ) -> Result<Vec<LoadedWorldMod>, WorldForgeError> {
     if references.is_empty() {
         return Ok(Vec::new());
     }
-    let canonical_root = std::fs::canonicalize(world_root).map_err(|error| {
-        WorldForgeError::new(
-            ErrorCode::ModLoadFailed,
-            format!(
-                "cannot resolve world root {}: {error}",
-                world_root.display()
-            ),
-        )
-    })?;
     let mut loaded = Vec::with_capacity(references.len());
     let mut ids = BTreeSet::new();
-    for reference in references {
+    for resolved_mod in references {
+        let reference = &resolved_mod.reference;
+        let canonical_root = std::fs::canonicalize(&resolved_mod.world_root).map_err(|error| {
+            WorldForgeError::new(
+                ErrorCode::ModLoadFailed,
+                format!(
+                    "cannot resolve mod world root {}: {error}",
+                    resolved_mod.world_root.display()
+                ),
+            )
+        })?;
         let relative = Path::new(reference);
         if relative.is_absolute()
             || relative.components().any(|component| {
@@ -633,14 +637,39 @@ fn load_manifest_mods(
             ));
         }
         let grant_path = path.with_extension("mod.toml");
-        let policy = if grant_path.is_file() {
-            let content = std::fs::read_to_string(&grant_path).map_err(|error| {
+        let grant_bytes = if grant_path.is_file() {
+            let canonical_grant = std::fs::canonicalize(&grant_path).map_err(|error| {
                 WorldForgeError::new(
                     ErrorCode::ModLoadFailed,
                     format!("cannot read {}: {error}", grant_path.display()),
                 )
             })?;
-            let manifest: ModGrantManifest = toml::from_str(&content).map_err(|error| {
+            if !canonical_grant.starts_with(&canonical_root) {
+                return Err(WorldForgeError::new(
+                    ErrorCode::ModLoadFailed,
+                    format!(
+                        "mod grant {} must stay inside its world",
+                        grant_path.display()
+                    ),
+                ));
+            }
+            Some(std::fs::read(&canonical_grant).map_err(|error| {
+                WorldForgeError::new(
+                    ErrorCode::ModLoadFailed,
+                    format!("cannot read {}: {error}", grant_path.display()),
+                )
+            })?)
+        } else {
+            None
+        };
+        let policy = if let Some(grant_bytes) = &grant_bytes {
+            let content = std::str::from_utf8(grant_bytes).map_err(|error| {
+                WorldForgeError::new(
+                    ErrorCode::ModLoadFailed,
+                    format!("invalid {}: {error}", grant_path.display()),
+                )
+            })?;
+            let manifest: ModGrantManifest = toml::from_str(content).map_err(|error| {
                 WorldForgeError::new(
                     ErrorCode::ModLoadFailed,
                     format!("invalid {}: {error}", grant_path.display()),
@@ -650,10 +679,23 @@ fn load_manifest_mods(
         } else {
             CapabilityPolicy::deny_all()
         };
+        let module_bytes = std::fs::read(&path).map_err(|error| {
+            WorldForgeError::new(
+                ErrorCode::ModLoadFailed,
+                format!("cannot read {}: {error}", path.display()),
+            )
+        })?;
+        let fingerprint = Fingerprint::hash_cbor(&(
+            "worldforge-mod-v1",
+            reference,
+            module_bytes.as_slice(),
+            grant_bytes.as_deref(),
+        ));
         let mut instance = load_wasm_mod(&path, policy, ModRuntimeConfig::default())?;
         instance.init()?;
         loaded.push(LoadedWorldMod {
             id: reference.clone(),
+            fingerprint,
             instance,
         });
     }
@@ -740,7 +782,8 @@ impl SimulationRuntime {
         // Resolve the complete local inheritance graph before initializing ECS.
         let resolved = worldforge_package::resolve_world(world_path)?;
         let resolved_world_path = resolved.path.clone();
-        let mods = load_manifest_mods(&resolved_world_path, &resolved.effective_mods)?;
+        let mods = load_manifest_mods(&resolved.effective_mods)?;
+        let mod_fingerprints = mods.iter().map(|loaded| loaded.fingerprint).collect();
         let scenario_path = resolved_world_path.join("scenario.toml");
         let mut scenario = resolved.scenario;
         let entities_config = resolved.entities;
@@ -1018,7 +1061,8 @@ impl SimulationRuntime {
             scenario_fingerprint,
             seed,
             initial_fp,
-        );
+        )
+        .with_mod_fingerprints(mod_fingerprints);
         let replay_writer = match bounded_event_limit {
             Some(limit) => replay_writer.with_event_limit(limit),
             None => replay_writer,
@@ -1482,10 +1526,9 @@ impl SimulationRuntime {
 
         let event = SimulationEvent::new(
             self.world.current_tick(),
-            EventType::BuildingConstructed {
+            EventType::BuildingUpgraded {
                 building: building.id,
-                district: format!("level-{}", current_level + 1),
-                count: current_count,
+                level: current_level + 1,
             },
         );
         self.record_player_event(event.clone());
@@ -1558,10 +1601,10 @@ impl SimulationRuntime {
 
         let event = SimulationEvent::new(
             self.world.current_tick(),
-            EventType::BuildingConstructed {
+            EventType::BuildingDemolished {
                 building: building.id,
                 district: district_id.to_string(),
-                count: remaining as u32,
+                remaining: remaining as u32,
             },
         );
         self.record_player_event(event.clone());
@@ -1881,7 +1924,15 @@ impl SimulationRuntime {
             "strike" => &[("sovereignty", 10), ("risk", 10), ("cohesion", -4)],
             _ => &[],
         };
-        let mut events = vec![event];
+        let mut events = vec![SimulationEvent::new(
+            tick,
+            EventType::PlayerGeopoliticalAction {
+                action: action.to_string(),
+                target: entity_id.to_string(),
+                option: option.map(str::to_string),
+            },
+        )];
+        events.push(event);
         events.extend(self.apply_system_trajectory_impacts(
             treasury_id,
             impacts,
@@ -2768,6 +2819,12 @@ impl SimulationRuntime {
     /// Inspect the current state without advancing the simulation.
     pub fn current_progress(&self) -> RunProgress {
         self.progress_with_events(Vec::new())
+    }
+
+    /// Ordered fingerprints for the exact module bytes and capability grants
+    /// loaded into this run.
+    pub fn mod_fingerprints(&self) -> Vec<Fingerprint> {
+        self.mods.iter().map(|loaded| loaded.fingerprint).collect()
     }
 
     fn progress_with_events(&self, recent_events: Vec<SimulationEvent>) -> RunProgress {
@@ -5581,6 +5638,8 @@ goods = 2.0
         let first = play();
         let second = play();
         assert_eq!(first.event_type_counts.mods, 2);
+        assert_eq!(first.proof.mod_hashes.len(), 1);
+        assert_eq!(first.proof.mod_hashes, second.proof.mod_hashes);
         assert_eq!(first.proof.event_chain_root, second.proof.event_chain_root);
         assert_eq!(
             first.final_state_fingerprint,
@@ -5588,6 +5647,68 @@ goods = 2.0
         );
 
         std::fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[test]
+    fn inherited_manifest_mods_execute_from_their_declaring_world() {
+        let catalog = std::env::temp_dir().join(format!(
+            "worldforge-runtime-inherited-mod-{}",
+            std::process::id()
+        ));
+        let base = catalog.join("base");
+        let derived = catalog.join("derived");
+        let _ = std::fs::remove_dir_all(&catalog);
+        std::fs::create_dir_all(&base).unwrap();
+        std::fs::create_dir_all(&derived).unwrap();
+        std::fs::write(
+            base.join("world.toml"),
+            "name = \"base\"\nmods = [\"pulse.wat\"]\n",
+        )
+        .unwrap();
+        std::fs::write(
+            base.join("scenario.toml"),
+            "world = \"base\"\nduration_ticks = 1\n",
+        )
+        .unwrap();
+        std::fs::write(
+            base.join("entities.toml"),
+            "[[entities]]\nname = \"observer\"\nentity_type = \"system\"\nregion = \"base\"\n",
+        )
+        .unwrap();
+        std::fs::write(
+            base.join("pulse.mod.toml"),
+            "capabilities = [\"world.event.emit\"]\n",
+        )
+        .unwrap();
+        std::fs::write(
+            base.join("pulse.wat"),
+            r#"(module
+                (import "worldforge" "emit_event" (func $emit (param i64)))
+                (func (export "init"))
+                (func (export "on_event") (param i64))
+                (func (export "on_tick") (param i64)
+                    i64.const 91
+                    call $emit))"#,
+        )
+        .unwrap();
+        std::fs::write(
+            derived.join("world.toml"),
+            "name = \"derived\"\nextends = [\"base\"]\n",
+        )
+        .unwrap();
+        std::fs::write(
+            derived.join("scenario.toml"),
+            "world = \"derived\"\nduration_ticks = 1\n",
+        )
+        .unwrap();
+        std::fs::write(derived.join("entities.toml"), "entities = []\n").unwrap();
+
+        let mut runtime = SimulationRuntime::load(&derived, 7, None).unwrap();
+        let result = runtime.run().unwrap();
+        assert_eq!(result.event_type_counts.mods, 1);
+        assert_eq!(result.proof.mod_hashes.len(), 1);
+
+        std::fs::remove_dir_all(catalog).unwrap();
     }
 
     #[test]

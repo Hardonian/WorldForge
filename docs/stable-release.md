@@ -41,7 +41,7 @@ Run the platform verification script from the repository root:
 ```
 
 The release gate enforces:
-1. Workspace compilation across all 13 crates (`cargo check --workspace`)
+1. Workspace compilation across all 14 crates (`cargo check --workspace`)
 2. Comprehensive unit and integration testing (`cargo test --workspace`)
 3. Formatting compliance (`cargo fmt --all -- --check`)
 4. Zero Clippy warnings (`cargo clippy --workspace --all-targets -- -D warnings`)

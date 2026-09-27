@@ -35,4 +35,8 @@ Replay re-execution and durable save loading compare effective fingerprints. Mod
 
 ## Current boundary
 
-Remote dependency registries are intentionally unsupported. Inherited mod declarations are detected across the graph, but manifest-driven mod loading remains a separate milestone and fails closed at runtime.
+Remote dependency registries are intentionally unsupported. Manifest-driven
+mods are inherited parent-first, resolve relative to the world that declared
+them, and run inside the same deterministic event and replay proof chain as
+local mods. Module bytes and capability-grant sidecars are fingerprinted; replay
+re-execution fails closed if the effective mod set changes.

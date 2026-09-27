@@ -33,8 +33,12 @@
     },
     "mods": {
       "type": "array",
-      "description": "Mod packages to apply",
-      "items": { "type": "string" }
+      "description": "Local .wasm or .wat modules, relative to the declaring world",
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
     }
   },
   "additionalProperties": false

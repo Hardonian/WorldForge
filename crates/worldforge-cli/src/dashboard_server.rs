@@ -1804,6 +1804,22 @@ fn event_document(event: &SimulationEvent) -> Value {
             building.clone(),
             f64::from(*count),
         ),
+        EventType::BuildingUpgraded { building, level } => (
+            "construction",
+            "city".to_string(),
+            building.clone(),
+            f64::from(*level),
+        ),
+        EventType::BuildingDemolished {
+            building,
+            district,
+            remaining,
+        } => (
+            "construction",
+            district.clone(),
+            building.clone(),
+            f64::from(*remaining),
+        ),
         EventType::TechnologyUnlocked { technology, branch } => {
             ("research", branch.clone(), technology.clone(), 0.0)
         }
@@ -1842,6 +1858,9 @@ fn event_document(event: &SimulationEvent) -> Value {
         }
         EventType::GeopoliticalStanceChanged { entity, from, to } => {
             ("geopolitics", entity.clone(), format!("{from}→{to}"), 0.0)
+        }
+        EventType::PlayerGeopoliticalAction { action, target, .. } => {
+            ("geopolitics", target.clone(), action.clone(), 1.0)
         }
         EventType::TributeCollected { entity, resources } => {
             let total = resources.values().sum::<f64>();

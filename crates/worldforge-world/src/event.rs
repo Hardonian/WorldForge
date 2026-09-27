@@ -43,6 +43,15 @@ pub enum EventType {
         district: String,
         count: u32,
     },
+    BuildingUpgraded {
+        building: String,
+        level: u32,
+    },
+    BuildingDemolished {
+        building: String,
+        district: String,
+        remaining: u32,
+    },
     TechnologyUnlocked {
         technology: String,
         branch: String,
@@ -89,6 +98,11 @@ pub enum EventType {
         entity: String,
         from: String,
         to: String,
+    },
+    PlayerGeopoliticalAction {
+        action: String,
+        target: String,
+        option: Option<String>,
     },
     TributeCollected {
         entity: String,
@@ -240,6 +254,14 @@ impl SimulationEvent {
                 district,
                 count,
             } => format!("built {building} in {district} (district count: {count})"),
+            EventType::BuildingUpgraded { building, level } => {
+                format!("upgraded {building} to level {level}")
+            }
+            EventType::BuildingDemolished {
+                building,
+                district,
+                remaining,
+            } => format!("demolished {building} in {district} ({remaining} remaining)"),
             EventType::TechnologyUnlocked { technology, branch } => {
                 format!("researched {technology} in the {branch} branch")
             }
@@ -293,6 +315,16 @@ impl SimulationEvent {
             EventType::GeopoliticalStanceChanged { entity, from, to } => {
                 format!("geopolitical stance of '{entity}' changed: {from} → {to}")
             }
+            EventType::PlayerGeopoliticalAction {
+                action,
+                target,
+                option,
+            } => format!(
+                "geopolitical command: {action} → {target}{}",
+                option
+                    .as_ref()
+                    .map_or_else(String::new, |option| format!(" ({option})"))
+            ),
             EventType::TributeCollected { entity, resources } => {
                 let details = resources
                     .iter()

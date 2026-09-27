@@ -225,6 +225,12 @@ impl ReplayWriter {
         self
     }
 
+    /// Commit the exact ordered mod set used by the simulation to its proof.
+    pub fn with_mod_fingerprints(mut self, fingerprints: Vec<Fingerprint>) -> Self {
+        self.mod_fingerprints = fingerprints;
+        self
+    }
+
     /// Record an event.
     pub fn record_event(&mut self, event: SimulationEvent) {
         self.event_chain.add_event_cbor(&event);
